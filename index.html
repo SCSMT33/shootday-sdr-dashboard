@@ -273,6 +273,8 @@
   .goals-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
   .goal-item { display: flex; flex-direction: column; gap: 5px; }
   .goal-label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .goal-info { cursor: help; text-transform: none; font-weight: 700; opacity: 0.7; }
+  .goal-info:hover { opacity: 1; color: var(--accent); }
   .goal-input-row { display: flex; align-items: center; gap: 8px; }
   .goal-input {
     background: var(--surface2);
@@ -359,7 +361,7 @@
         <option value="all">All leads</option>
       </select>
       <span>Range:</span>
-      <select id="rangeSelect" onchange="renderDashboard()">
+      <select id="rangeSelect" onchange="saveRangeFilter(); renderDashboard()">
         <option value="all">All time</option>
         <option value="thisMonth">This month</option>
         <option value="14">Last 14 days</option>
@@ -435,14 +437,21 @@
           </div>
         </div>
         <div class="goal-item">
-          <div class="goal-label">Meetings Booked / month</div>
+          <div class="goal-label">Meetings Booked / month <span class="goal-info" title="Team monthly total. Each SDR's individual on-track check uses this number split evenly across MJ and Gospel (÷2) — the two individual goals add up to this team total.">ⓘ</span></div>
           <div class="goal-input-row">
             <input class="goal-input" type="number" id="goal_meetings" placeholder="e.g. 90" oninput="saveGoals(); renderDashboard()">
             <span class="goal-unit">meetings</span>
           </div>
         </div>
         <div class="goal-item">
-          <div class="goal-label">% Qualified target</div>
+          <div class="goal-label">Leads Qualified / month <span class="goal-info" title="Team monthly total. Each SDR's individual on-track check uses this number split evenly across MJ and Gospel (÷2) — the two individual goals add up to this team total.">ⓘ</span></div>
+          <div class="goal-input-row">
+            <input class="goal-input" type="number" id="goal_qualified" placeholder="e.g. 130" oninput="saveGoals(); renderDashboard()">
+            <span class="goal-unit">leads</span>
+          </div>
+        </div>
+        <div class="goal-item">
+          <div class="goal-label">% Qualified target <span class="goal-info" title="Same percentage target applies to the team and to each individual SDR.">ⓘ</span></div>
           <div class="goal-input-row">
             <input class="goal-input" type="number" id="goal_pct_qual" placeholder="e.g. 30" oninput="saveGoals(); renderDashboard()">
             <span class="goal-unit">%</span>
@@ -567,6 +576,7 @@ function parseCSV(text, filename) {
   saveLoadedData(filename);
   loadGoals();
   loadLeadTypeFilter();
+  loadRangeFilter();
   renderDashboard();
 }
 
@@ -605,6 +615,15 @@ function loadLeadTypeFilter() {
   } catch(e) {}
   recomputeAllData();
 }
+function saveRangeFilter() {
+  try { localStorage.setItem('sdr_range', document.getElementById('rangeSelect').value); } catch(e) {}
+}
+function loadRangeFilter() {
+  try {
+    const saved = localStorage.getItem('sdr_range');
+    if (saved) document.getElementById('rangeSelect').value = saved;
+  } catch(e) {}
+}
 
 // ─── PERSIST LOADED DATA ACROSS REFRESHES ─────────────────────────────────────
 function saveLoadedData(filename) {
@@ -618,6 +637,7 @@ function restoreLoadedData() {
     if (!saved || !saved.rawByDay) return false;
     rawByDay = saved.rawByDay;
     loadLeadTypeFilter();
+    loadRangeFilter();
     const dates = Object.keys(allData).sort();
     const firstDate = dates[0];
     const lastDate = dates[dates.length - 1];
@@ -747,6 +767,7 @@ function renderSummaryCards(days) {
   const g = goals();
   const goalLeads = parseFloat(g.leads) || null;
   const goalMeetings = parseFloat(g.meetings) || null;
+  const goalQualified = parseFloat(g.qualified) || null;
   const goalPctQual = parseFloat(g.pct_qual) || null;
   const goalNRRate = parseFloat(g.nr_rate) || null;
 
@@ -754,7 +775,7 @@ function renderSummaryCards(days) {
     ${countCard('Lead Volume', totalLeads, mjLeads, gospelLeads, elapsed, daysInMo, showProjection, undefined, goalLeads)}
     ${countCard('Meetings Booked', totalMeetings, mjMeetings, gospelMeetings, elapsed, daysInMo, showProjection, undefined, goalMeetings)}
     ${rateCard('Meeting Booked Rate', meetingRate, mjMeetingRate, gospelMeetingRate, meanMetric(days, v, 'meeting_rate'), 'meetings ÷ total leads')}
-    ${countCard('Leads Qualified', totalQualified, mjQualified, gospelQualified, elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`)}
+    ${countCard('Leads Qualified', totalQualified, mjQualified, gospelQualified, elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, goalQualified)}
     ${rateCard('% Leads Qualified', pctQual, mjPctQual, gospelPctQual, meanMetric(days, v, 'pct_qualified'), 'share reaching Warm/Hot+', goalPctQual, false)}
     ${rateCard('Non-Responsive Rate', nrRate, mjNRRate, gospelNRRate, meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, goalNRRate, true)}
     ${countCard('Disqualified by AE', totalAEDQ, mjAEDQ, gospelAEDQ, elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual')}
@@ -793,8 +814,11 @@ function splitRow(mjValue, gospelValue, mjAvg, gospelAvg, isPct, mjProjected, go
   const fmt = v => isPct ? v.toFixed(1) + '%' : Math.round(v);
   const goalNote = (val) => {
     if (val == null || !goalVal) return '';
-    const onTrack = lowerIsBetter ? val <= goalVal : val >= goalVal;
-    return `<span class="split-goal ${onTrack ? 'on-track' : 'off-track'}">${isPct ? 'target ' + goalVal + '%' : 'goal ' + goalVal} ${onTrack ? '✓' : '✗'}</span>`;
+    // Count goals are team monthly totals; split evenly across the 2 SDRs for an individual target.
+    const indivGoal = isPct ? goalVal : goalVal / 2;
+    const onTrack = lowerIsBetter ? val <= indivGoal : val >= indivGoal;
+    const fmtGoal = isPct ? goalVal : Math.round(indivGoal);
+    return `<span class="split-goal ${onTrack ? 'on-track' : 'off-track'}">${isPct ? 'target ' + fmtGoal + '%' : 'goal ' + fmtGoal} ${onTrack ? '✓' : '✗'}</span>`;
   };
   return `<div class="card-split">
     <div class="split-col">
@@ -981,6 +1005,7 @@ function goals() {
   return {
     leads: document.getElementById('goal_leads').value,
     meetings: document.getElementById('goal_meetings').value,
+    qualified: document.getElementById('goal_qualified').value,
     pct_qual: document.getElementById('goal_pct_qual').value,
     nr_rate: document.getElementById('goal_nr_rate').value,
   };
@@ -993,6 +1018,7 @@ function loadGoals() {
     const saved = JSON.parse(localStorage.getItem('sdr_goals') || '{}');
     if (saved.leads) document.getElementById('goal_leads').value = saved.leads;
     if (saved.meetings) document.getElementById('goal_meetings').value = saved.meetings;
+    if (saved.qualified) document.getElementById('goal_qualified').value = saved.qualified;
     if (saved.pct_qual) document.getElementById('goal_pct_qual').value = saved.pct_qual;
     if (saved.nr_rate) document.getElementById('goal_nr_rate').value = saved.nr_rate;
   } catch(e) {}
