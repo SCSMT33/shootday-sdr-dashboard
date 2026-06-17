@@ -456,8 +456,31 @@ function parseCSV(text, filename) {
   document.getElementById('noData').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
 
+  saveLoadedData(filename);
   loadGoals();
   renderDashboard();
+}
+
+// ─── PERSIST LOADED DATA ACROSS REFRESHES ─────────────────────────────────────
+function saveLoadedData(filename) {
+  try {
+    localStorage.setItem('sdr_data', JSON.stringify({ allData, filename }));
+  } catch (e) {}
+}
+function restoreLoadedData() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('sdr_data') || 'null');
+    if (!saved || !saved.allData) return false;
+    allData = saved.allData;
+    const dates = Object.keys(allData).sort();
+    const firstDate = dates[0];
+    const lastDate = dates[dates.length - 1];
+    const rangeText = dates.length ? (firstDate === lastDate ? firstDate : `${firstDate} – ${lastDate}`) : 'no dates found';
+    document.getElementById('lastUpdated').textContent = `${saved.filename} · ${rangeText}`;
+    document.getElementById('noData').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    return true;
+  } catch (e) { return false; }
 }
 
 function computeMetrics(leads) {
@@ -680,8 +703,12 @@ function loadGoals() {
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
-document.getElementById('noData').style.display = 'block';
 loadGoals();
+if (restoreLoadedData()) {
+  renderDashboard();
+} else {
+  document.getElementById('noData').style.display = 'block';
+}
 </script>
 </body>
 </html>
