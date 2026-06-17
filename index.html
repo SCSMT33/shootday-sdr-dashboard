@@ -150,14 +150,21 @@
   .card.expanded {
     grid-column: span 2;
     grid-row: span 2;
-    padding: 28px;
+    padding: 32px;
     box-shadow: 0 4px 16px rgba(0,0,0,0.08);
   }
-  .card.expanded .card-value { font-size: 48px; }
-  .card.expanded .card-label { font-size: 13px; }
-  .card.expanded .card-split { gap: 24px; }
-  .card.expanded .split-total { font-size: 26px; }
-  .card.expanded .split-name { font-size: 12px; }
+  .card.expanded .card-value { font-size: 58px; margin-bottom: 10px; }
+  .card.expanded .card-label { font-size: 15px; margin-bottom: 16px; }
+  .card.expanded .card-sub { font-size: 14px; }
+  .card.expanded .card-split { gap: 32px; margin-top: 20px; padding-top: 18px; }
+  .card.expanded .split-total { font-size: 32px; }
+  .card.expanded .split-name { font-size: 13px; }
+  .card.expanded .split-avg { font-size: 13px; }
+  .card.expanded .split-proj { font-size: 13px; }
+  .card.expanded .split-goal { font-size: 12px; }
+  .card.expanded .card-avg-row { font-size: 15px; margin-top: 18px; }
+  .card.expanded .card-projected { font-size: 15px; padding: 10px 14px; margin-top: 14px; }
+  .card.expanded .card-goal { font-size: 15px; padding: 10px 14px; margin-top: 14px; }
   .card-expand-btn {
     position: absolute;
     top: 12px;
@@ -192,6 +199,9 @@
   .split-total { font-size: 17px; font-weight: 700; color: var(--text); }
   .split-avg { font-size: 11px; color: var(--muted); }
   .split-proj { font-size: 11px; color: var(--accent); font-weight: 600; margin-top: 1px; }
+  .split-goal { font-size: 10px; font-weight: 600; margin-top: 1px; display: block; }
+  .split-goal.on-track { color: var(--green); }
+  .split-goal.off-track { color: var(--red); }
 
   .card-avg-row {
     display: flex;
@@ -213,6 +223,17 @@
     display: flex;
     justify-content: space-between;
   }
+  .card-goal {
+    margin-top: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 10px;
+    border-radius: 6px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .card-goal.on-track { background: rgba(26,162,96,0.1); color: var(--green); }
+  .card-goal.off-track { background: rgba(217,54,54,0.1); color: var(--red); }
 
   /* CHARTS GRID */
   .charts-grid {
@@ -400,20 +421,20 @@
 
     <!-- GOALS -->
     <div class="goals-section">
-      <div class="goals-title">Daily Targets</div>
-      <div class="goals-sub">Set your goal numbers here — they appear as dashed target lines on each chart. Saved automatically.</div>
+      <div class="goals-title">Monthly Targets</div>
+      <div class="goals-sub">Enter monthly totals — daily/cumulative targets on the charts and "on track" badges on the cards are calculated automatically. Saved automatically.</div>
       <div class="goals-grid">
         <div class="goal-item">
-          <div class="goal-label">Lead Volume / day</div>
+          <div class="goal-label">Lead Volume / month</div>
           <div class="goal-input-row">
-            <input class="goal-input" type="number" id="goal_leads" placeholder="e.g. 15" oninput="saveGoals(); renderDashboard()">
+            <input class="goal-input" type="number" id="goal_leads" placeholder="e.g. 450" oninput="saveGoals(); renderDashboard()">
             <span class="goal-unit">leads</span>
           </div>
         </div>
         <div class="goal-item">
-          <div class="goal-label">Meetings Booked / day</div>
+          <div class="goal-label">Meetings Booked / month</div>
           <div class="goal-input-row">
-            <input class="goal-input" type="number" id="goal_meetings" placeholder="e.g. 3" oninput="saveGoals(); renderDashboard()">
+            <input class="goal-input" type="number" id="goal_meetings" placeholder="e.g. 90" oninput="saveGoals(); renderDashboard()">
             <span class="goal-unit">meetings</span>
           </div>
         </div>
@@ -720,13 +741,19 @@ function renderSummaryCards(days) {
   const mjPipeline = (lastDay && allData[lastDay] && allData[lastDay]['MJ']) ? allData[lastDay]['MJ'].active_pipeline : 0;
   const gospelPipeline = (lastDay && allData[lastDay] && allData[lastDay]['Gospel']) ? allData[lastDay]['Gospel'].active_pipeline : 0;
 
+  const g = goals();
+  const goalLeads = parseFloat(g.leads) || null;
+  const goalMeetings = parseFloat(g.meetings) || null;
+  const goalPctQual = parseFloat(g.pct_qual) || null;
+  const goalNRRate = parseFloat(g.nr_rate) || null;
+
   document.getElementById('summaryCards').innerHTML = `
-    ${countCard('Lead Volume', totalLeads, mjLeads, gospelLeads, elapsed, daysInMo, showProjection)}
-    ${countCard('Meetings Booked', totalMeetings, mjMeetings, gospelMeetings, elapsed, daysInMo, showProjection)}
+    ${countCard('Lead Volume', totalLeads, mjLeads, gospelLeads, elapsed, daysInMo, showProjection, undefined, goalLeads)}
+    ${countCard('Meetings Booked', totalMeetings, mjMeetings, gospelMeetings, elapsed, daysInMo, showProjection, undefined, goalMeetings)}
     ${rateCard('Meeting Booked Rate', meetingRate, mjMeetingRate, gospelMeetingRate, meanMetric(days, v, 'meeting_rate'), 'meetings ÷ total leads')}
     ${countCard('Leads Qualified', totalQualified, mjQualified, gospelQualified, elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`)}
-    ${rateCard('% Leads Qualified', pctQual, mjPctQual, gospelPctQual, meanMetric(days, v, 'pct_qualified'), 'share reaching Warm/Hot+')}
-    ${rateCard('Non-Responsive Rate', nrRate, mjNRRate, gospelNRRate, meanMetric(days, v, 'nr_rate'), `${totalNR} leads`)}
+    ${rateCard('% Leads Qualified', pctQual, mjPctQual, gospelPctQual, meanMetric(days, v, 'pct_qualified'), 'share reaching Warm/Hot+', goalPctQual, false)}
+    ${rateCard('Non-Responsive Rate', nrRate, mjNRRate, gospelNRRate, meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, goalNRRate, true)}
     ${countCard('Disqualified by AE', totalAEDQ, mjAEDQ, gospelAEDQ, elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual')}
     ${pipelineCard('Active Pipeline', activePipeline, mjPipeline, gospelPipeline, meanMetric(days, v, 'active_pipeline'), lastDay)}
     ${pendingCard('Speed-to-Lead', 'Pending (needs Aircall sync)')}
@@ -748,51 +775,72 @@ function applyExpandedState() {
   });
 }
 
-function splitRow(mjValue, gospelValue, mjAvg, gospelAvg, isPct, mjProjected, gospelProjected) {
+function goalStatusRow(actual, goalVal, isPct, lowerIsBetter, rowLabel) {
+  if (!goalVal) return '';
+  const onTrack = lowerIsBetter ? actual <= goalVal : actual >= goalVal;
+  const fmt = v => isPct ? v.toFixed(1) + '%' : Math.round(v);
+  return `<div class="card-goal ${onTrack ? 'on-track' : 'off-track'}">
+    <span>${rowLabel}</span>
+    <span>${fmt(goalVal)} ${onTrack ? '✓' : '✗'}</span>
+  </div>`;
+}
+
+function splitRow(mjValue, gospelValue, mjAvg, gospelAvg, isPct, mjProjected, gospelProjected, goalVal, lowerIsBetter) {
   if (currentView !== 'Team') return '';
   const fmt = v => isPct ? v.toFixed(1) + '%' : Math.round(v);
+  const goalNote = (val) => {
+    if (val == null || !goalVal) return '';
+    const onTrack = lowerIsBetter ? val <= goalVal : val >= goalVal;
+    return `<span class="split-goal ${onTrack ? 'on-track' : 'off-track'}">${isPct ? 'target ' + goalVal + '%' : 'goal ' + goalVal} ${onTrack ? '✓' : '✗'}</span>`;
+  };
   return `<div class="card-split">
     <div class="split-col">
       <span class="split-name mj">MJ</span>
       <span class="split-total">${fmt(mjValue)}</span>
       ${mjAvg !== undefined ? `<span class="split-avg">${isPct ? '' : mjAvg.toFixed(1) + '/day'}</span>` : ''}
       ${mjProjected != null ? `<span class="split-proj">→ ${mjProjected} proj.</span>` : ''}
+      ${goalNote(isPct ? mjValue : mjProjected)}
     </div>
     <div class="split-col">
       <span class="split-name gospel">Gospel</span>
       <span class="split-total">${fmt(gospelValue)}</span>
       ${gospelAvg !== undefined ? `<span class="split-avg">${isPct ? '' : gospelAvg.toFixed(1) + '/day'}</span>` : ''}
       ${gospelProjected != null ? `<span class="split-proj">→ ${gospelProjected} proj.</span>` : ''}
+      ${goalNote(isPct ? gospelValue : gospelProjected)}
     </div>
   </div>`;
 }
 
-function countCard(label, total, mjTotal, gospelTotal, elapsed, daysInMo, showProjection, extraSub) {
+function countCard(label, total, mjTotal, gospelTotal, elapsed, daysInMo, showProjection, extraSub, goalMonthly) {
   const avg = elapsed ? (total / elapsed) : 0;
   const mjAvg = elapsed ? (mjTotal / elapsed) : 0;
   const gospelAvg = elapsed ? (gospelTotal / elapsed) : 0;
   const projected = showProjection ? Math.round(avg * daysInMo) : null;
   const mjProjected = showProjection ? Math.round(mjAvg * daysInMo) : null;
   const gospelProjected = showProjection ? Math.round(gospelAvg * daysInMo) : null;
+  const goalRow = (showProjection && goalMonthly) ? goalStatusRow(projected, goalMonthly, false, false, 'Monthly Goal (team)') : '';
   return `<div class="card" data-label="${label}">
     ${expandBtn(label)}
     <div class="card-label">${label}</div>
     <div class="card-value">${total}</div>
     <div class="card-sub">${extraSub || ''}</div>
-    ${splitRow(mjTotal, gospelTotal, mjAvg, gospelAvg, false, mjProjected, gospelProjected)}
+    ${splitRow(mjTotal, gospelTotal, mjAvg, gospelAvg, false, mjProjected, gospelProjected, showProjection ? goalMonthly : null, false)}
     <div class="card-avg-row"><span>Avg / day</span><span>${avg.toFixed(1)}</span></div>
     ${projected !== null ? `<div class="card-projected"><span>Projected (month, team)</span><span>${projected}</span></div>` : ''}
+    ${goalRow}
   </div>`;
 }
 
-function rateCard(label, pct, mjPct, gospelPct, avgDaily, extraSub) {
+function rateCard(label, pct, mjPct, gospelPct, avgDaily, extraSub, goalVal, lowerIsBetter) {
+  const goalRow = goalStatusRow(pct, goalVal, true, lowerIsBetter, 'Target (team)');
   return `<div class="card" data-label="${label}">
     ${expandBtn(label)}
     <div class="card-label">${label}</div>
     <div class="card-value">${pct.toFixed(1)}%</div>
     <div class="card-sub">${extraSub || ''}</div>
-    ${splitRow(mjPct, gospelPct, undefined, undefined, true)}
+    ${splitRow(mjPct, gospelPct, undefined, undefined, true, undefined, undefined, goalVal, lowerIsBetter)}
     <div class="card-avg-row"><span>Avg / day</span><span>${avgDaily.toFixed(1)}%</span></div>
+    ${goalRow}
   </div>`;
 }
 
@@ -870,7 +918,8 @@ function makeChart(id, days, metric, goalKey, isRate, cumulativeAllowed) {
   const cumulative = cumulativeAllowed !== false && isCumulative();
   const labels = days.map(d => d.slice(5)); // MM-DD
   const datasets = buildDatasets(days, metric, isRate, cumulative);
-  const gv = goals()[goalKey];
+  const rawGoal = parseFloat(goals()[goalKey]);
+  const gv = (!isNaN(rawGoal) && rawGoal) ? (isRate ? rawGoal : rawGoal / daysInCurrentMonth()) : null;
   const gl = goalKey ? goalLine(days, gv, isRate, cumulative) : null;
   if (gl) datasets.push(gl);
 
