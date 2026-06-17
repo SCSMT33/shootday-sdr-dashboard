@@ -255,10 +255,50 @@
   .chart-card.full { grid-column: 1 / -1; }
   .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
   .chart-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .chart-header-right { display: flex; align-items: center; gap: 16px; }
   .chart-legend { display: flex; gap: 14px; }
   .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
   .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
   canvas { max-height: 220px; }
+
+  .chart-cumulative-toggle {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .chart-cumulative-toggle input { display: none; }
+  .toggle-track {
+    position: relative;
+    width: 30px;
+    height: 17px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    transition: background 0.15s, border-color 0.15s;
+    flex-shrink: 0;
+  }
+  .toggle-track::after {
+    content: '';
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 13px;
+    height: 13px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+    transition: transform 0.15s;
+  }
+  .chart-cumulative-toggle input:checked + .toggle-track {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .chart-cumulative-toggle input:checked + .toggle-track::after { transform: translateX(13px); }
+  .chart-cumulative-toggle:hover .toggle-text { color: var(--text); }
 
   /* GOALS SECTION */
   .goals-section {
@@ -367,10 +407,6 @@
         <option value="14">Last 14 days</option>
         <option value="7">Last 7 days</option>
       </select>
-      <label class="cumulative-toggle">
-        <input type="checkbox" id="cumulativeToggle" onchange="renderCharts(getFilteredDays())">
-        Cumulative / pace view
-      </label>
     </div>
   </div>
 
@@ -383,14 +419,28 @@
       <div class="chart-card full">
         <div class="chart-header">
           <span class="chart-title">Lead Volume — Daily</span>
-          <div class="chart-legend" id="legend-chartLeads"></div>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartLeads"></div>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="cumulativeToggle-chartLeads" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Cumulative</span>
+            </label>
+          </div>
         </div>
         <canvas id="chartLeads"></canvas>
       </div>
       <div class="chart-card">
         <div class="chart-header">
           <span class="chart-title">Meetings Booked — Daily</span>
-          <div class="chart-legend" id="legend-chartMeetings"></div>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartMeetings"></div>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="cumulativeToggle-chartMeetings" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Cumulative</span>
+            </label>
+          </div>
         </div>
         <canvas id="chartMeetings"></canvas>
       </div>
@@ -893,8 +943,8 @@ function pendingCard(label, sub) {
 // ─── CHARTS ───────────────────────────────────────────────────────────────────
 const COLORS = { MJ: '#1a9e94', Gospel: '#e07b1a', Team: '#6c63ff', Goal: 'rgba(0,0,0,0.35)' };
 
-function isCumulative() {
-  const el = document.getElementById('cumulativeToggle');
+function isCumulative(id) {
+  const el = document.getElementById('cumulativeToggle-' + id);
   return el ? el.checked : false;
 }
 
@@ -942,7 +992,7 @@ function goalLine(days, value, isRate, cumulative) {
 }
 
 function makeChart(id, days, metric, goalKey, isRate, cumulativeAllowed) {
-  const cumulative = cumulativeAllowed !== false && isCumulative();
+  const cumulative = cumulativeAllowed !== false && isCumulative(id);
   const labels = days.map(d => d.slice(5)); // MM-DD
   const datasets = buildDatasets(days, metric, isRate, cumulative);
   const rawGoal = parseFloat(goals()[goalKey]);
