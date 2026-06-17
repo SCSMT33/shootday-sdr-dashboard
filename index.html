@@ -114,6 +114,16 @@
     font-size: 12px;
     cursor: pointer;
   }
+  .cumulative-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 12px;
+    user-select: none;
+  }
+  .cumulative-toggle input { cursor: pointer; }
 
   /* MAIN LAYOUT */
   main { padding: 20px 28px 40px; }
@@ -134,8 +144,35 @@
     box-shadow: 0 1px 2px rgba(0,0,0,0.04);
     display: flex;
     flex-direction: column;
+    position: relative;
+    transition: all 0.18s;
   }
-  .card-label { color: var(--muted); font-size: 12px; font-weight: 500; letter-spacing: 0.01em; margin-bottom: 10px; }
+  .card.expanded {
+    grid-column: span 2;
+    grid-row: span 2;
+    padding: 28px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  }
+  .card.expanded .card-value { font-size: 48px; }
+  .card.expanded .card-label { font-size: 13px; }
+  .card.expanded .card-split { gap: 24px; }
+  .card.expanded .split-total { font-size: 26px; }
+  .card.expanded .split-name { font-size: 12px; }
+  .card-expand-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 4px 6px;
+    border-radius: 5px;
+  }
+  .card-expand-btn:hover { background: var(--surface2); color: var(--text); }
+  .card-label { color: var(--muted); font-size: 12px; font-weight: 500; letter-spacing: 0.01em; margin-bottom: 10px; padding-right: 20px; }
   .card-value { font-size: 30px; font-weight: 700; line-height: 1; margin-bottom: 6px; color: var(--text); }
   .card-sub { font-size: 12px; color: var(--muted); }
   .card-sub .mj { color: var(--mj); }
@@ -154,6 +191,7 @@
   .split-name.gospel { color: var(--gospel); }
   .split-total { font-size: 17px; font-weight: 700; color: var(--text); }
   .split-avg { font-size: 11px; color: var(--muted); }
+  .split-proj { font-size: 11px; color: var(--accent); font-weight: 600; margin-top: 1px; }
 
   .card-avg-row {
     display: flex;
@@ -303,6 +341,10 @@
         <option value="14">Last 14 days</option>
         <option value="7">Last 7 days</option>
       </select>
+      <label class="cumulative-toggle">
+        <input type="checkbox" id="cumulativeToggle" onchange="renderCharts(getFilteredDays())">
+        Cumulative / pace view
+      </label>
     </div>
   </div>
 
@@ -408,6 +450,7 @@ let allData = null;   // { date: { MJ, Gospel, Team } } — derived from rawByDa
 let rawByDay = null;   // { date: { MJ: [rows], Gospel: [rows] } } — unfiltered raw rows, persisted
 let currentView = 'Team';
 let charts = {};
+let expandedCards = new Set();
 
 // ─── FILE HANDLING ────────────────────────────────────────────────────────────
 function handleFile(e) {
@@ -689,9 +732,23 @@ function renderSummaryCards(days) {
     ${pendingCard('Speed-to-Lead', 'Pending (needs Aircall sync)')}
     ${pendingCard('Cadence Adherence', 'Pending (manual score)')}
   `;
+  applyExpandedState();
 }
 
-function splitRow(mjValue, gospelValue, mjAvg, gospelAvg, isPct) {
+function expandBtn(label) {
+  return `<button class="card-expand-btn" onclick="event.stopPropagation(); toggleExpand('${label}')" title="Expand">&#10530;</button>`;
+}
+function toggleExpand(label) {
+  if (expandedCards.has(label)) expandedCards.delete(label); else expandedCards.add(label);
+  applyExpandedState();
+}
+function applyExpandedState() {
+  document.querySelectorAll('.card').forEach(c => {
+    c.classList.toggle('expanded', expandedCards.has(c.dataset.label));
+  });
+}
+
+function splitRow(mjValue, gospelValue, mjAvg, gospelAvg, isPct, mjProjected, gospelProjected) {
   if (currentView !== 'Team') return '';
   const fmt = v => isPct ? v.toFixed(1) + '%' : Math.round(v);
   return `<div class="card-split">
@@ -699,11 +756,13 @@ function splitRow(mjValue, gospelValue, mjAvg, gospelAvg, isPct) {
       <span class="split-name mj">MJ</span>
       <span class="split-total">${fmt(mjValue)}</span>
       ${mjAvg !== undefined ? `<span class="split-avg">${isPct ? '' : mjAvg.toFixed(1) + '/day'}</span>` : ''}
+      ${mjProjected != null ? `<span class="split-proj">→ ${mjProjected} proj.</span>` : ''}
     </div>
     <div class="split-col">
       <span class="split-name gospel">Gospel</span>
       <span class="split-total">${fmt(gospelValue)}</span>
       ${gospelAvg !== undefined ? `<span class="split-avg">${isPct ? '' : gospelAvg.toFixed(1) + '/day'}</span>` : ''}
+      ${gospelProjected != null ? `<span class="split-proj">→ ${gospelProjected} proj.</span>` : ''}
     </div>
   </div>`;
 }
@@ -713,18 +772,22 @@ function countCard(label, total, mjTotal, gospelTotal, elapsed, daysInMo, showPr
   const mjAvg = elapsed ? (mjTotal / elapsed) : 0;
   const gospelAvg = elapsed ? (gospelTotal / elapsed) : 0;
   const projected = showProjection ? Math.round(avg * daysInMo) : null;
-  return `<div class="card">
+  const mjProjected = showProjection ? Math.round(mjAvg * daysInMo) : null;
+  const gospelProjected = showProjection ? Math.round(gospelAvg * daysInMo) : null;
+  return `<div class="card" data-label="${label}">
+    ${expandBtn(label)}
     <div class="card-label">${label}</div>
     <div class="card-value">${total}</div>
     <div class="card-sub">${extraSub || ''}</div>
-    ${splitRow(mjTotal, gospelTotal, mjAvg, gospelAvg, false)}
+    ${splitRow(mjTotal, gospelTotal, mjAvg, gospelAvg, false, mjProjected, gospelProjected)}
     <div class="card-avg-row"><span>Avg / day</span><span>${avg.toFixed(1)}</span></div>
-    ${projected !== null ? `<div class="card-projected"><span>Projected (month)</span><span>${projected}</span></div>` : ''}
+    ${projected !== null ? `<div class="card-projected"><span>Projected (month, team)</span><span>${projected}</span></div>` : ''}
   </div>`;
 }
 
 function rateCard(label, pct, mjPct, gospelPct, avgDaily, extraSub) {
-  return `<div class="card">
+  return `<div class="card" data-label="${label}">
+    ${expandBtn(label)}
     <div class="card-label">${label}</div>
     <div class="card-value">${pct.toFixed(1)}%</div>
     <div class="card-sub">${extraSub || ''}</div>
@@ -734,7 +797,8 @@ function rateCard(label, pct, mjPct, gospelPct, avgDaily, extraSub) {
 }
 
 function pipelineCard(label, current, mjCurrent, gospelCurrent, avgDaily, lastDay) {
-  return `<div class="card">
+  return `<div class="card" data-label="${label}">
+    ${expandBtn(label)}
     <div class="card-label">${label}</div>
     <div class="card-value">${current}</div>
     <div class="card-sub">${lastDay ? `as of ${lastDay}` : 'needs follow-up'}</div>
@@ -744,7 +808,7 @@ function pipelineCard(label, current, mjCurrent, gospelCurrent, avgDaily, lastDa
 }
 
 function pendingCard(label, sub) {
-  return `<div class="card">
+  return `<div class="card" data-label="${label}">
     <div class="card-label">${label}</div>
     <div class="card-value" style="font-size:16px;color:var(--muted)">Pending</div>
     <div class="card-sub">${sub}</div>
@@ -754,29 +818,45 @@ function pendingCard(label, sub) {
 // ─── CHARTS ───────────────────────────────────────────────────────────────────
 const COLORS = { MJ: '#1a9e94', Gospel: '#e07b1a', Team: '#6c63ff', Goal: 'rgba(0,0,0,0.35)' };
 
-function buildDatasets(days, metric) {
+function isCumulative() {
+  const el = document.getElementById('cumulativeToggle');
+  return el ? el.checked : false;
+}
+
+function buildDatasets(days, metric, isRate, cumulative) {
   const views = currentView === 'Team'
     ? [{ key: 'MJ', label: 'MJ', color: COLORS.MJ }, { key: 'Gospel', label: 'Gospel', color: COLORS.Gospel }]
     : [{ key: currentView, label: currentView, color: currentView === 'MJ' ? COLORS.MJ : COLORS.Gospel }];
 
-  return views.map(v => ({
-    label: v.label,
-    data: days.map(d => (allData[d] && allData[d][v.key]) ? allData[d][v.key][metric] : 0),
-    borderColor: v.color,
-    backgroundColor: v.color + '22',
-    tension: 0.35,
-    pointRadius: 3,
-    pointHoverRadius: 5,
-    fill: false,
-    borderWidth: 2
-  }));
+  return views.map(v => {
+    let data = days.map(d => (allData[d] && allData[d][v.key]) ? allData[d][v.key][metric] : 0);
+    if (cumulative) {
+      let sum = 0;
+      data = data.map((val, i) => {
+        sum += val;
+        return isRate ? parseFloat((sum / (i + 1)).toFixed(1)) : sum;
+      });
+    }
+    return {
+      label: v.label,
+      data,
+      borderColor: v.color,
+      backgroundColor: v.color + '22',
+      tension: 0.35,
+      pointRadius: 3,
+      pointHoverRadius: 5,
+      fill: false,
+      borderWidth: 2
+    };
+  });
 }
 
-function goalLine(days, value) {
+function goalLine(days, value, isRate, cumulative) {
   if (!value) return null;
+  const v = parseFloat(value);
   return {
     label: 'Target',
-    data: days.map(() => parseFloat(value)),
+    data: cumulative && !isRate ? days.map((_, i) => parseFloat((v * (i + 1)).toFixed(1))) : days.map(() => v),
     borderColor: COLORS.Goal,
     borderDash: [5, 5],
     borderWidth: 1.5,
@@ -786,11 +866,12 @@ function goalLine(days, value) {
   };
 }
 
-function makeChart(id, days, metric, goalKey, isRate) {
+function makeChart(id, days, metric, goalKey, isRate, cumulativeAllowed) {
+  const cumulative = cumulativeAllowed !== false && isCumulative();
   const labels = days.map(d => d.slice(5)); // MM-DD
-  const datasets = buildDatasets(days, metric);
+  const datasets = buildDatasets(days, metric, isRate, cumulative);
   const gv = goals()[goalKey];
-  const gl = goalKey ? goalLine(days, gv) : null;
+  const gl = goalKey ? goalLine(days, gv, isRate, cumulative) : null;
   if (gl) datasets.push(gl);
 
   if (charts[id]) { charts[id].destroy(); }
@@ -835,12 +916,12 @@ function makeChart(id, days, metric, goalKey, isRate) {
 }
 
 function renderCharts(days) {
-  makeChart('chartLeads', days, 'leads', 'leads', false);
-  makeChart('chartMeetings', days, 'meetings', 'meetings', false);
-  makeChart('chartMeetingRate', days, 'meeting_rate', null, true);
-  makeChart('chartQualPct', days, 'pct_qualified', 'pct_qual', true);
-  makeChart('chartNR', days, 'nr_rate', 'nr_rate', true);
-  makeChart('chartPipeline', days, 'active_pipeline', null, false);
+  makeChart('chartLeads', days, 'leads', 'leads', false, true);
+  makeChart('chartMeetings', days, 'meetings', 'meetings', false, true);
+  makeChart('chartMeetingRate', days, 'meeting_rate', null, true, true);
+  makeChart('chartQualPct', days, 'pct_qualified', 'pct_qual', true, true);
+  makeChart('chartNR', days, 'nr_rate', 'nr_rate', true, true);
+  makeChart('chartPipeline', days, 'active_pipeline', null, false, false);
 }
 
 // ─── GOALS ────────────────────────────────────────────────────────────────────
