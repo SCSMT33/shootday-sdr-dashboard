@@ -7,24 +7,24 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
-    --bg: #0f1117;
-    --surface: #1a1d27;
-    --surface2: #222535;
-    --border: #2e3248;
+    --bg: #f5f6fa;
+    --surface: #ffffff;
+    --surface2: #eef0f6;
+    --border: #dcdfeb;
     --accent: #6c63ff;
-    --mj: #4ecdc4;
-    --gospel: #ff9f43;
+    --mj: #1a9e94;
+    --gospel: #e07b1a;
     --team: #6c63ff;
-    --goal: rgba(255,255,255,0.3);
-    --text: #e8eaf0;
-    --muted: #7b7f9e;
+    --goal: rgba(0,0,0,0.35);
+    --text: #1a1d27;
+    --muted: #5b5f78;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     background: var(--bg);
     color: var(--text);
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    font-size: 14px;
+    font-size: 15px;
     min-height: 100vh;
   }
 
@@ -44,10 +44,10 @@
   }
   .logo { display: flex; align-items: center; gap: 10px; }
   .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
-  .logo h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.02em; color: var(--text); }
+  .logo h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.02em; color: var(--text); }
   .logo span { color: var(--muted); font-weight: 400; }
   .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .last-updated { color: var(--muted); font-size: 12px; }
+  .last-updated { color: var(--text); font-size: 15px; font-weight: 600; }
   #refreshBtn {
     background: var(--accent);
     color: #fff;
@@ -113,10 +113,11 @@
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
   }
-  .card-label { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
-  .card-value { font-size: 28px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
-  .card-sub { font-size: 11px; color: var(--muted); }
+  .card-label { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+  .card-value { font-size: 30px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+  .card-sub { font-size: 12px; color: var(--muted); }
   .card-sub .mj { color: var(--mj); }
   .card-sub .gospel { color: var(--gospel); }
 
@@ -132,12 +133,13 @@
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 18px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
   }
   .chart-card.full { grid-column: 1 / -1; }
   .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
-  .chart-title { font-size: 13px; font-weight: 600; }
+  .chart-title { font-size: 14px; font-weight: 600; }
   .chart-legend { display: flex; gap: 14px; }
-  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
   .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
   canvas { max-height: 220px; }
 
@@ -237,6 +239,7 @@
       <span>Range:</span>
       <select id="rangeSelect" onchange="renderDashboard()">
         <option value="all">All time</option>
+        <option value="thisMonth">This month</option>
         <option value="14">Last 14 days</option>
         <option value="7">Last 7 days</option>
       </select>
@@ -470,7 +473,14 @@ function setView(v) {
 function getFilteredDays() {
   if (!allData) return [];
   const days = Object.keys(allData).sort();
-  const range = parseInt(document.getElementById('rangeSelect').value);
+  const rangeVal = document.getElementById('rangeSelect').value;
+  if (rangeVal === 'all') return days;
+  if (rangeVal === 'thisMonth') {
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    return days.filter(d => d.startsWith(ym));
+  }
+  const range = parseInt(rangeVal);
   if (isNaN(range)) return days;
   return days.slice(-range);
 }
@@ -540,7 +550,7 @@ function pendingCard(label, sub) {
 }
 
 // ─── CHARTS ───────────────────────────────────────────────────────────────────
-const COLORS = { MJ: '#4ecdc4', Gospel: '#ff9f43', Team: '#6c63ff', Goal: 'rgba(255,255,255,0.3)' };
+const COLORS = { MJ: '#1a9e94', Gospel: '#e07b1a', Team: '#6c63ff', Goal: 'rgba(0,0,0,0.35)' };
 
 function buildDatasets(days, metric) {
   const views = currentView === 'Team'
@@ -596,16 +606,16 @@ function makeChart(id, days, metric, goalKey, isRate) {
           backgroundColor: '#1a1d27',
           borderColor: '#2e3248',
           borderWidth: 1,
-          titleColor: '#e8eaf0',
-          bodyColor: '#7b7f9e',
+          titleColor: '#ffffff',
+          bodyColor: '#cfd2e3',
           callbacks: {
             label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}${isRate ? '%' : ''}`
           }
         }
       },
       scales: {
-        x: { ticks: { color: '#7b7f9e', font: { size: 10 } }, grid: { color: '#2e3248' } },
-        y: { ticks: { color: '#7b7f9e', font: { size: 10 } }, grid: { color: '#2e3248' }, beginAtZero: true }
+        x: { ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' } },
+        y: { ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' }, beginAtZero: true }
       }
     }
   });
