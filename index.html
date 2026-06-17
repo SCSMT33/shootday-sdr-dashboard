@@ -121,9 +121,10 @@
   /* SUMMARY CARDS */
   .summary-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 14px;
     margin-bottom: 24px;
+    align-items: stretch;
   }
   .card {
     background: var(--surface);
@@ -131,12 +132,49 @@
     border-radius: 8px;
     padding: 18px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    display: flex;
+    flex-direction: column;
   }
   .card-label { color: var(--muted); font-size: 12px; font-weight: 500; letter-spacing: 0.01em; margin-bottom: 10px; }
   .card-value { font-size: 30px; font-weight: 700; line-height: 1; margin-bottom: 6px; color: var(--text); }
   .card-sub { font-size: 12px; color: var(--muted); }
   .card-sub .mj { color: var(--mj); }
   .card-sub .gospel { color: var(--gospel); }
+
+  .card-split {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .split-col { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+  .split-name { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .split-name.mj { color: var(--mj); }
+  .split-name.gospel { color: var(--gospel); }
+  .split-total { font-size: 17px; font-weight: 700; color: var(--text); }
+  .split-avg { font-size: 11px; color: var(--muted); }
+
+  .card-avg-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .card-avg-row span:last-child { font-weight: 600; color: var(--text); }
+
+  .card-projected {
+    margin-top: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    background: rgba(66,133,244,0.08);
+    padding: 6px 10px;
+    border-radius: 6px;
+    display: flex;
+    justify-content: space-between;
+  }
 
   /* CHARTS GRID */
   .charts-grid {
@@ -532,6 +570,29 @@ function sumMetric(days, view, key) {
   }, 0);
 }
 
+function meanMetric(days, view, key) {
+  if (!days.length) return 0;
+  return sumMetric(days, view, key) / days.length;
+}
+
+// Calendar days spanned by a date range (inclusive), used as the "per day" divisor
+function calendarSpanDays(days) {
+  if (!days.length) return 0;
+  const first = new Date(days[0] + 'T00:00:00');
+  const last = new Date(days[days.length - 1] + 'T00:00:00');
+  return Math.round((last - first) / 86400000) + 1;
+}
+
+function elapsedDaysForAvg(days, rangeVal) {
+  if (rangeVal === 'thisMonth') return new Date().getDate();
+  return calendarSpanDays(days) || 1;
+}
+
+function daysInCurrentMonth() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+}
+
 // ─── RENDER DASHBOARD ─────────────────────────────────────────────────────────
 function renderDashboard() {
   if (!allData) return;
@@ -542,45 +603,100 @@ function renderDashboard() {
 
 function renderSummaryCards(days) {
   const v = currentView;
+  const rangeVal = document.getElementById('rangeSelect').value;
+  const elapsed = elapsedDaysForAvg(days, rangeVal);
+  const daysInMo = daysInCurrentMonth();
+  const showProjection = rangeVal === 'thisMonth';
+  const lastDay = days[days.length - 1];
+
+  // Totals for the current view
   const totalLeads = sumMetric(days, v, 'leads');
   const totalMeetings = sumMetric(days, v, 'meetings');
   const totalQualified = sumMetric(days, v, 'qualified');
-  const pctQual = totalLeads ? (totalQualified / totalLeads * 100).toFixed(1) : '0.0';
   const totalNR = sumMetric(days, v, 'non_responsive');
-  const nrRate = totalLeads ? (totalNR / totalLeads * 100).toFixed(1) : '0.0';
   const totalAEDQ = sumMetric(days, v, 'ae_dq');
-
-  // Active pipeline is the latest day's value, not a sum
-  const lastDay = days[days.length - 1];
+  const pctQual = totalLeads ? (totalQualified / totalLeads * 100) : 0;
+  const nrRate = totalLeads ? (totalNR / totalLeads * 100) : 0;
   const activePipeline = (lastDay && allData[lastDay] && allData[lastDay][v]) ? allData[lastDay][v].active_pipeline : 0;
 
-  const subLeads = v === 'Team'
-    ? `<span class="mj">MJ ${sumMetric(days, 'MJ', 'leads')}</span> · <span class="gospel">Gospel ${sumMetric(days, 'Gospel', 'leads')}</span>`
-    : `${days.length} day${days.length === 1 ? '' : 's'}`;
-  const subMeetings = v === 'Team'
-    ? `<span class="mj">MJ ${sumMetric(days, 'MJ', 'meetings')}</span> · <span class="gospel">Gospel ${sumMetric(days, 'Gospel', 'meetings')}</span>`
-    : '';
+  // MJ / Gospel raw totals (used for split rows only in Team view)
+  const mjLeads = sumMetric(days, 'MJ', 'leads'), gospelLeads = sumMetric(days, 'Gospel', 'leads');
+  const mjMeetings = sumMetric(days, 'MJ', 'meetings'), gospelMeetings = sumMetric(days, 'Gospel', 'meetings');
+  const mjQualified = sumMetric(days, 'MJ', 'qualified'), gospelQualified = sumMetric(days, 'Gospel', 'qualified');
+  const mjNR = sumMetric(days, 'MJ', 'non_responsive'), gospelNR = sumMetric(days, 'Gospel', 'non_responsive');
+  const mjAEDQ = sumMetric(days, 'MJ', 'ae_dq'), gospelAEDQ = sumMetric(days, 'Gospel', 'ae_dq');
+  const mjPctQual = mjLeads ? (mjQualified / mjLeads * 100) : 0;
+  const gospelPctQual = gospelLeads ? (gospelQualified / gospelLeads * 100) : 0;
+  const mjNRRate = mjLeads ? (mjNR / mjLeads * 100) : 0;
+  const gospelNRRate = gospelLeads ? (gospelNR / gospelLeads * 100) : 0;
+  const mjPipeline = (lastDay && allData[lastDay] && allData[lastDay]['MJ']) ? allData[lastDay]['MJ'].active_pipeline : 0;
+  const gospelPipeline = (lastDay && allData[lastDay] && allData[lastDay]['Gospel']) ? allData[lastDay]['Gospel'].active_pipeline : 0;
 
   document.getElementById('summaryCards').innerHTML = `
-    ${card('Lead Volume', totalLeads, subLeads)}
-    ${card('Meetings Booked', totalMeetings, subMeetings)}
-    ${card('Leads Qualified', totalQualified, `${pctQual}% of leads`)}
-    ${card('% Leads Qualified', pctQual + '%', 'share reaching Warm/Hot+')}
-    ${card('Non-Responsive Rate', nrRate + '%', `${totalNR} leads`)}
-    ${card('Disqualified by AE', totalAEDQ, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual')}
-    ${card('Active Pipeline', activePipeline, lastDay ? `as of ${lastDay}` : 'needs follow-up')}
+    ${countCard('Lead Volume', totalLeads, mjLeads, gospelLeads, elapsed, daysInMo, showProjection)}
+    ${countCard('Meetings Booked', totalMeetings, mjMeetings, gospelMeetings, elapsed, daysInMo, showProjection)}
+    ${countCard('Leads Qualified', totalQualified, mjQualified, gospelQualified, elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`)}
+    ${rateCard('% Leads Qualified', pctQual, mjPctQual, gospelPctQual, meanMetric(days, v, 'pct_qualified'), 'share reaching Warm/Hot+')}
+    ${rateCard('Non-Responsive Rate', nrRate, mjNRRate, gospelNRRate, meanMetric(days, v, 'nr_rate'), `${totalNR} leads`)}
+    ${countCard('Disqualified by AE', totalAEDQ, mjAEDQ, gospelAEDQ, elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual')}
+    ${pipelineCard('Active Pipeline', activePipeline, mjPipeline, gospelPipeline, meanMetric(days, v, 'active_pipeline'), lastDay)}
     ${pendingCard('Speed-to-Lead', 'Pending (needs Aircall sync)')}
     ${pendingCard('Cadence Adherence', 'Pending (manual score)')}
   `;
 }
 
-function card(label, value, sub) {
-  return `<div class="card">
-    <div class="card-label">${label}</div>
-    <div class="card-value">${value}</div>
-    <div class="card-sub">${sub}</div>
+function splitRow(mjValue, gospelValue, mjAvg, gospelAvg, isPct) {
+  if (currentView !== 'Team') return '';
+  const fmt = v => isPct ? v.toFixed(1) + '%' : Math.round(v);
+  return `<div class="card-split">
+    <div class="split-col">
+      <span class="split-name mj">MJ</span>
+      <span class="split-total">${fmt(mjValue)}</span>
+      ${mjAvg !== undefined ? `<span class="split-avg">${isPct ? '' : mjAvg.toFixed(1) + '/day'}</span>` : ''}
+    </div>
+    <div class="split-col">
+      <span class="split-name gospel">Gospel</span>
+      <span class="split-total">${fmt(gospelValue)}</span>
+      ${gospelAvg !== undefined ? `<span class="split-avg">${isPct ? '' : gospelAvg.toFixed(1) + '/day'}</span>` : ''}
+    </div>
   </div>`;
 }
+
+function countCard(label, total, mjTotal, gospelTotal, elapsed, daysInMo, showProjection, extraSub) {
+  const avg = elapsed ? (total / elapsed) : 0;
+  const mjAvg = elapsed ? (mjTotal / elapsed) : 0;
+  const gospelAvg = elapsed ? (gospelTotal / elapsed) : 0;
+  const projected = showProjection ? Math.round(avg * daysInMo) : null;
+  return `<div class="card">
+    <div class="card-label">${label}</div>
+    <div class="card-value">${total}</div>
+    <div class="card-sub">${extraSub || ''}</div>
+    ${splitRow(mjTotal, gospelTotal, mjAvg, gospelAvg, false)}
+    <div class="card-avg-row"><span>Avg / day</span><span>${avg.toFixed(1)}</span></div>
+    ${projected !== null ? `<div class="card-projected"><span>Projected (month)</span><span>${projected}</span></div>` : ''}
+  </div>`;
+}
+
+function rateCard(label, pct, mjPct, gospelPct, avgDaily, extraSub) {
+  return `<div class="card">
+    <div class="card-label">${label}</div>
+    <div class="card-value">${pct.toFixed(1)}%</div>
+    <div class="card-sub">${extraSub || ''}</div>
+    ${splitRow(mjPct, gospelPct, undefined, undefined, true)}
+    <div class="card-avg-row"><span>Avg / day</span><span>${avgDaily.toFixed(1)}%</span></div>
+  </div>`;
+}
+
+function pipelineCard(label, current, mjCurrent, gospelCurrent, avgDaily, lastDay) {
+  return `<div class="card">
+    <div class="card-label">${label}</div>
+    <div class="card-value">${current}</div>
+    <div class="card-sub">${lastDay ? `as of ${lastDay}` : 'needs follow-up'}</div>
+    ${splitRow(mjCurrent, gospelCurrent, undefined, undefined, false)}
+    <div class="card-avg-row"><span>Avg / day (period)</span><span>${avgDaily.toFixed(1)}</span></div>
+  </div>`;
+}
+
 function pendingCard(label, sub) {
   return `<div class="card">
     <div class="card-label">${label}</div>
