@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shootday SDR Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #222535;
+    --border: #2e3248;
+    --accent: #6c63ff;
+    --mj: #4ecdc4;
+    --gospel: #ff9f43;
+    --team: #6c63ff;
+    --goal: rgba(255,255,255,0.3);
+    --text: #e8eaf0;
+    --muted: #7b7f9e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* HEADER */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+  .logo h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.02em; color: var(--text); }
+  .logo span { color: var(--muted); font-weight: 400; }
+  .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .last-updated { color: var(--muted); font-size: 12px; }
+  #refreshBtn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: opacity 0.15s;
+  }
+  #refreshBtn:hover { opacity: 0.85; }
+  #fileInput { display: none; }
+
+  /* VIEW TOGGLE */
+  .controls {
+    padding: 18px 28px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .view-tabs { display: flex; gap: 4px; background: var(--surface); border-radius: 8px; padding: 3px; border: 1px solid var(--border); }
+  .view-tab {
+    padding: 6px 16px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .view-tab.active { background: var(--accent); color: #fff; }
+  .date-range { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+  .date-range select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  /* MAIN LAYOUT */
+  main { padding: 20px 28px 40px; }
+
+  /* SUMMARY CARDS */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .card-label { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+  .card-value { font-size: 28px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+  .card-sub { font-size: 11px; color: var(--muted); }
+  .card-sub .mj { color: var(--mj); }
+  .card-sub .gospel { color: var(--gospel); }
+
+  /* CHARTS GRID */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .chart-card.full { grid-column: 1 / -1; }
+  .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
+  .chart-title { font-size: 13px; font-weight: 600; }
+  .chart-legend { display: flex; gap: 14px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+  canvas { max-height: 220px; }
+
+  /* GOALS SECTION */
+  .goals-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 16px;
+  }
+  .goals-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .goals-sub { font-size: 11px; color: var(--muted); margin-bottom: 16px; }
+  .goals-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  .goal-item { display: flex; flex-direction: column; gap: 5px; }
+  .goal-label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .goal-input-row { display: flex; align-items: center; gap: 8px; }
+  .goal-input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 14px;
+    font-weight: 600;
+    width: 90px;
+    transition: border-color 0.15s;
+  }
+  .goal-input:focus { outline: none; border-color: var(--accent); }
+  .goal-unit { font-size: 11px; color: var(--muted); }
+  .pending-badge { background: var(--surface2); color: var(--muted); font-size: 10px; padding: 2px 7px; border-radius: 10px; display: inline-block; border: 1px solid var(--border); }
+
+  /* UPLOAD ZONE */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 48px 32px;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    max-width: 480px;
+    margin: 60px auto;
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); color: var(--text); background: rgba(108,99,255,0.04); }
+  .upload-zone p { font-size: 13px; margin-top: 8px; }
+  .upload-icon { font-size: 32px; margin-bottom: 10px; }
+
+  #noData { display: none; }
+  #dashboard { display: none; }
+
+  @media (max-width: 768px) {
+    .charts-grid { grid-template-columns: 1fr; }
+    .chart-card.full { grid-column: 1; }
+    header { padding: 12px 16px; }
+    main, .controls { padding-left: 16px; padding-right: 16px; }
+    .header-right { width: 100%; justify-content: space-between; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    <h1>Shootday <span>SDR Dashboard</span></h1>
+  </div>
+  <div class="header-right">
+    <span class="last-updated" id="lastUpdated">No data loaded</span>
+    <button id="refreshBtn" onclick="document.getElementById('fileInput').click()">
+      &#x27F3; Load CSV
+    </button>
+    <input type="file" id="fileInput" accept=".csv" onchange="handleFile(event)">
+  </div>
+</header>
+
+<!-- NO DATA STATE -->
+<div id="noData">
+  <main>
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+      <div class="upload-icon">&#128202;</div>
+      <strong>Load your Airtable CSV export</strong>
+      <p>Click or drag and drop your Bookings CSV file</p>
+    </div>
+  </main>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <div class="controls">
+    <div class="view-tabs">
+      <button class="view-tab active" data-view="Team" onclick="setView('Team')">Team</button>
+      <button class="view-tab" data-view="MJ" onclick="setView('MJ')">MJ</button>
+      <button class="view-tab" data-view="Gospel" onclick="setView('Gospel')">Gospel</button>
+    </div>
+    <div class="date-range">
+      <span>Range:</span>
+      <select id="rangeSelect" onchange="renderDashboard()">
+        <option value="all">All time</option>
+        <option value="14">Last 14 days</option>
+        <option value="7">Last 7 days</option>
+      </select>
+    </div>
+  </div>
+
+  <main>
+    <!-- SUMMARY CARDS -->
+    <div class="summary-grid" id="summaryCards"></div>
+
+    <!-- CHARTS -->
+    <div class="charts-grid">
+      <div class="chart-card full">
+        <div class="chart-header">
+          <span class="chart-title">Lead Volume — Daily</span>
+          <div class="chart-legend" id="legend-chartLeads"></div>
+        </div>
+        <canvas id="chartLeads"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">Meetings Booked — Daily</span>
+          <div class="chart-legend" id="legend-chartMeetings"></div>
+        </div>
+        <canvas id="chartMeetings"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">% Leads Qualified — Trend</span>
+          <div class="chart-legend" id="legend-chartQualPct"></div>
+        </div>
+        <canvas id="chartQualPct"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">Non-Responsive Rate % — Trend</span>
+          <div class="chart-legend" id="legend-chartNR"></div>
+        </div>
+        <canvas id="chartNR"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">Active Pipeline — Daily</span>
+          <div class="chart-legend" id="legend-chartPipeline"></div>
+        </div>
+        <canvas id="chartPipeline"></canvas>
+      </div>
+    </div>
+
+    <!-- GOALS -->
+    <div class="goals-section">
+      <div class="goals-title">Daily Targets</div>
+      <div class="goals-sub">Set your goal numbers here — they appear as dashed target lines on each chart. Saved automatically.</div>
+      <div class="goals-grid">
+        <div class="goal-item">
+          <div class="goal-label">Lead Volume / day</div>
+          <div class="goal-input-row">
+            <input class="goal-input" type="number" id="goal_leads" placeholder="e.g. 15" oninput="saveGoals(); renderDashboard()">
+            <span class="goal-unit">leads</span>
+          </div>
+        </div>
+        <div class="goal-item">
+          <div class="goal-label">Meetings Booked / day</div>
+          <div class="goal-input-row">
+            <input class="goal-input" type="number" id="goal_meetings" placeholder="e.g. 3" oninput="saveGoals(); renderDashboard()">
+            <span class="goal-unit">meetings</span>
+          </div>
+        </div>
+        <div class="goal-item">
+          <div class="goal-label">% Qualified target</div>
+          <div class="goal-input-row">
+            <input class="goal-input" type="number" id="goal_pct_qual" placeholder="e.g. 30" oninput="saveGoals(); renderDashboard()">
+            <span class="goal-unit">%</span>
+          </div>
+        </div>
+        <div class="goal-item">
+          <div class="goal-label">Non-Responsive Rate max</div>
+          <div class="goal-input-row">
+            <input class="goal-input" type="number" id="goal_nr_rate" placeholder="e.g. 25" oninput="saveGoals(); renderDashboard()">
+            <span class="goal-unit">%</span>
+          </div>
+        </div>
+        <div class="goal-item">
+          <div class="goal-label">Speed-to-Lead</div>
+          <div class="goal-input-row"><span class="pending-badge">Pending (needs Aircall sync)</span></div>
+        </div>
+        <div class="goal-item">
+          <div class="goal-label">Cadence Adherence</div>
+          <div class="goal-input-row"><span class="pending-badge">Pending (manual score)</span></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let allData = null;   // { date: { MJ, Gospel, Team } }
+let currentView = 'Team';
+let charts = {};
+
+// ─── FILE HANDLING ────────────────────────────────────────────────────────────
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  readFile(file);
+}
+function dragOver(e) { e.preventDefault(); document.getElementById('uploadZone').classList.add('drag'); }
+function dragLeave(e) { document.getElementById('uploadZone').classList.remove('drag'); }
+function dropFile(e) {
+  e.preventDefault();
+  dragLeave(e);
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  readFile(file);
+}
+function readFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => parseCSV(ev.target.result, file.name);
+  reader.readAsText(file);
+}
+
+// ─── ROBUST CSV PARSER (handles quoted fields with embedded commas/newlines) ──
+function parseCSVText(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  // normalize line endings
+  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else { inQuotes = false; }
+      } else {
+        field += c;
+      }
+    } else {
+      if (c === '"') { inQuotes = true; }
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\n') { row.push(field); field = ''; rows.push(row); row = []; }
+      else { field += c; }
+    }
+  }
+  // last field/row
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => r.length > 1 || (r.length === 1 && r[0].trim() !== ''));
+}
+
+function parseCSV(text, filename) {
+  const raw = text.replace(/^﻿/, '');
+  const table = parseCSVText(raw);
+  if (!table.length) return;
+  const headers = table[0].map(h => h.trim());
+
+  const rows = [];
+  for (let i = 1; i < table.length; i++) {
+    const vals = table[i];
+    const row = {};
+    headers.forEach((h, idx) => { row[h] = (vals[idx] || '').trim(); });
+    rows.push(row);
+  }
+
+  // Filter to SDR-owned rows only
+  const sdrRows = rows.filter(r => r['SDR Owner'] === 'MJ Montero' || r['SDR Owner'] === 'Gospel Lim');
+
+  // Group by day and SDR
+  const byDay = {};
+  sdrRows.forEach(r => {
+    const raw = r['Creation Date'] || '';
+    if (!raw) return;
+    const day = raw.substring(0, 10);
+    if (!byDay[day]) byDay[day] = { MJ: [], Gospel: [] };
+    const key = r['SDR Owner'] === 'MJ Montero' ? 'MJ' : 'Gospel';
+    byDay[day][key].push(r);
+  });
+
+  // Compute metrics per day
+  allData = {};
+  Object.keys(byDay).sort().forEach(day => {
+    const mj = byDay[day].MJ;
+    const gospel = byDay[day].Gospel;
+    allData[day] = {
+      MJ: computeMetrics(mj),
+      Gospel: computeMetrics(gospel),
+      Team: computeMetrics([...mj, ...gospel])
+    };
+  });
+
+  const dates = Object.keys(allData).sort();
+  const firstDate = dates[0];
+  const lastDate = dates[dates.length - 1];
+  const rangeText = dates.length ? (firstDate === lastDate ? firstDate : `${firstDate} – ${lastDate}`) : 'no dates found';
+  document.getElementById('lastUpdated').textContent = `${filename} · ${rangeText}`;
+  document.getElementById('noData').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+
+  loadGoals();
+  renderDashboard();
+}
+
+function computeMetrics(leads) {
+  if (!leads || !leads.length) return { leads: 0, meetings: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, active_pipeline: 0 };
+  const meetings = leads.filter(r => ['Meeting Scheduled','Meeting Done','Meeting Rejected','Meeting Not Atended'].includes(r['Meeting Status'])).length;
+  const qualified = leads.filter(r => ['Qualified_SDR','Warm','Hot','Closed','Lost'].includes(r['Sales status'])).length;
+  const non_responsive = leads.filter(r => r['Disqualified reason'] === 'Not responsive' || r['Sales status'] === 'Non respondant').length;
+  const ae_dq = leads.filter(r => (r['Sales status'] || '').includes('Disqualified AE')).length;
+  const active_pipeline = leads.filter(r => !['Closed','Disqualified','Lost','Deposit refund',''].includes(r['Sales status'])).length;
+  return {
+    leads: leads.length,
+    meetings,
+    qualified,
+    pct_qualified: leads.length ? parseFloat((qualified / leads.length * 100).toFixed(1)) : 0,
+    non_responsive,
+    nr_rate: leads.length ? parseFloat((non_responsive / leads.length * 100).toFixed(1)) : 0,
+    ae_dq,
+    active_pipeline
+  };
+}
+
+// ─── VIEW TOGGLE ──────────────────────────────────────────────────────────────
+function setView(v) {
+  currentView = v;
+  document.querySelectorAll('.view-tab').forEach(t => t.classList.toggle('active', t.dataset.view === v));
+  renderDashboard();
+}
+
+// ─── FILTERED DATA ────────────────────────────────────────────────────────────
+function getFilteredDays() {
+  if (!allData) return [];
+  const days = Object.keys(allData).sort();
+  const range = parseInt(document.getElementById('rangeSelect').value);
+  if (isNaN(range)) return days;
+  return days.slice(-range);
+}
+
+function sumMetric(days, view, key) {
+  return days.reduce((acc, d) => {
+    const m = allData[d] && allData[d][view];
+    return acc + (m ? (m[key] || 0) : 0);
+  }, 0);
+}
+
+// ─── RENDER DASHBOARD ─────────────────────────────────────────────────────────
+function renderDashboard() {
+  if (!allData) return;
+  const days = getFilteredDays();
+  renderSummaryCards(days);
+  renderCharts(days);
+}
+
+function renderSummaryCards(days) {
+  const v = currentView;
+  const totalLeads = sumMetric(days, v, 'leads');
+  const totalMeetings = sumMetric(days, v, 'meetings');
+  const totalQualified = sumMetric(days, v, 'qualified');
+  const pctQual = totalLeads ? (totalQualified / totalLeads * 100).toFixed(1) : '0.0';
+  const totalNR = sumMetric(days, v, 'non_responsive');
+  const nrRate = totalLeads ? (totalNR / totalLeads * 100).toFixed(1) : '0.0';
+  const totalAEDQ = sumMetric(days, v, 'ae_dq');
+
+  // Active pipeline is the latest day's value, not a sum
+  const lastDay = days[days.length - 1];
+  const activePipeline = (lastDay && allData[lastDay] && allData[lastDay][v]) ? allData[lastDay][v].active_pipeline : 0;
+
+  const subLeads = v === 'Team'
+    ? `<span class="mj">MJ ${sumMetric(days, 'MJ', 'leads')}</span> · <span class="gospel">Gospel ${sumMetric(days, 'Gospel', 'leads')}</span>`
+    : `${days.length} day${days.length === 1 ? '' : 's'}`;
+  const subMeetings = v === 'Team'
+    ? `<span class="mj">MJ ${sumMetric(days, 'MJ', 'meetings')}</span> · <span class="gospel">Gospel ${sumMetric(days, 'Gospel', 'meetings')}</span>`
+    : '';
+
+  document.getElementById('summaryCards').innerHTML = `
+    ${card('Lead Volume', totalLeads, subLeads)}
+    ${card('Meetings Booked', totalMeetings, subMeetings)}
+    ${card('Leads Qualified', totalQualified, `${pctQual}% of leads`)}
+    ${card('% Leads Qualified', pctQual + '%', 'share reaching Warm/Hot+')}
+    ${card('Non-Responsive Rate', nrRate + '%', `${totalNR} leads`)}
+    ${card('Disqualified by AE', totalAEDQ, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual')}
+    ${card('Active Pipeline', activePipeline, lastDay ? `as of ${lastDay}` : 'needs follow-up')}
+    ${pendingCard('Speed-to-Lead', 'Pending (needs Aircall sync)')}
+    ${pendingCard('Cadence Adherence', 'Pending (manual score)')}
+  `;
+}
+
+function card(label, value, sub) {
+  return `<div class="card">
+    <div class="card-label">${label}</div>
+    <div class="card-value">${value}</div>
+    <div class="card-sub">${sub}</div>
+  </div>`;
+}
+function pendingCard(label, sub) {
+  return `<div class="card">
+    <div class="card-label">${label}</div>
+    <div class="card-value" style="font-size:16px;color:var(--muted)">Pending</div>
+    <div class="card-sub">${sub}</div>
+  </div>`;
+}
+
+// ─── CHARTS ───────────────────────────────────────────────────────────────────
+const COLORS = { MJ: '#4ecdc4', Gospel: '#ff9f43', Team: '#6c63ff', Goal: 'rgba(255,255,255,0.3)' };
+
+function buildDatasets(days, metric) {
+  const views = currentView === 'Team'
+    ? [{ key: 'MJ', label: 'MJ', color: COLORS.MJ }, { key: 'Gospel', label: 'Gospel', color: COLORS.Gospel }]
+    : [{ key: currentView, label: currentView, color: currentView === 'MJ' ? COLORS.MJ : COLORS.Gospel }];
+
+  return views.map(v => ({
+    label: v.label,
+    data: days.map(d => (allData[d] && allData[d][v.key]) ? allData[d][v.key][metric] : 0),
+    borderColor: v.color,
+    backgroundColor: v.color + '22',
+    tension: 0.35,
+    pointRadius: 3,
+    pointHoverRadius: 5,
+    fill: false,
+    borderWidth: 2
+  }));
+}
+
+function goalLine(days, value) {
+  if (!value) return null;
+  return {
+    label: 'Target',
+    data: days.map(() => parseFloat(value)),
+    borderColor: COLORS.Goal,
+    borderDash: [5, 5],
+    borderWidth: 1.5,
+    pointRadius: 0,
+    fill: false,
+    tension: 0
+  };
+}
+
+function makeChart(id, days, metric, goalKey, isRate) {
+  const labels = days.map(d => d.slice(5)); // MM-DD
+  const datasets = buildDatasets(days, metric);
+  const gv = goals()[goalKey];
+  const gl = goalKey ? goalLine(days, gv) : null;
+  if (gl) datasets.push(gl);
+
+  if (charts[id]) { charts[id].destroy(); }
+  const ctx = document.getElementById(id).getContext('2d');
+  charts[id] = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1d27',
+          borderColor: '#2e3248',
+          borderWidth: 1,
+          titleColor: '#e8eaf0',
+          bodyColor: '#7b7f9e',
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}${isRate ? '%' : ''}`
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#7b7f9e', font: { size: 10 } }, grid: { color: '#2e3248' } },
+        y: { ticks: { color: '#7b7f9e', font: { size: 10 } }, grid: { color: '#2e3248' }, beginAtZero: true }
+      }
+    }
+  });
+
+  const legendEl = document.getElementById('legend-' + id);
+  if (legendEl) {
+    const items = currentView === 'Team'
+      ? [{ label: 'MJ', color: COLORS.MJ }, { label: 'Gospel', color: COLORS.Gospel }]
+      : [{ label: currentView, color: currentView === 'MJ' ? COLORS.MJ : COLORS.Gospel }];
+    if (gl) items.push({ label: 'Target', color: COLORS.Goal });
+    legendEl.innerHTML = items.map(it =>
+      `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
+    ).join('');
+  }
+}
+
+function renderCharts(days) {
+  makeChart('chartLeads', days, 'leads', 'leads', false);
+  makeChart('chartMeetings', days, 'meetings', 'meetings', false);
+  makeChart('chartQualPct', days, 'pct_qualified', 'pct_qual', true);
+  makeChart('chartNR', days, 'nr_rate', 'nr_rate', true);
+  makeChart('chartPipeline', days, 'active_pipeline', null, false);
+}
+
+// ─── GOALS ────────────────────────────────────────────────────────────────────
+function goals() {
+  return {
+    leads: document.getElementById('goal_leads').value,
+    meetings: document.getElementById('goal_meetings').value,
+    pct_qual: document.getElementById('goal_pct_qual').value,
+    nr_rate: document.getElementById('goal_nr_rate').value,
+  };
+}
+function saveGoals() {
+  try { localStorage.setItem('sdr_goals', JSON.stringify(goals())); } catch(e) {}
+}
+function loadGoals() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('sdr_goals') || '{}');
+    if (saved.leads) document.getElementById('goal_leads').value = saved.leads;
+    if (saved.meetings) document.getElementById('goal_meetings').value = saved.meetings;
+    if (saved.pct_qual) document.getElementById('goal_pct_qual').value = saved.pct_qual;
+    if (saved.nr_rate) document.getElementById('goal_nr_rate').value = saved.nr_rate;
+  } catch(e) {}
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+document.getElementById('noData').style.display = 'block';
+loadGoals();
+</script>
+</body>
+</html>
