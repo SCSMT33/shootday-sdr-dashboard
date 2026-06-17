@@ -489,7 +489,7 @@
           <div class="goal-derived" id="derived_leads"></div>
         </div>
         <div class="goal-item">
-          <div class="goal-label">Meeting Booked Rate target <span class="goal-info" title="Meetings Booked goal = this % × Lead Volume goal. Each SDR's individual on-track check splits the resulting count evenly across MJ and Gospel (÷2).">ⓘ</span></div>
+          <div class="goal-label">Meeting Booked Rate target <span class="goal-info" title="Meetings Booked goal = this % × Lead Volume goal (team). For each SDR's individual check, the same % is applied to their own actual lead volume — not an even split — since leads aren't divided 50/50.">ⓘ</span></div>
           <div class="goal-input-row">
             <input class="goal-input" type="number" id="goal_meeting_rate" placeholder="e.g. 20" oninput="saveGoals(); renderDashboard()">
             <span class="goal-unit">%</span>
@@ -497,7 +497,7 @@
           <div class="goal-derived" id="derived_meetings"></div>
         </div>
         <div class="goal-item">
-          <div class="goal-label">% Qualified target <span class="goal-info" title="Leads Qualified goal = this % × Lead Volume goal. Same percentage target applies to the team and to each individual SDR; the count is split evenly (÷2) for individual on-track checks.">ⓘ</span></div>
+          <div class="goal-label">% Qualified target <span class="goal-info" title="Leads Qualified goal = this % × Lead Volume goal (team). For each SDR's individual check, the same % is applied to their own actual lead volume — not an even split — since leads aren't divided 50/50.">ⓘ</span></div>
           <div class="goal-input-row">
             <input class="goal-input" type="number" id="goal_pct_qual" placeholder="e.g. 40" oninput="saveGoals(); renderDashboard()">
             <span class="goal-unit">%</span>
@@ -813,11 +813,20 @@ function renderSummaryCards(days) {
 
   const d = derivedGoals();
 
+  // Each SDR's individual count goal is the KPI% applied to *their own* projected
+  // lead volume (not an even split of the team goal) — leads aren't split 50/50.
+  const mjLeadsProjected = elapsed ? (mjLeads / elapsed * daysInMo) : 0;
+  const gospelLeadsProjected = elapsed ? (gospelLeads / elapsed * daysInMo) : 0;
+  const mjMeetingsGoal = d.goalMeetingRate ? (d.goalMeetingRate / 100 * mjLeadsProjected) : null;
+  const gospelMeetingsGoal = d.goalMeetingRate ? (d.goalMeetingRate / 100 * gospelLeadsProjected) : null;
+  const mjQualifiedGoal = d.goalPctQual ? (d.goalPctQual / 100 * mjLeadsProjected) : null;
+  const gospelQualifiedGoal = d.goalPctQual ? (d.goalPctQual / 100 * gospelLeadsProjected) : null;
+
   document.getElementById('summaryCards').innerHTML = `
-    ${countCard('Lead Volume', totalLeads, mjLeads, gospelLeads, elapsed, daysInMo, showProjection, undefined, d.goalLeads)}
-    ${countCard('Meetings Booked', totalMeetings, mjMeetings, gospelMeetings, elapsed, daysInMo, showProjection, undefined, d.goalMeetings)}
+    ${countCard('Lead Volume', totalLeads, mjLeads, gospelLeads, elapsed, daysInMo, showProjection, undefined, d.goalLeads, d.goalLeads ? d.goalLeads * (mjLeads / (totalLeads || 1)) : null, d.goalLeads ? d.goalLeads * (gospelLeads / (totalLeads || 1)) : null)}
+    ${countCard('Meetings Booked', totalMeetings, mjMeetings, gospelMeetings, elapsed, daysInMo, showProjection, undefined, d.goalMeetings, mjMeetingsGoal, gospelMeetingsGoal)}
     ${rateCard('Meeting Booked Rate', meetingRate, mjMeetingRate, gospelMeetingRate, meanMetric(days, v, 'meeting_rate'), 'meetings ÷ total leads', d.goalMeetingRate, false)}
-    ${countCard('Leads Qualified', totalQualified, mjQualified, gospelQualified, elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified)}
+    ${countCard('Leads Qualified', totalQualified, mjQualified, gospelQualified, elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified, mjQualifiedGoal, gospelQualifiedGoal)}
     ${rateCard('% Leads Qualified', pctQual, mjPctQual, gospelPctQual, meanMetric(days, v, 'pct_qualified'), 'share reaching Warm/Hot+', d.goalPctQual, false)}
     ${rateCard('Non-Responsive Rate', nrRate, mjNRRate, gospelNRRate, meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true)}
     ${countCard('Disqualified by AE', totalAEDQ, mjAEDQ, gospelAEDQ, elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual')}
@@ -851,15 +860,13 @@ function goalStatusRow(actual, goalVal, isPct, lowerIsBetter, rowLabel) {
   </div>`;
 }
 
-function splitRow(mjValue, gospelValue, mjAvg, gospelAvg, isPct, mjProjected, gospelProjected, goalVal, lowerIsBetter) {
+function splitRow(mjValue, gospelValue, mjAvg, gospelAvg, isPct, mjProjected, gospelProjected, mjGoal, gospelGoal, lowerIsBetter) {
   if (currentView !== 'Team') return '';
   const fmt = v => isPct ? v.toFixed(1) + '%' : Math.round(v);
-  const goalNote = (val) => {
+  const goalNote = (val, goalVal) => {
     if (val == null || !goalVal) return '';
-    // Count goals are team monthly totals; split evenly across the 2 SDRs for an individual target.
-    const indivGoal = isPct ? goalVal : goalVal / 2;
-    const onTrack = lowerIsBetter ? val <= indivGoal : val >= indivGoal;
-    const fmtGoal = isPct ? goalVal : Math.round(indivGoal);
+    const onTrack = lowerIsBetter ? val <= goalVal : val >= goalVal;
+    const fmtGoal = isPct ? goalVal : Math.round(goalVal);
     return `<span class="split-goal ${onTrack ? 'on-track' : 'off-track'}">${isPct ? 'target ' + fmtGoal + '%' : 'goal ' + fmtGoal} ${onTrack ? '✓' : '✗'}</span>`;
   };
   return `<div class="card-split">
@@ -868,19 +875,19 @@ function splitRow(mjValue, gospelValue, mjAvg, gospelAvg, isPct, mjProjected, go
       <span class="split-total">${fmt(mjValue)}</span>
       ${mjAvg !== undefined ? `<span class="split-avg">${isPct ? '' : mjAvg.toFixed(1) + '/day'}</span>` : ''}
       ${mjProjected != null ? `<span class="split-proj">→ ${mjProjected} proj.</span>` : ''}
-      ${goalNote(isPct ? mjValue : mjProjected)}
+      ${goalNote(isPct ? mjValue : mjProjected, mjGoal)}
     </div>
     <div class="split-col">
       <span class="split-name gospel">Gospel</span>
       <span class="split-total">${fmt(gospelValue)}</span>
       ${gospelAvg !== undefined ? `<span class="split-avg">${isPct ? '' : gospelAvg.toFixed(1) + '/day'}</span>` : ''}
       ${gospelProjected != null ? `<span class="split-proj">→ ${gospelProjected} proj.</span>` : ''}
-      ${goalNote(isPct ? gospelValue : gospelProjected)}
+      ${goalNote(isPct ? gospelValue : gospelProjected, gospelGoal)}
     </div>
   </div>`;
 }
 
-function countCard(label, total, mjTotal, gospelTotal, elapsed, daysInMo, showProjection, extraSub, goalMonthly) {
+function countCard(label, total, mjTotal, gospelTotal, elapsed, daysInMo, showProjection, extraSub, goalMonthly, mjGoal, gospelGoal) {
   const avg = elapsed ? (total / elapsed) : 0;
   const mjAvg = elapsed ? (mjTotal / elapsed) : 0;
   const gospelAvg = elapsed ? (gospelTotal / elapsed) : 0;
@@ -893,7 +900,7 @@ function countCard(label, total, mjTotal, gospelTotal, elapsed, daysInMo, showPr
     <div class="card-label">${label}</div>
     <div class="card-value">${total}</div>
     <div class="card-sub">${extraSub || ''}</div>
-    ${splitRow(mjTotal, gospelTotal, mjAvg, gospelAvg, false, mjProjected, gospelProjected, showProjection ? goalMonthly : null, false)}
+    ${splitRow(mjTotal, gospelTotal, mjAvg, gospelAvg, false, mjProjected, gospelProjected, showProjection ? mjGoal : null, showProjection ? gospelGoal : null, false)}
     <div class="card-avg-row"><span>Avg / day</span><span>${avg.toFixed(1)}</span></div>
     ${projected !== null ? `<div class="card-projected"><span>Projected (month, team)</span><span>${projected}</span></div>` : ''}
     ${goalRow}
@@ -907,7 +914,7 @@ function rateCard(label, pct, mjPct, gospelPct, avgDaily, extraSub, goalVal, low
     <div class="card-label">${label}</div>
     <div class="card-value">${pct.toFixed(1)}%</div>
     <div class="card-sub">${extraSub || ''}</div>
-    ${splitRow(mjPct, gospelPct, undefined, undefined, true, undefined, undefined, goalVal, lowerIsBetter)}
+    ${splitRow(mjPct, gospelPct, undefined, undefined, true, undefined, undefined, goalVal, goalVal, lowerIsBetter)}
     <div class="card-avg-row"><span>Avg / day</span><span>${avgDaily.toFixed(1)}%</span></div>
     ${goalRow}
   </div>`;
