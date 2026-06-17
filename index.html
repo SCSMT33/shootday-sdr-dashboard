@@ -329,6 +329,7 @@
   }
   .goal-input:focus { outline: none; border-color: var(--accent); }
   .goal-unit { font-size: 11px; color: var(--muted); }
+  .goal-derived { font-size: 11px; color: var(--accent); font-weight: 600; min-height: 14px; }
   .pending-badge { background: var(--surface2); color: var(--muted); font-size: 10px; padding: 2px 7px; border-radius: 10px; display: inline-block; border: 1px solid var(--border); }
 
   /* UPLOAD ZONE */
@@ -477,35 +478,31 @@
     <!-- GOALS -->
     <div class="goals-section">
       <div class="goals-title">Monthly Targets</div>
-      <div class="goals-sub">Enter monthly totals — daily/cumulative targets on the charts and "on track" badges on the cards are calculated automatically. Saved automatically.</div>
+      <div class="goals-sub">Lead Volume is your monthly baseline. Meeting Booked Rate and % Qualified are KPI percentages — their count goals (and chart/card targets) are calculated automatically as % × Lead Volume. Saved automatically.</div>
       <div class="goals-grid">
         <div class="goal-item">
-          <div class="goal-label">Lead Volume / month</div>
+          <div class="goal-label">Lead Volume / month <span class="goal-info" title="Baseline. All other count goals (Meetings Booked, Leads Qualified) are calculated as a percentage of this number.">ⓘ</span></div>
           <div class="goal-input-row">
             <input class="goal-input" type="number" id="goal_leads" placeholder="e.g. 450" oninput="saveGoals(); renderDashboard()">
             <span class="goal-unit">leads</span>
           </div>
+          <div class="goal-derived" id="derived_leads"></div>
         </div>
         <div class="goal-item">
-          <div class="goal-label">Meetings Booked / month <span class="goal-info" title="Team monthly total. Each SDR's individual on-track check uses this number split evenly across MJ and Gospel (÷2) — the two individual goals add up to this team total.">ⓘ</span></div>
+          <div class="goal-label">Meeting Booked Rate target <span class="goal-info" title="Meetings Booked goal = this % × Lead Volume goal. Each SDR's individual on-track check splits the resulting count evenly across MJ and Gospel (÷2).">ⓘ</span></div>
           <div class="goal-input-row">
-            <input class="goal-input" type="number" id="goal_meetings" placeholder="e.g. 90" oninput="saveGoals(); renderDashboard()">
-            <span class="goal-unit">meetings</span>
-          </div>
-        </div>
-        <div class="goal-item">
-          <div class="goal-label">Leads Qualified / month <span class="goal-info" title="Team monthly total. Each SDR's individual on-track check uses this number split evenly across MJ and Gospel (÷2) — the two individual goals add up to this team total.">ⓘ</span></div>
-          <div class="goal-input-row">
-            <input class="goal-input" type="number" id="goal_qualified" placeholder="e.g. 130" oninput="saveGoals(); renderDashboard()">
-            <span class="goal-unit">leads</span>
-          </div>
-        </div>
-        <div class="goal-item">
-          <div class="goal-label">% Qualified target <span class="goal-info" title="Same percentage target applies to the team and to each individual SDR.">ⓘ</span></div>
-          <div class="goal-input-row">
-            <input class="goal-input" type="number" id="goal_pct_qual" placeholder="e.g. 30" oninput="saveGoals(); renderDashboard()">
+            <input class="goal-input" type="number" id="goal_meeting_rate" placeholder="e.g. 20" oninput="saveGoals(); renderDashboard()">
             <span class="goal-unit">%</span>
           </div>
+          <div class="goal-derived" id="derived_meetings"></div>
+        </div>
+        <div class="goal-item">
+          <div class="goal-label">% Qualified target <span class="goal-info" title="Leads Qualified goal = this % × Lead Volume goal. Same percentage target applies to the team and to each individual SDR; the count is split evenly (÷2) for individual on-track checks.">ⓘ</span></div>
+          <div class="goal-input-row">
+            <input class="goal-input" type="number" id="goal_pct_qual" placeholder="e.g. 40" oninput="saveGoals(); renderDashboard()">
+            <span class="goal-unit">%</span>
+          </div>
+          <div class="goal-derived" id="derived_qualified"></div>
         </div>
         <div class="goal-item">
           <div class="goal-label">Non-Responsive Rate max</div>
@@ -814,20 +811,15 @@ function renderSummaryCards(days) {
   const mjPipeline = (lastDay && allData[lastDay] && allData[lastDay]['MJ']) ? allData[lastDay]['MJ'].active_pipeline : 0;
   const gospelPipeline = (lastDay && allData[lastDay] && allData[lastDay]['Gospel']) ? allData[lastDay]['Gospel'].active_pipeline : 0;
 
-  const g = goals();
-  const goalLeads = parseFloat(g.leads) || null;
-  const goalMeetings = parseFloat(g.meetings) || null;
-  const goalQualified = parseFloat(g.qualified) || null;
-  const goalPctQual = parseFloat(g.pct_qual) || null;
-  const goalNRRate = parseFloat(g.nr_rate) || null;
+  const d = derivedGoals();
 
   document.getElementById('summaryCards').innerHTML = `
-    ${countCard('Lead Volume', totalLeads, mjLeads, gospelLeads, elapsed, daysInMo, showProjection, undefined, goalLeads)}
-    ${countCard('Meetings Booked', totalMeetings, mjMeetings, gospelMeetings, elapsed, daysInMo, showProjection, undefined, goalMeetings)}
-    ${rateCard('Meeting Booked Rate', meetingRate, mjMeetingRate, gospelMeetingRate, meanMetric(days, v, 'meeting_rate'), 'meetings ÷ total leads')}
-    ${countCard('Leads Qualified', totalQualified, mjQualified, gospelQualified, elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, goalQualified)}
-    ${rateCard('% Leads Qualified', pctQual, mjPctQual, gospelPctQual, meanMetric(days, v, 'pct_qualified'), 'share reaching Warm/Hot+', goalPctQual, false)}
-    ${rateCard('Non-Responsive Rate', nrRate, mjNRRate, gospelNRRate, meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, goalNRRate, true)}
+    ${countCard('Lead Volume', totalLeads, mjLeads, gospelLeads, elapsed, daysInMo, showProjection, undefined, d.goalLeads)}
+    ${countCard('Meetings Booked', totalMeetings, mjMeetings, gospelMeetings, elapsed, daysInMo, showProjection, undefined, d.goalMeetings)}
+    ${rateCard('Meeting Booked Rate', meetingRate, mjMeetingRate, gospelMeetingRate, meanMetric(days, v, 'meeting_rate'), 'meetings ÷ total leads', d.goalMeetingRate, false)}
+    ${countCard('Leads Qualified', totalQualified, mjQualified, gospelQualified, elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified)}
+    ${rateCard('% Leads Qualified', pctQual, mjPctQual, gospelPctQual, meanMetric(days, v, 'pct_qualified'), 'share reaching Warm/Hot+', d.goalPctQual, false)}
+    ${rateCard('Non-Responsive Rate', nrRate, mjNRRate, gospelNRRate, meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true)}
     ${countCard('Disqualified by AE', totalAEDQ, mjAEDQ, gospelAEDQ, elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual')}
     ${pipelineCard('Active Pipeline', activePipeline, mjPipeline, gospelPipeline, meanMetric(days, v, 'active_pipeline'), lastDay)}
     ${pendingCard('Speed-to-Lead', 'Pending (needs Aircall sync)')}
@@ -991,13 +983,13 @@ function goalLine(days, value, isRate, cumulative) {
   };
 }
 
-function makeChart(id, days, metric, goalKey, isRate, cumulativeAllowed) {
+function makeChart(id, days, metric, goalKey, isRate, cumulativeAllowed, goalOverride) {
   const cumulative = cumulativeAllowed !== false && isCumulative(id);
   const labels = days.map(d => d.slice(5)); // MM-DD
   const datasets = buildDatasets(days, metric, isRate, cumulative);
-  const rawGoal = parseFloat(goals()[goalKey]);
+  const rawGoal = goalOverride != null ? goalOverride : parseFloat(goals()[goalKey]);
   const gv = (!isNaN(rawGoal) && rawGoal) ? (isRate ? rawGoal : rawGoal / daysInCurrentMonth()) : null;
-  const gl = goalKey ? goalLine(days, gv, isRate, cumulative) : null;
+  const gl = (goalKey || goalOverride != null) ? goalLine(days, gv, isRate, cumulative) : null;
   if (gl) datasets.push(gl);
 
   if (charts[id]) { charts[id].destroy(); }
@@ -1042,9 +1034,10 @@ function makeChart(id, days, metric, goalKey, isRate, cumulativeAllowed) {
 }
 
 function renderCharts(days) {
+  const d = derivedGoals();
   makeChart('chartLeads', days, 'leads', 'leads', false, true);
-  makeChart('chartMeetings', days, 'meetings', 'meetings', false, true);
-  makeChart('chartMeetingRate', days, 'meeting_rate', null, true, true);
+  makeChart('chartMeetings', days, 'meetings', null, false, true, d.goalMeetings);
+  makeChart('chartMeetingRate', days, 'meeting_rate', null, true, true, d.goalMeetingRate);
   makeChart('chartQualPct', days, 'pct_qualified', 'pct_qual', true, true);
   makeChart('chartNR', days, 'nr_rate', 'nr_rate', true, true);
   makeChart('chartPipeline', days, 'active_pipeline', null, false, false);
@@ -1054,24 +1047,48 @@ function renderCharts(days) {
 function goals() {
   return {
     leads: document.getElementById('goal_leads').value,
-    meetings: document.getElementById('goal_meetings').value,
-    qualified: document.getElementById('goal_qualified').value,
+    meeting_rate: document.getElementById('goal_meeting_rate').value,
     pct_qual: document.getElementById('goal_pct_qual').value,
     nr_rate: document.getElementById('goal_nr_rate').value,
   };
 }
+// Lead Volume is the baseline goal; Meetings Booked and Leads Qualified count
+// goals are derived from it via the KPI percentages, not entered directly.
+function derivedGoals() {
+  const g = goals();
+  const goalLeads = parseFloat(g.leads) || null;
+  const goalMeetingRate = parseFloat(g.meeting_rate) || null;
+  const goalPctQual = parseFloat(g.pct_qual) || null;
+  return {
+    goalLeads,
+    goalMeetingRate,
+    goalPctQual,
+    goalNRRate: parseFloat(g.nr_rate) || null,
+    goalMeetings: (goalLeads && goalMeetingRate) ? goalLeads * goalMeetingRate / 100 : null,
+    goalQualified: (goalLeads && goalPctQual) ? goalLeads * goalPctQual / 100 : null,
+  };
+}
+function renderDerivedGoalPreviews() {
+  const d = derivedGoals();
+  const fmt = v => v == null ? '' : `→ ${Math.round(v)} goal`;
+  const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  set('derived_leads', '');
+  set('derived_meetings', fmt(d.goalMeetings));
+  set('derived_qualified', fmt(d.goalQualified));
+}
 function saveGoals() {
   try { localStorage.setItem('sdr_goals', JSON.stringify(goals())); } catch(e) {}
+  renderDerivedGoalPreviews();
 }
 function loadGoals() {
   try {
     const saved = JSON.parse(localStorage.getItem('sdr_goals') || '{}');
     if (saved.leads) document.getElementById('goal_leads').value = saved.leads;
-    if (saved.meetings) document.getElementById('goal_meetings').value = saved.meetings;
-    if (saved.qualified) document.getElementById('goal_qualified').value = saved.qualified;
+    if (saved.meeting_rate) document.getElementById('goal_meeting_rate').value = saved.meeting_rate;
     if (saved.pct_qual) document.getElementById('goal_pct_qual').value = saved.pct_qual;
     if (saved.nr_rate) document.getElementById('goal_nr_rate').value = saved.nr_rate;
   } catch(e) {}
+  renderDerivedGoalPreviews();
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
