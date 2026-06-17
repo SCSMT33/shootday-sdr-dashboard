@@ -153,18 +153,18 @@
     padding: 32px;
     box-shadow: 0 4px 16px rgba(0,0,0,0.08);
   }
-  .card.expanded .card-value { font-size: 58px; margin-bottom: 10px; }
-  .card.expanded .card-label { font-size: 15px; margin-bottom: 16px; }
-  .card.expanded .card-sub { font-size: 14px; }
-  .card.expanded .card-split { gap: 32px; margin-top: 20px; padding-top: 18px; }
-  .card.expanded .split-total { font-size: 32px; }
-  .card.expanded .split-name { font-size: 13px; }
-  .card.expanded .split-avg { font-size: 13px; }
-  .card.expanded .split-proj { font-size: 13px; }
-  .card.expanded .split-goal { font-size: 12px; }
-  .card.expanded .card-avg-row { font-size: 15px; margin-top: 18px; }
-  .card.expanded .card-projected { font-size: 15px; padding: 10px 14px; margin-top: 14px; }
-  .card.expanded .card-goal { font-size: 15px; padding: 10px 14px; margin-top: 14px; }
+  .card.expanded .card-value { font-size: 80px; margin-bottom: 14px; }
+  .card.expanded .card-label { font-size: 19px; margin-bottom: 20px; }
+  .card.expanded .card-sub { font-size: 17px; }
+  .card.expanded .card-split { gap: 40px; margin-top: 26px; padding-top: 22px; }
+  .card.expanded .split-total { font-size: 44px; }
+  .card.expanded .split-name { font-size: 16px; }
+  .card.expanded .split-avg { font-size: 16px; }
+  .card.expanded .split-proj { font-size: 16px; }
+  .card.expanded .split-goal { font-size: 15px; }
+  .card.expanded .card-avg-row { font-size: 19px; margin-top: 24px; }
+  .card.expanded .card-projected { font-size: 19px; padding: 14px 18px; margin-top: 18px; }
+  .card.expanded .card-goal { font-size: 19px; padding: 14px 18px; margin-top: 18px; }
   .card-expand-btn {
     position: absolute;
     top: 12px;
@@ -234,6 +234,9 @@
   }
   .card-goal.on-track { background: rgba(26,162,96,0.1); color: var(--green); }
   .card-goal.off-track { background: rgba(217,54,54,0.1); color: var(--red); }
+
+  .card-spark { margin-top: 16px; flex: 1; min-height: 90px; }
+  .card-spark canvas { width: 100% !important; height: 100% !important; }
 
   /* CHARTS GRID */
   .charts-grid {
