@@ -7,23 +7,25 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
-    --bg: #f5f6fa;
+    --bg: #f7f8fa;
     --surface: #ffffff;
-    --surface2: #eef0f6;
-    --border: #dcdfeb;
-    --accent: #6c63ff;
+    --surface2: #f1f2f6;
+    --border: #e3e5ec;
+    --accent: #4285f4;
     --mj: #1a9e94;
     --gospel: #e07b1a;
-    --team: #6c63ff;
+    --team: #4285f4;
     --goal: rgba(0,0,0,0.35);
-    --text: #1a1d27;
-    --muted: #5b5f78;
+    --text: #20232b;
+    --muted: #80849c;
+    --green: #1aa260;
+    --red: #d93636;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
     font-size: 15px;
     min-height: 100vh;
   }
@@ -32,7 +34,8 @@
   header {
     background: var(--surface);
     border-bottom: 1px solid var(--border);
-    padding: 16px 28px;
+    padding: 14px 28px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -43,9 +46,23 @@
     gap: 10px;
   }
   .logo { display: flex; align-items: center; gap: 10px; }
-  .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
-  .logo h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.02em; color: var(--text); }
-  .logo span { color: var(--muted); font-weight: 400; }
+  .logo-icon {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #ffe27a, #f7c948 60%, #f0b429 100%);
+    position: relative; flex-shrink: 0;
+  }
+  .logo-icon::after {
+    content: '';
+    position: absolute; top: 50%; left: 50%;
+    width: 16px; height: 16px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    border-bottom-color: transparent;
+    border-left-color: transparent;
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
+  .logo h1 { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; color: var(--text); }
+  .logo span { color: var(--muted); font-weight: 400; font-size: 14px; }
   .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .last-updated { color: var(--text); font-size: 15px; font-weight: 600; }
   #refreshBtn {
@@ -76,12 +93,12 @@
   }
   .view-tabs { display: flex; gap: 4px; background: var(--surface); border-radius: 8px; padding: 3px; border: 1px solid var(--border); }
   .view-tab {
-    padding: 6px 16px;
+    padding: 7px 18px;
     border-radius: 6px;
     border: none;
     background: transparent;
     color: var(--muted);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.15s;
@@ -111,12 +128,12 @@
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    border-radius: 8px;
+    padding: 18px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
   }
-  .card-label { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
-  .card-value { font-size: 30px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+  .card-label { color: var(--muted); font-size: 12px; font-weight: 500; letter-spacing: 0.01em; margin-bottom: 10px; }
+  .card-value { font-size: 30px; font-weight: 700; line-height: 1; margin-bottom: 6px; color: var(--text); }
   .card-sub { font-size: 12px; color: var(--muted); }
   .card-sub .mj { color: var(--mj); }
   .card-sub .gospel { color: var(--gospel); }
@@ -131,13 +148,13 @@
   .chart-card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 18px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
   }
   .chart-card.full { grid-column: 1 / -1; }
   .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
-  .chart-title { font-size: 14px; font-weight: 600; }
+  .chart-title { font-size: 14px; font-weight: 600; color: var(--text); }
   .chart-legend { display: flex; gap: 14px; }
   .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
   .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
@@ -204,8 +221,8 @@
 
 <header>
   <div class="logo">
-    <div class="logo-dot"></div>
-    <h1>Shootday <span>SDR Dashboard</span></h1>
+    <div class="logo-icon"></div>
+    <h1>shootday <span>SDR Dashboard</span></h1>
   </div>
   <div class="header-right">
     <span class="last-updated" id="lastUpdated">No data loaded</span>
