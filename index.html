@@ -291,6 +291,11 @@
       <button class="view-tab" data-view="Gospel" onclick="setView('Gospel')">Gospel</button>
     </div>
     <div class="date-range">
+      <span>Leads:</span>
+      <select id="leadTypeSelect" onchange="saveLeadTypeFilter(); renderDashboard()">
+        <option value="business">Business leads only</option>
+        <option value="all">All leads</option>
+      </select>
       <span>Range:</span>
       <select id="rangeSelect" onchange="renderDashboard()">
         <option value="all">All time</option>
@@ -320,6 +325,13 @@
           <div class="chart-legend" id="legend-chartMeetings"></div>
         </div>
         <canvas id="chartMeetings"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">Meeting Booked Rate % — Trend</span>
+          <div class="chart-legend" id="legend-chartMeetingRate"></div>
+        </div>
+        <canvas id="chartMeetingRate"></canvas>
       </div>
       <div class="chart-card">
         <div class="chart-header">
@@ -392,7 +404,8 @@
 
 <script>
 // ─── STATE ───────────────────────────────────────────────────────────────────
-let allData = null;   // { date: { MJ, Gospel, Team } }
+let allData = null;   // { date: { MJ, Gospel, Team } } — derived from rawByDay via current lead-type filter
+let rawByDay = null;   // { date: { MJ: [rows], Gospel: [rows] } } — unfiltered raw rows, persisted
 let currentView = 'Team';
 let charts = {};
 
@@ -463,28 +476,18 @@ function parseCSV(text, filename) {
   // Filter to SDR-owned rows only
   const sdrRows = rows.filter(r => r['SDR Owner'] === 'MJ Montero' || r['SDR Owner'] === 'Gospel Lim');
 
-  // Group by day and SDR
-  const byDay = {};
+  // Group by day and SDR, keeping raw rows so the business-lead filter can be toggled live
+  rawByDay = {};
   sdrRows.forEach(r => {
     const raw = r['Creation Date'] || '';
     if (!raw) return;
     const day = raw.substring(0, 10);
-    if (!byDay[day]) byDay[day] = { MJ: [], Gospel: [] };
+    if (!rawByDay[day]) rawByDay[day] = { MJ: [], Gospel: [] };
     const key = r['SDR Owner'] === 'MJ Montero' ? 'MJ' : 'Gospel';
-    byDay[day][key].push(r);
+    rawByDay[day][key].push(r);
   });
 
-  // Compute metrics per day
-  allData = {};
-  Object.keys(byDay).sort().forEach(day => {
-    const mj = byDay[day].MJ;
-    const gospel = byDay[day].Gospel;
-    allData[day] = {
-      MJ: computeMetrics(mj),
-      Gospel: computeMetrics(gospel),
-      Team: computeMetrics([...mj, ...gospel])
-    };
-  });
+  recomputeAllData();
 
   const dates = Object.keys(allData).sort();
   const firstDate = dates[0];
@@ -496,20 +499,58 @@ function parseCSV(text, filename) {
 
   saveLoadedData(filename);
   loadGoals();
+  loadLeadTypeFilter();
   renderDashboard();
+}
+
+// ─── BUSINESS-LEAD FILTER ──────────────────────────────────────────────────────
+function isBusinessLead(r) {
+  return (r['is_business_lead'] || '').trim().toLowerCase() === 'checked';
+}
+function leadTypeFilter() {
+  const el = document.getElementById('leadTypeSelect');
+  return el ? el.value : 'business';
+}
+function applyLeadTypeFilter(rows) {
+  return leadTypeFilter() === 'business' ? rows.filter(isBusinessLead) : rows;
+}
+function recomputeAllData() {
+  if (!rawByDay) return;
+  allData = {};
+  Object.keys(rawByDay).sort().forEach(day => {
+    const mj = applyLeadTypeFilter(rawByDay[day].MJ);
+    const gospel = applyLeadTypeFilter(rawByDay[day].Gospel);
+    allData[day] = {
+      MJ: computeMetrics(mj),
+      Gospel: computeMetrics(gospel),
+      Team: computeMetrics([...mj, ...gospel])
+    };
+  });
+}
+function saveLeadTypeFilter() {
+  try { localStorage.setItem('sdr_lead_type', leadTypeFilter()); } catch(e) {}
+  recomputeAllData();
+}
+function loadLeadTypeFilter() {
+  try {
+    const saved = localStorage.getItem('sdr_lead_type');
+    if (saved) document.getElementById('leadTypeSelect').value = saved;
+  } catch(e) {}
+  recomputeAllData();
 }
 
 // ─── PERSIST LOADED DATA ACROSS REFRESHES ─────────────────────────────────────
 function saveLoadedData(filename) {
   try {
-    localStorage.setItem('sdr_data', JSON.stringify({ allData, filename }));
+    localStorage.setItem('sdr_data', JSON.stringify({ rawByDay, filename }));
   } catch (e) {}
 }
 function restoreLoadedData() {
   try {
     const saved = JSON.parse(localStorage.getItem('sdr_data') || 'null');
-    if (!saved || !saved.allData) return false;
-    allData = saved.allData;
+    if (!saved || !saved.rawByDay) return false;
+    rawByDay = saved.rawByDay;
+    loadLeadTypeFilter();
     const dates = Object.keys(allData).sort();
     const firstDate = dates[0];
     const lastDate = dates[dates.length - 1];
@@ -522,7 +563,7 @@ function restoreLoadedData() {
 }
 
 function computeMetrics(leads) {
-  if (!leads || !leads.length) return { leads: 0, meetings: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, active_pipeline: 0 };
+  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, active_pipeline: 0 };
   const meetings = leads.filter(r => ['Meeting Scheduled','Meeting Done','Meeting Rejected','Meeting Not Atended'].includes(r['Meeting Status'])).length;
   const qualified = leads.filter(r => ['Qualified_SDR','Warm','Hot','Closed','Lost'].includes(r['Sales status'])).length;
   const non_responsive = leads.filter(r => r['Disqualified reason'] === 'Not responsive' || r['Sales status'] === 'Non respondant').length;
@@ -531,6 +572,7 @@ function computeMetrics(leads) {
   return {
     leads: leads.length,
     meetings,
+    meeting_rate: leads.length ? parseFloat((meetings / leads.length * 100).toFixed(1)) : 0,
     qualified,
     pct_qualified: leads.length ? parseFloat((qualified / leads.length * 100).toFixed(1)) : 0,
     non_responsive,
@@ -617,6 +659,7 @@ function renderSummaryCards(days) {
   const totalAEDQ = sumMetric(days, v, 'ae_dq');
   const pctQual = totalLeads ? (totalQualified / totalLeads * 100) : 0;
   const nrRate = totalLeads ? (totalNR / totalLeads * 100) : 0;
+  const meetingRate = totalLeads ? (totalMeetings / totalLeads * 100) : 0;
   const activePipeline = (lastDay && allData[lastDay] && allData[lastDay][v]) ? allData[lastDay][v].active_pipeline : 0;
 
   // MJ / Gospel raw totals (used for split rows only in Team view)
@@ -629,12 +672,15 @@ function renderSummaryCards(days) {
   const gospelPctQual = gospelLeads ? (gospelQualified / gospelLeads * 100) : 0;
   const mjNRRate = mjLeads ? (mjNR / mjLeads * 100) : 0;
   const gospelNRRate = gospelLeads ? (gospelNR / gospelLeads * 100) : 0;
+  const mjMeetingRate = mjLeads ? (mjMeetings / mjLeads * 100) : 0;
+  const gospelMeetingRate = gospelLeads ? (gospelMeetings / gospelLeads * 100) : 0;
   const mjPipeline = (lastDay && allData[lastDay] && allData[lastDay]['MJ']) ? allData[lastDay]['MJ'].active_pipeline : 0;
   const gospelPipeline = (lastDay && allData[lastDay] && allData[lastDay]['Gospel']) ? allData[lastDay]['Gospel'].active_pipeline : 0;
 
   document.getElementById('summaryCards').innerHTML = `
     ${countCard('Lead Volume', totalLeads, mjLeads, gospelLeads, elapsed, daysInMo, showProjection)}
     ${countCard('Meetings Booked', totalMeetings, mjMeetings, gospelMeetings, elapsed, daysInMo, showProjection)}
+    ${rateCard('Meeting Booked Rate', meetingRate, mjMeetingRate, gospelMeetingRate, meanMetric(days, v, 'meeting_rate'), 'meetings ÷ total leads')}
     ${countCard('Leads Qualified', totalQualified, mjQualified, gospelQualified, elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`)}
     ${rateCard('% Leads Qualified', pctQual, mjPctQual, gospelPctQual, meanMetric(days, v, 'pct_qualified'), 'share reaching Warm/Hot+')}
     ${rateCard('Non-Responsive Rate', nrRate, mjNRRate, gospelNRRate, meanMetric(days, v, 'nr_rate'), `${totalNR} leads`)}
@@ -791,6 +837,7 @@ function makeChart(id, days, metric, goalKey, isRate) {
 function renderCharts(days) {
   makeChart('chartLeads', days, 'leads', 'leads', false);
   makeChart('chartMeetings', days, 'meetings', 'meetings', false);
+  makeChart('chartMeetingRate', days, 'meeting_rate', null, true);
   makeChart('chartQualPct', days, 'pct_qualified', 'pct_qual', true);
   makeChart('chartNR', days, 'nr_rate', 'nr_rate', true);
   makeChart('chartPipeline', days, 'active_pipeline', null, false);
