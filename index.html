@@ -866,13 +866,6 @@ function renderSummaryCards(days) {
   const mjQualifiedGoal = d.goalPctQual ? (d.goalPctQual / 100 * mjLeadsProjected) : null;
   const gospelQualifiedGoal = d.goalPctQual ? (d.goalPctQual / 100 * gospelLeadsProjected) : null;
 
-  // Commission View: the Lead Volume card counts B2B leads only — every other
-  // card still reflects the combined B2B+B2C pool computed above.
-  const isCommission = leadTypeFilter() === 'commission';
-  const leadVolTotal = isCommission ? sumMetricFrom(allDataB2B, days, v, 'leads') : totalLeads;
-  const leadVolMJ = isCommission ? sumMetricFrom(allDataB2B, days, 'MJ', 'leads') : mjLeads;
-  const leadVolGospel = isCommission ? sumMetricFrom(allDataB2B, days, 'Gospel', 'leads') : gospelLeads;
-
   document.getElementById('summaryCards').innerHTML = `
     ${countCard('Lead Volume', leadVolTotal, leadVolMJ, leadVolGospel, elapsed, daysInMo, showProjection, isCommission ? 'B2B leads only' : undefined, d.goalLeads, d.goalLeads ? d.goalLeads * (leadVolMJ / (leadVolTotal || 1)) : null, d.goalLeads ? d.goalLeads * (leadVolGospel / (leadVolTotal || 1)) : null)}
     ${countCard('Meetings Booked', totalMeetings, mjMeetings, gospelMeetings, elapsed, daysInMo, showProjection, undefined, d.goalMeetings, mjMeetingsGoal, gospelMeetingsGoal)}
