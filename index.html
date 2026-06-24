@@ -772,6 +772,18 @@ function meanMetric(days, view, key) {
   return sumMetric(days, view, key) / days.length;
 }
 
+// Per-day rate average where the numerator stays combined (B2B+B2C) but the
+// denominator is forced to B2B-only leads — used by Commission View's rate cards.
+function meanRateCommission(days, view, numKey) {
+  if (!days.length) return 0;
+  const total = days.reduce((acc, d) => {
+    const num = (allData[d] && allData[d][view]) ? (allData[d][view][numKey] || 0) : 0;
+    const denom = (allDataB2B[d] && allDataB2B[d][view]) ? (allDataB2B[d][view].leads || 0) : 0;
+    return acc + (denom ? (num / denom * 100) : 0);
+  }, 0);
+  return total / days.length;
+}
+
 // Calendar days spanned by a date range (inclusive), used as the "per day" divisor
 function calendarSpanDays(days) {
   if (!days.length) return 0;
@@ -812,9 +824,6 @@ function renderSummaryCards(days) {
   const totalQualified = sumMetric(days, v, 'qualified');
   const totalNR = sumMetric(days, v, 'non_responsive');
   const totalAEDQ = sumMetric(days, v, 'ae_dq');
-  const pctQual = totalLeads ? (totalQualified / totalLeads * 100) : 0;
-  const nrRate = totalLeads ? (totalNR / totalLeads * 100) : 0;
-  const meetingRate = totalLeads ? (totalMeetings / totalLeads * 100) : 0;
   const activePipeline = (lastDay && allData[lastDay] && allData[lastDay][v]) ? allData[lastDay][v].active_pipeline : 0;
 
   // MJ / Gospel raw totals (used for split rows only in Team view)
@@ -823,40 +832,47 @@ function renderSummaryCards(days) {
   const mjQualified = sumMetric(days, 'MJ', 'qualified'), gospelQualified = sumMetric(days, 'Gospel', 'qualified');
   const mjNR = sumMetric(days, 'MJ', 'non_responsive'), gospelNR = sumMetric(days, 'Gospel', 'non_responsive');
   const mjAEDQ = sumMetric(days, 'MJ', 'ae_dq'), gospelAEDQ = sumMetric(days, 'Gospel', 'ae_dq');
-  const mjPctQual = mjLeads ? (mjQualified / mjLeads * 100) : 0;
-  const gospelPctQual = gospelLeads ? (gospelQualified / gospelLeads * 100) : 0;
-  const mjNRRate = mjLeads ? (mjNR / mjLeads * 100) : 0;
-  const gospelNRRate = gospelLeads ? (gospelNR / gospelLeads * 100) : 0;
-  const mjMeetingRate = mjLeads ? (mjMeetings / mjLeads * 100) : 0;
-  const gospelMeetingRate = gospelLeads ? (gospelMeetings / gospelLeads * 100) : 0;
   const mjPipeline = (lastDay && allData[lastDay] && allData[lastDay]['MJ']) ? allData[lastDay]['MJ'].active_pipeline : 0;
   const gospelPipeline = (lastDay && allData[lastDay] && allData[lastDay]['Gospel']) ? allData[lastDay]['Gospel'].active_pipeline : 0;
 
-  const d = derivedGoals();
-
-  // Each SDR's individual count goal is the KPI% applied to *their own* projected
-  // lead volume (not an even split of the team goal) — leads aren't split 50/50.
-  const mjLeadsProjected = elapsed ? (mjLeads / elapsed * daysInMo) : 0;
-  const gospelLeadsProjected = elapsed ? (gospelLeads / elapsed * daysInMo) : 0;
-  const mjMeetingsGoal = d.goalMeetingRate ? (d.goalMeetingRate / 100 * mjLeadsProjected) : null;
-  const gospelMeetingsGoal = d.goalMeetingRate ? (d.goalMeetingRate / 100 * gospelLeadsProjected) : null;
-  const mjQualifiedGoal = d.goalPctQual ? (d.goalPctQual / 100 * mjLeadsProjected) : null;
-  const gospelQualifiedGoal = d.goalPctQual ? (d.goalPctQual / 100 * gospelLeadsProjected) : null;
-
-  // Commission View: the Lead Volume card counts B2B leads only — every other
-  // card still reflects the combined B2B+B2C pool computed above.
+  // Commission View: every rate/percentage card (Meeting Booked Rate, % Qualified,
+  // NR Rate) keeps the combined B2B+B2C numerator but is judged against the
+  // B2B-only lead volume as its denominator — same as the Lead Volume card uses.
+  // Outside Commission View these equal the combined totals, so the math below
+  // is unaffected.
   const isCommission = leadTypeFilter() === 'commission';
   const leadVolTotal = isCommission ? sumMetricFrom(allDataB2B, days, v, 'leads') : totalLeads;
   const leadVolMJ = isCommission ? sumMetricFrom(allDataB2B, days, 'MJ', 'leads') : mjLeads;
   const leadVolGospel = isCommission ? sumMetricFrom(allDataB2B, days, 'Gospel', 'leads') : gospelLeads;
 
+  const pctQual = leadVolTotal ? (totalQualified / leadVolTotal * 100) : 0;
+  const nrRate = leadVolTotal ? (totalNR / leadVolTotal * 100) : 0;
+  const meetingRate = leadVolTotal ? (totalMeetings / leadVolTotal * 100) : 0;
+  const mjPctQual = leadVolMJ ? (mjQualified / leadVolMJ * 100) : 0;
+  const gospelPctQual = leadVolGospel ? (gospelQualified / leadVolGospel * 100) : 0;
+  const mjNRRate = leadVolMJ ? (mjNR / leadVolMJ * 100) : 0;
+  const gospelNRRate = leadVolGospel ? (gospelNR / leadVolGospel * 100) : 0;
+  const mjMeetingRate = leadVolMJ ? (mjMeetings / leadVolMJ * 100) : 0;
+  const gospelMeetingRate = leadVolGospel ? (gospelMeetings / leadVolGospel * 100) : 0;
+
+  const d = derivedGoals();
+
+  // Each SDR's individual count goal is the KPI% applied to *their own* projected
+  // lead volume (not an even split of the team goal) — leads aren't split 50/50.
+  const mjLeadsProjected = elapsed ? (leadVolMJ / elapsed * daysInMo) : 0;
+  const gospelLeadsProjected = elapsed ? (leadVolGospel / elapsed * daysInMo) : 0;
+  const mjMeetingsGoal = d.goalMeetingRate ? (d.goalMeetingRate / 100 * mjLeadsProjected) : null;
+  const gospelMeetingsGoal = d.goalMeetingRate ? (d.goalMeetingRate / 100 * gospelLeadsProjected) : null;
+  const mjQualifiedGoal = d.goalPctQual ? (d.goalPctQual / 100 * mjLeadsProjected) : null;
+  const gospelQualifiedGoal = d.goalPctQual ? (d.goalPctQual / 100 * gospelLeadsProjected) : null;
+
   document.getElementById('summaryCards').innerHTML = `
     ${countCard('Lead Volume', leadVolTotal, leadVolMJ, leadVolGospel, elapsed, daysInMo, showProjection, isCommission ? 'B2B leads only' : undefined, d.goalLeads, d.goalLeads ? d.goalLeads * (leadVolMJ / (leadVolTotal || 1)) : null, d.goalLeads ? d.goalLeads * (leadVolGospel / (leadVolTotal || 1)) : null)}
     ${countCard('Meetings Booked', totalMeetings, mjMeetings, gospelMeetings, elapsed, daysInMo, showProjection, undefined, d.goalMeetings, mjMeetingsGoal, gospelMeetingsGoal)}
-    ${rateCard('Meeting Booked Rate', meetingRate, mjMeetingRate, gospelMeetingRate, meanMetric(days, v, 'meeting_rate'), 'meetings ÷ total leads', d.goalMeetingRate, false)}
+    ${rateCard('Meeting Booked Rate', meetingRate, mjMeetingRate, gospelMeetingRate, isCommission ? meanRateCommission(days, v, 'meetings') : meanMetric(days, v, 'meeting_rate'), isCommission ? 'meetings (B2B+B2C) ÷ B2B leads' : 'meetings ÷ total leads', d.goalMeetingRate, false)}
     ${countCard('Leads Qualified', totalQualified, mjQualified, gospelQualified, elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified, mjQualifiedGoal, gospelQualifiedGoal)}
-    ${rateCard('% Leads Qualified', pctQual, mjPctQual, gospelPctQual, meanMetric(days, v, 'pct_qualified'), 'share reaching Warm/Hot+', d.goalPctQual, false)}
-    ${rateCard('Non-Responsive Rate', nrRate, mjNRRate, gospelNRRate, meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true)}
+    ${rateCard('% Leads Qualified', pctQual, mjPctQual, gospelPctQual, isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'share reaching Warm/Hot+', d.goalPctQual, false)}
+    ${rateCard('Non-Responsive Rate', nrRate, mjNRRate, gospelNRRate, isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true)}
     ${countCard('Disqualified by AE', totalAEDQ, mjAEDQ, gospelAEDQ, elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual')}
     ${pipelineCard('Active Pipeline', activePipeline, mjPipeline, gospelPipeline, meanMetric(days, v, 'active_pipeline'), lastDay)}
     ${pendingCard('Speed-to-Lead', 'Pending (needs Aircall sync)')}
