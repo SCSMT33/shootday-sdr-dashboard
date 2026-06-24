@@ -398,8 +398,10 @@
     <div class="date-range">
       <span>Leads:</span>
       <select id="leadTypeSelect" onchange="saveLeadTypeFilter(); renderDashboard()">
-        <option value="business">Business leads only</option>
+        <option value="business">B2B leads only</option>
+        <option value="b2c">B2C leads only</option>
         <option value="all">All leads</option>
+        <option value="commission">Commission View</option>
       </select>
       <span>Range:</span>
       <select id="rangeSelect" onchange="saveRangeFilter(); renderDashboard()">
@@ -527,6 +529,7 @@
 <script>
 // ─── STATE ───────────────────────────────────────────────────────────────────
 let allData = null;   // { date: { MJ, Gospel, Team } } — derived from rawByDay via current lead-type filter
+let allDataB2B = null;   // same shape, always business-leads-only — used by Commission View's Lead Volume card
 let rawByDay = null;   // { date: { MJ: [rows], Gospel: [rows] } } — unfiltered raw rows, persisted
 let currentView = 'Team';
 let charts = {};
@@ -631,16 +634,24 @@ function parseCSV(text, filename) {
 function isBusinessLead(r) {
   return (r['is_business_lead'] || '').trim().toLowerCase() === 'checked';
 }
+function isB2CLead(r) {
+  return !isBusinessLead(r);
+}
 function leadTypeFilter() {
   const el = document.getElementById('leadTypeSelect');
   return el ? el.value : 'business';
 }
 function applyLeadTypeFilter(rows) {
-  return leadTypeFilter() === 'business' ? rows.filter(isBusinessLead) : rows;
+  const f = leadTypeFilter();
+  if (f === 'business') return rows.filter(isBusinessLead);
+  if (f === 'b2c') return rows.filter(isB2CLead);
+  // 'all' and 'commission' both compute every other card from the combined B2B+B2C pool
+  return rows;
 }
 function recomputeAllData() {
   if (!rawByDay) return;
   allData = {};
+  allDataB2B = {};
   Object.keys(rawByDay).sort().forEach(day => {
     const mj = applyLeadTypeFilter(rawByDay[day].MJ);
     const gospel = applyLeadTypeFilter(rawByDay[day].Gospel);
@@ -648,6 +659,13 @@ function recomputeAllData() {
       MJ: computeMetrics(mj),
       Gospel: computeMetrics(gospel),
       Team: computeMetrics([...mj, ...gospel])
+    };
+    const mjB2B = rawByDay[day].MJ.filter(isBusinessLead);
+    const gospelB2B = rawByDay[day].Gospel.filter(isBusinessLead);
+    allDataB2B[day] = {
+      MJ: computeMetrics(mjB2B),
+      Gospel: computeMetrics(gospelB2B),
+      Team: computeMetrics([...mjB2B, ...gospelB2B])
     };
   });
 }
@@ -740,8 +758,11 @@ function getFilteredDays() {
 }
 
 function sumMetric(days, view, key) {
+  return sumMetricFrom(allData, days, view, key);
+}
+function sumMetricFrom(data, days, view, key) {
   return days.reduce((acc, d) => {
-    const m = allData[d] && allData[d][view];
+    const m = data[d] && data[d][view];
     return acc + (m ? (m[key] || 0) : 0);
   }, 0);
 }
@@ -822,8 +843,15 @@ function renderSummaryCards(days) {
   const mjQualifiedGoal = d.goalPctQual ? (d.goalPctQual / 100 * mjLeadsProjected) : null;
   const gospelQualifiedGoal = d.goalPctQual ? (d.goalPctQual / 100 * gospelLeadsProjected) : null;
 
+  // Commission View: the Lead Volume card counts B2B leads only — every other
+  // card still reflects the combined B2B+B2C pool computed above.
+  const isCommission = leadTypeFilter() === 'commission';
+  const leadVolTotal = isCommission ? sumMetricFrom(allDataB2B, days, v, 'leads') : totalLeads;
+  const leadVolMJ = isCommission ? sumMetricFrom(allDataB2B, days, 'MJ', 'leads') : mjLeads;
+  const leadVolGospel = isCommission ? sumMetricFrom(allDataB2B, days, 'Gospel', 'leads') : gospelLeads;
+
   document.getElementById('summaryCards').innerHTML = `
-    ${countCard('Lead Volume', totalLeads, mjLeads, gospelLeads, elapsed, daysInMo, showProjection, undefined, d.goalLeads, d.goalLeads ? d.goalLeads * (mjLeads / (totalLeads || 1)) : null, d.goalLeads ? d.goalLeads * (gospelLeads / (totalLeads || 1)) : null)}
+    ${countCard('Lead Volume', leadVolTotal, leadVolMJ, leadVolGospel, elapsed, daysInMo, showProjection, isCommission ? 'B2B leads only' : undefined, d.goalLeads, d.goalLeads ? d.goalLeads * (leadVolMJ / (leadVolTotal || 1)) : null, d.goalLeads ? d.goalLeads * (leadVolGospel / (leadVolTotal || 1)) : null)}
     ${countCard('Meetings Booked', totalMeetings, mjMeetings, gospelMeetings, elapsed, daysInMo, showProjection, undefined, d.goalMeetings, mjMeetingsGoal, gospelMeetingsGoal)}
     ${rateCard('Meeting Booked Rate', meetingRate, mjMeetingRate, gospelMeetingRate, meanMetric(days, v, 'meeting_rate'), 'meetings ÷ total leads', d.goalMeetingRate, false)}
     ${countCard('Leads Qualified', totalQualified, mjQualified, gospelQualified, elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified, mjQualifiedGoal, gospelQualifiedGoal)}
