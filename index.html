@@ -421,6 +421,29 @@
     <div class="charts-grid">
       <div class="chart-card full">
         <div class="chart-header">
+          <span class="chart-title">Meetings Booked — Daily</span>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartMeetings"></div>
+          </div>
+        </div>
+        <canvas id="chartMeetings"></canvas>
+      </div>
+      <div class="chart-card full">
+        <div class="chart-header">
+          <span class="chart-title">Meeting Booked Rate % — Trend</span>
+          <div class="chart-legend" id="legend-chartMeetingRate"></div>
+        </div>
+        <canvas id="chartMeetingRate"></canvas>
+      </div>
+      <div class="chart-card full">
+        <div class="chart-header">
+          <span class="chart-title">% Leads Qualified — Trend</span>
+          <div class="chart-legend" id="legend-chartQualPct"></div>
+        </div>
+        <canvas id="chartQualPct"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
           <span class="chart-title">Lead Volume — Daily</span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartLeads"></div>
@@ -432,34 +455,6 @@
           </div>
         </div>
         <canvas id="chartLeads"></canvas>
-      </div>
-      <div class="chart-card">
-        <div class="chart-header">
-          <span class="chart-title">Meetings Booked — Daily</span>
-          <div class="chart-header-right">
-            <div class="chart-legend" id="legend-chartMeetings"></div>
-            <label class="chart-cumulative-toggle">
-              <input type="checkbox" id="cumulativeToggle-chartMeetings" onchange="renderCharts(getFilteredDays())">
-              <span class="toggle-track"></span>
-              <span class="toggle-text">Cumulative</span>
-            </label>
-          </div>
-        </div>
-        <canvas id="chartMeetings"></canvas>
-      </div>
-      <div class="chart-card">
-        <div class="chart-header">
-          <span class="chart-title">Meeting Booked Rate % — Trend</span>
-          <div class="chart-legend" id="legend-chartMeetingRate"></div>
-        </div>
-        <canvas id="chartMeetingRate"></canvas>
-      </div>
-      <div class="chart-card">
-        <div class="chart-header">
-          <span class="chart-title">% Leads Qualified — Trend</span>
-          <div class="chart-legend" id="legend-chartQualPct"></div>
-        </div>
-        <canvas id="chartQualPct"></canvas>
       </div>
       <div class="chart-card">
         <div class="chart-header">
@@ -984,7 +979,7 @@ function pendingCard(label, sub) {
 }
 
 // ─── CHARTS ───────────────────────────────────────────────────────────────────
-const COLORS = { MJ: '#1a9e94', Gospel: '#e07b1a', Team: '#6c63ff', Goal: 'rgba(0,0,0,0.35)' };
+const COLORS = { MJ: '#1a9e94', Gospel: '#e07b1a', Team: '#6c63ff', Goal: 'rgba(0,0,0,0.35)', Pace: '#9c6dff' };
 
 function isCumulative(id) {
   const el = document.getElementById('cumulativeToggle-' + id);
@@ -997,12 +992,15 @@ function buildDatasets(days, metric, isRate, cumulative) {
     : [{ key: currentView, label: currentView, color: currentView === 'MJ' ? COLORS.MJ : COLORS.Gospel }];
 
   return views.map(v => {
-    let data = days.map(d => (allData[d] && allData[d][v.key]) ? allData[d][v.key][metric] : 0);
+    // A day missing from allData entirely (future day not yet reached) renders as a
+    // gap (null); a day present with metric 0 is a real zero and stays 0.
+    let data = days.map(d => allData[d] ? (allData[d][v.key] ? (allData[d][v.key][metric] || 0) : 0) : null);
     if (cumulative) {
-      let sum = 0;
-      data = data.map((val, i) => {
-        sum += val;
-        return isRate ? parseFloat((sum / (i + 1)).toFixed(1)) : sum;
+      let sum = 0, count = 0;
+      data = data.map(val => {
+        if (val == null) return null;
+        sum += val; count++;
+        return isRate ? parseFloat((sum / count).toFixed(1)) : sum;
       });
     }
     return {
@@ -1010,11 +1008,12 @@ function buildDatasets(days, metric, isRate, cumulative) {
       data,
       borderColor: v.color,
       backgroundColor: v.color + '22',
-      tension: 0.35,
+      tension: 0,
       pointRadius: 3,
       pointHoverRadius: 5,
       fill: false,
-      borderWidth: 2
+      borderWidth: 2,
+      spanGaps: false
     };
   });
 }
@@ -1034,10 +1033,36 @@ function goalLine(days, value, isRate, cumulative) {
   };
 }
 
-function makeChart(id, days, metric, goalKey, isRate, cumulativeAllowed, goalOverride) {
+// Flat dashed line at the team's actual daily run rate so far this period — lets the
+// goal Target line and the current Pace be compared at a glance on the same chart.
+function paceLine(days, metric) {
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const elapsedDays = days.filter(d => d <= todayKey && allData[d]);
+  if (!elapsedDays.length) return null;
+  const total = sumMetricFrom(allData, elapsedDays, 'Team', metric);
+  const v = parseFloat((total / elapsedDays.length).toFixed(1));
+  if (!v) return null;
+  return {
+    label: 'Pace',
+    data: days.map(() => v),
+    borderColor: COLORS.Pace || '#9c6dff',
+    borderDash: [2, 4],
+    borderWidth: 1.5,
+    pointRadius: 0,
+    fill: false,
+    tension: 0
+  };
+}
+
+function makeChart(id, days, metric, goalKey, isRate, cumulativeAllowed, goalOverride, showPace) {
   const cumulative = cumulativeAllowed !== false && isCumulative(id);
   const labels = days.map(d => d.slice(5)); // MM-DD
   const datasets = buildDatasets(days, metric, isRate, cumulative);
+  if (showPace && !isRate) {
+    const pl = paceLine(days, metric);
+    if (pl) datasets.push(pl);
+  }
   const rawGoal = goalOverride != null ? goalOverride : parseFloat(goals()[goalKey]);
   const gv = (!isNaN(rawGoal) && rawGoal) ? (isRate ? rawGoal : rawGoal / daysInCurrentMonth()) : null;
   const gl = (goalKey || goalOverride != null) ? goalLine(days, gv, isRate, cumulative) : null;
@@ -1078,18 +1103,30 @@ function makeChart(id, days, metric, goalKey, isRate, cumulativeAllowed, goalOve
       ? [{ label: 'MJ', color: COLORS.MJ }, { label: 'Gospel', color: COLORS.Gospel }]
       : [{ label: currentView, color: currentView === 'MJ' ? COLORS.MJ : COLORS.Gospel }];
     if (gl) items.push({ label: 'Target', color: COLORS.Goal });
+    if (showPace && !isRate) items.push({ label: 'Pace', color: COLORS.Pace });
     legendEl.innerHTML = items.map(it =>
       `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
     ).join('');
   }
 }
 
+// All days of the current calendar month (including days not yet reached), so the
+// featured charts span the full month even before it's over.
+function monthDayKeys() {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const dim = daysInCurrentMonth();
+  return Array.from({ length: dim }, (_, i) => `${y}-${String(m + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`);
+}
+
 function renderCharts(days) {
   const d = derivedGoals();
+  const rangeVal = document.getElementById('rangeSelect').value;
+  const featuredDays = rangeVal === 'thisMonth' ? monthDayKeys() : days;
+  makeChart('chartMeetings', featuredDays, 'meetings', null, false, false, d.goalMeetings, true);
+  makeChart('chartMeetingRate', featuredDays, 'meeting_rate', null, true, false, d.goalMeetingRate);
+  makeChart('chartQualPct', featuredDays, 'pct_qualified', 'pct_qual', true, false);
   makeChart('chartLeads', days, 'leads', 'leads', false, true);
-  makeChart('chartMeetings', days, 'meetings', null, false, true, d.goalMeetings);
-  makeChart('chartMeetingRate', days, 'meeting_rate', null, true, true, d.goalMeetingRate);
-  makeChart('chartQualPct', days, 'pct_qualified', 'pct_qual', true, true);
   makeChart('chartNR', days, 'nr_rate', 'nr_rate', true, true);
   makeChart('chartPipeline', days, 'active_pipeline', null, false, false);
 }
