@@ -823,10 +823,23 @@ function restoreLoadedData() {
   } catch (e) { return false; }
 }
 
+// Qualified = every Sales status EXCEPT the explicit non-qualifying set below,
+// rather than an allowlist — any status not yet excluded here counts as
+// qualified by default. "Pending" is our best-guess mapping for the "blue dot"
+// status the team described (flag to confirm — only a handful of rows today).
+function isQualifiedStatus(status) {
+  const s = (status || '').trim().toLowerCase();
+  if (!s) return false;
+  if (s === 'non respondant') return false;
+  if (s === 'cold') return false;
+  if (s === 'pending') return false;
+  if (s.includes('disqualified')) return false;
+  return true;
+}
 function computeMetrics(leads) {
   if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, active_pipeline: 0 };
   const meetings = leads.filter(r => ['Meeting Scheduled','Meeting Done','Meeting Rejected','Meeting Not Atended'].includes(r['Meeting Status'])).length;
-  const qualified = leads.filter(r => ['Qualified_SDR','Warm','Hot','Closed','Lost'].includes(r['Sales status'])).length;
+  const qualified = leads.filter(r => isQualifiedStatus(r['Sales status'])).length;
   const non_responsive = leads.filter(r => r['Disqualified reason'] === 'Not responsive' || r['Sales status'] === 'Non respondant').length;
   const ae_dq = leads.filter(r => (r['Sales status'] || '').includes('Disqualified AE')).length;
   const active_pipeline = leads.filter(r => !['Closed','Disqualified','Lost','Deposit refund',''].includes(r['Sales status'])).length;
@@ -1063,7 +1076,7 @@ function renderSummaryCards(days) {
     ${countCard('Meetings Booked', totalMeetings, perSDR.map(s => ({ ...s, value: s.meetings, goal: s.meetingsGoal })), elapsed, daysInMo, showProjection, undefined, d.goalMeetings)}
     ${rateCard('Meeting Booked Rate', meetingRate, perSDR.map(s => ({ ...s, value: s.meetingRate })), isCommission ? meanRateCommission(days, v, 'meetings') : meanMetric(days, v, 'meeting_rate'), isCommission ? 'meetings (B2B+B2C) ÷ B2B leads' : 'meetings ÷ total leads', d.goalMeetingRate, false)}
     ${countCard('Leads Qualified', totalQualified, perSDR.map(s => ({ ...s, value: s.qualified, goal: s.qualifiedGoal })), elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified)}
-    ${rateCard('% Leads Qualified', pctQual, perSDR.map(s => ({ ...s, value: s.pctQual })), isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'share reaching Warm/Hot+', d.goalPctQual, false)}
+    ${rateCard('% Leads Qualified', pctQual, perSDR.map(s => ({ ...s, value: s.pctQual })), isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'excludes non-responsive/cold/pending/disqualified', d.goalPctQual, false)}
     ${rateCard('Non-Responsive Rate', nrRate, perSDR.map(s => ({ ...s, value: s.nrRate })), isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true)}
     ${countCard('Disqualified by AE', totalAEDQ, perSDR.map(s => ({ ...s, value: s.aedq })), elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual')}
     ${pipelineCard('Active Pipeline', activePipeline, perSDR.map(s => ({ ...s, value: s.pipeline })), meanMetric(days, v, 'active_pipeline'), lastDay)}
