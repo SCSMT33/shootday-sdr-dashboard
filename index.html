@@ -336,6 +336,67 @@
   .goal-derived { font-size: 11px; color: var(--accent); font-weight: 600; min-height: 14px; }
   .pending-badge { background: var(--surface2); color: var(--muted); font-size: 10px; padding: 2px 7px; border-radius: 10px; display: inline-block; border: 1px solid var(--border); }
 
+  /* COMMISSION CALCULATOR */
+  .commission-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 16px;
+  }
+  .commission-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .commission-sub { font-size: 11px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+  .commission-period { font-size: 12px; color: var(--accent); font-weight: 600; margin-bottom: 16px; }
+  .commission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .commission-card { border: 1px solid var(--border); border-radius: 10px; padding: 16px; background: var(--surface2); }
+  .commission-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .commission-card-name { font-size: 15px; font-weight: 700; }
+  .commission-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 14px; }
+  .commission-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+  .commission-stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+  .commission-stat-value { font-size: 17px; font-weight: 700; margin-top: 2px; }
+  .commission-stat-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .commission-bracket-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 12px 0 6px; }
+  .commission-bracket-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 4px; }
+  .commission-bracket-table th { text-align: left; font-size: 10px; color: var(--muted); text-transform: uppercase; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+  .commission-bracket-table td { padding: 5px 6px; border-bottom: 1px solid var(--border); }
+  .commission-bracket-table tr.active td { background: rgba(66, 133, 244, 0.12); font-weight: 700; color: var(--accent); }
+  .commission-incentive-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; }
+  .commission-incentive-row.total { font-weight: 700; font-size: 13px; border-top: 1px solid var(--border); margin-top: 6px; padding-top: 8px; }
+  .commission-base-row { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
+  .commission-base-input {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 14px;
+    font-weight: 600;
+    width: 100px;
+  }
+  .commission-base-input:focus { outline: none; border-color: var(--accent); }
+  .commission-calc-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .commission-calc-btn:hover { opacity: 0.9; }
+  .commission-total-box {
+    margin-top: 12px;
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .commission-total-box .commission-incentive-row { font-size: 12px; }
+  .commission-total-box .commission-incentive-row.grand-total { font-weight: 700; font-size: 15px; color: var(--accent); border-top: 1px solid var(--border); margin-top: 6px; padding-top: 8px; }
+  .commission-empty { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
+
   /* UPLOAD ZONE */
   .upload-zone {
     border: 2px dashed var(--border);
@@ -565,6 +626,14 @@
           <div class="goal-input-row"><span class="pending-badge">Pending (manual score)</span></div>
         </div>
       </div>
+    </div>
+
+    <!-- COMMISSION CALCULATOR -->
+    <div class="commission-section">
+      <div class="commission-title">Commission Calculator</div>
+      <div class="commission-sub">Recalculates for whichever SDR(s) and date range you've selected above (e.g. pick "Last month" and select just one person). Qualified Leads and Meetings are counted from all leads (B2B + B2C); both are always judged as a percentage of that person's B2B leads only, matching Commission View. New Sales Incentive and Lead Factor are not included here.</div>
+      <div class="commission-period" id="commissionPeriod"></div>
+      <div class="commission-grid" id="commissionCards"></div>
     </div>
   </main>
 </div>
@@ -1078,6 +1147,7 @@ function renderDashboard() {
   const days = getFilteredDays();
   renderSummaryCards(days);
   renderCharts(days);
+  renderCommissionCalculator(days);
 }
 
 function renderSummaryCards(days) {
@@ -1463,6 +1533,161 @@ function loadGoals() {
     if (saved.nr_rate) document.getElementById('goal_nr_rate').value = saved.nr_rate;
   } catch(e) {}
   renderDerivedGoalPreviews();
+}
+
+// ─── COMMISSION CALCULATOR ─────────────────────────────────────────────────────
+// Brackets recreate the original spreadsheet's dynamic-%-of-B2B-leads thresholds
+// as flat rate cutoffs (rate = combined B2B+B2C count ÷ that SDR's B2B leads),
+// which is equivalent to the original's per-SDR recalculated Min/Max counts.
+// New Sales Incentive and Lead Factor are intentionally left out per instruction.
+const QUALIFIED_BRACKETS = [
+  { minPct: 0,  maxPct: 40,       amount: 0 },
+  { minPct: 40, maxPct: 50,       amount: 150 },
+  { minPct: 50, maxPct: 55,       amount: 200 },
+  { minPct: 55, maxPct: 60,       amount: 250 },
+  { minPct: 60, maxPct: Infinity, amount: 400 }
+];
+const MEETING_BRACKETS = [
+  { minPct: 0,  maxPct: 20,       amount: 0 },
+  { minPct: 20, maxPct: 25,       amount: 300 },
+  { minPct: 25, maxPct: 30,       amount: 400 },
+  { minPct: 30, maxPct: 35,       amount: 600 },
+  { minPct: 35, maxPct: 40,       amount: 800 },
+  { minPct: 40, maxPct: Infinity, amount: 1000 }
+];
+function findBracketIndex(ratePct, brackets) {
+  const idx = brackets.findIndex(b => ratePct >= b.minPct && (b.maxPct === Infinity || ratePct < b.maxPct));
+  return idx === -1 ? 0 : idx;
+}
+function bracketTable(brackets, activeIdx, isPct) {
+  return `<table class="commission-bracket-table">
+    <thead><tr><th>Rate</th><th>Bonus</th></tr></thead>
+    <tbody>
+      ${brackets.map((b, i) => `<tr class="${i === activeIdx ? 'active' : ''}">
+        <td>${b.minPct}%${b.maxPct === Infinity ? '+' : ' – <' + b.maxPct + '%'}</td>
+        <td>$${b.amount.toLocaleString()}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+// Reads directly from rawByDay (not allData) so the calculator's B2B/B2C split
+// and rates are always correct regardless of whatever the "Leads:" filter
+// dropdown is currently set to.
+function commissionMetricsForSDR(days, sdrKey) {
+  const rows = [];
+  days.forEach(d => {
+    const dayRows = rawByDay[d] && rawByDay[d][sdrKey];
+    if (dayRows) rows.push(...dayRows);
+  });
+  const b2bLeads = rows.filter(isBusinessLead).length;
+  const b2cLeads = rows.filter(isB2CLead).length;
+  const qualified = rows.filter(isQualifiedLead).length;
+  const meetings = rows.filter(isMeetingBooked).length;
+  return {
+    totalLeads: rows.length,
+    b2bLeads,
+    b2cLeads,
+    qualified,
+    meetings,
+    qualifiedRate: b2bLeads ? (qualified / b2bLeads * 100) : 0,
+    meetingRate: b2bLeads ? (meetings / b2bLeads * 100) : 0
+  };
+}
+function loadCommissionBases() {
+  try { return JSON.parse(localStorage.getItem('sdr_commission_bases') || '{}'); } catch(e) { return {}; }
+}
+function saveCommissionBase(key, value) {
+  try {
+    const bases = loadCommissionBases();
+    bases[key] = value;
+    localStorage.setItem('sdr_commission_bases', JSON.stringify(bases));
+  } catch(e) {}
+}
+function calculateCommission(key) {
+  const baseInput = document.getElementById('commissionBase-' + key);
+  const base = parseFloat(baseInput.value) || 0;
+  saveCommissionBase(key, baseInput.value);
+  const qIncentive = parseFloat(document.getElementById('commissionQIncentive-' + key).dataset.amount) || 0;
+  const mIncentive = parseFloat(document.getElementById('commissionMIncentive-' + key).dataset.amount) || 0;
+  const total = base + qIncentive + mIncentive;
+  const box = document.getElementById('commissionTotalBox-' + key);
+  box.innerHTML = `
+    <div class="commission-incentive-row"><span>Base</span><span>$${base.toLocaleString()}</span></div>
+    <div class="commission-incentive-row"><span>Qualified Leads Incentive</span><span>$${qIncentive.toLocaleString()}</span></div>
+    <div class="commission-incentive-row"><span>Meeting Incentive</span><span>$${mIncentive.toLocaleString()}</span></div>
+    <div class="commission-incentive-row grand-total"><span>Total Compensation</span><span>$${total.toLocaleString()}</span></div>
+  `;
+}
+function commissionCard(sdr, days) {
+  const m = commissionMetricsForSDR(days, sdr.key);
+  const qIdx = findBracketIndex(m.qualifiedRate, QUALIFIED_BRACKETS);
+  const mIdx = findBracketIndex(m.meetingRate, MEETING_BRACKETS);
+  const qAmount = QUALIFIED_BRACKETS[qIdx].amount;
+  const mAmount = MEETING_BRACKETS[mIdx].amount;
+  const bases = loadCommissionBases();
+  const savedBase = bases[sdr.key] || '';
+  return `<div class="commission-card">
+    <div class="commission-card-header">
+      <span class="split-name" style="color:${sdr.color}; font-size:13px;">${sdr.label}</span>
+      <span class="commission-card-name">${sdr.name}</span>
+    </div>
+    <div class="commission-stats">
+      <div class="commission-stat">
+        <div class="commission-stat-label">New Business Leads</div>
+        <div class="commission-stat-value">${m.b2bLeads}</div>
+      </div>
+      <div class="commission-stat">
+        <div class="commission-stat-label">B2C Leads</div>
+        <div class="commission-stat-value">${m.b2cLeads}</div>
+      </div>
+      <div class="commission-stat">
+        <div class="commission-stat-label">Qualified Leads</div>
+        <div class="commission-stat-value">${m.qualified}</div>
+        <div class="commission-stat-sub">${m.qualifiedRate.toFixed(1)}% of B2B leads</div>
+      </div>
+      <div class="commission-stat">
+        <div class="commission-stat-label">Meetings</div>
+        <div class="commission-stat-value">${m.meetings}</div>
+        <div class="commission-stat-sub">${m.meetingRate.toFixed(1)}% of B2B leads</div>
+      </div>
+    </div>
+    <div class="commission-bracket-label">Qualified Leads Incentive</div>
+    ${bracketTable(QUALIFIED_BRACKETS, qIdx)}
+    <div class="commission-incentive-row"><span>Bracket bonus</span><span id="commissionQIncentive-${sdr.key}" data-amount="${qAmount}">$${qAmount.toLocaleString()}</span></div>
+    <div class="commission-bracket-label">Meeting Set Incentive</div>
+    ${bracketTable(MEETING_BRACKETS, mIdx)}
+    <div class="commission-incentive-row"><span>Bracket bonus</span><span id="commissionMIncentive-${sdr.key}" data-amount="${mAmount}">$${mAmount.toLocaleString()}</span></div>
+    <div class="commission-base-row">
+      <span class="commission-stat-label">Base $</span>
+      <input class="commission-base-input" type="number" id="commissionBase-${sdr.key}" value="${savedBase}" placeholder="e.g. 2000">
+      <button class="commission-calc-btn" onclick="calculateCommission('${sdr.key}')">Calculate</button>
+    </div>
+    <div class="commission-total-box" id="commissionTotalBox-${sdr.key}">
+      <div class="commission-incentive-row"><span>Qualified Leads Incentive</span><span>$${qAmount.toLocaleString()}</span></div>
+      <div class="commission-incentive-row"><span>Meeting Incentive</span><span>$${mAmount.toLocaleString()}</span></div>
+      <div class="commission-incentive-row grand-total"><span>Total Compensation</span><span>enter Base and click Calculate</span></div>
+    </div>
+  </div>`;
+}
+function commissionPeriodLabel(days) {
+  if (!days.length) return 'No data in this range';
+  const rangeVal = document.getElementById('rangeSelect').value;
+  const rangeLabelEl = document.querySelector('#rangeSelect option[value="' + rangeVal + '"]');
+  const rangeLabel = rangeLabelEl ? rangeLabelEl.textContent : 'Selected range';
+  const first = days[0], last = days[days.length - 1];
+  return `${rangeLabel} · ${first === last ? first : first + ' – ' + last}`;
+}
+function renderCommissionCalculator(days) {
+  const periodEl = document.getElementById('commissionPeriod');
+  const cardsEl = document.getElementById('commissionCards');
+  if (!periodEl || !cardsEl || !rawByDay) return;
+  periodEl.textContent = commissionPeriodLabel(days);
+  const selected = SDRS.filter(s => selectedSDRs.has(s.key));
+  if (!selected.length || !days.length) {
+    cardsEl.innerHTML = `<div class="commission-empty">No leads in the selected range for the selected SDR(s).</div>`;
+    return;
+  }
+  cardsEl.innerHTML = selected.map(s => commissionCard(s, days)).join('');
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
