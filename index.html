@@ -360,6 +360,7 @@
     white-space: nowrap;
   }
   .commission-report-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .commission-report-btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
   .commission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
   .commission-card { border: 1px solid var(--border); border-radius: 10px; padding: 16px; background: var(--surface2); }
   .commission-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
@@ -450,6 +451,20 @@
   .report-table th { text-align: left; padding: 5px 6px; border-bottom: 1px solid #999; background: #f1f2f6; }
   .report-table td { padding: 5px 6px; border-bottom: 1px solid #ddd; }
   .report-empty-note { font-size: 11px; color: var(--muted); font-style: italic; margin-bottom: 10px; }
+
+  /* REPORT PREVIEW (on-screen, at the very bottom of the page) */
+  .report-preview-area {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 16px;
+  }
+  .report-preview-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .report-preview-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .report-preview-body { background: #fff; color: #111; border: 1px solid var(--border); border-radius: 8px; padding: 20px; overflow-x: auto; }
+  .report-preview-body .report-table th { background: #f1f2f6; }
 
   @media print {
     body > *:not(#reportPrintArea) { display: none !important; }
@@ -670,11 +685,17 @@
           <div class="commission-title">Commission Calculator</div>
           <div class="commission-sub">Recalculates for whichever SDR(s) and date range you've selected above (e.g. pick "Last month" and select just one person). Qualified Leads and Meetings are counted from all leads (B2B + B2C); both are always judged as a percentage of that person's B2B leads only, matching Commission View. New Sales Incentive and Lead Factor are not included here.</div>
         </div>
-        <button class="commission-report-btn" onclick="exportQualifiedReport()">Export Report (PDF)</button>
+        <div class="commission-report-btn-group">
+          <button class="commission-report-btn" onclick="previewQualifiedReport()">Preview Report</button>
+          <button class="commission-report-btn" onclick="exportQualifiedReport()">Export Report (PDF)</button>
+        </div>
       </div>
       <div class="commission-period" id="commissionPeriod"></div>
       <div class="commission-grid" id="commissionCards"></div>
     </div>
+
+    <!-- REPORT PREVIEW: shown on-screen only after clicking "Preview Report", at the very bottom of the page -->
+    <div id="reportPreviewArea" class="report-preview-area"></div>
   </main>
 </div>
 
@@ -1775,14 +1796,9 @@ function reportTable(rows) {
 // qualified lead from the selected date range, split into "qualified with a
 // meeting booked" and "qualified but never booked" — for SDRs/leadership to
 // manually spot-check what counted toward the numbers.
-function exportQualifiedReport() {
-  const days = getFilteredDays();
-  const printArea = document.getElementById('reportPrintArea');
-  const selected = SDRS.filter(s => selectedSDRs.has(s.key));
-  if (!printArea || !rawByDay || !selected.length || !days.length) {
-    alert('No data to export for the current SDR/range selection.');
-    return;
-  }
+// Builds the report's inner HTML (title/meta/sections) — shared by the
+// on-screen Preview and the print/PDF export so they're always identical.
+function buildQualifiedReportHtml(days, selected) {
   const periodLabel = commissionPeriodLabel(days);
   const sections = selected.map(sdr => {
     const rows = [];
@@ -1801,11 +1817,51 @@ function exportQualifiedReport() {
       ${reportTable(qualifiedNotBooked)}
     `;
   }).join('');
-  printArea.innerHTML = `
+  return `
     <div class="report-title">Qualified Leads Review Report</div>
     <div class="report-meta">${escapeHtml(periodLabel)} · generated for manual review of every lead counted toward Qualified/Meeting numbers</div>
     ${sections}
   `;
+}
+function getReportSelection() {
+  const days = getFilteredDays();
+  const selected = SDRS.filter(s => selectedSDRs.has(s.key));
+  if (!rawByDay || !selected.length || !days.length) return null;
+  return { days, selected };
+}
+function previewQualifiedReport() {
+  const sel = getReportSelection();
+  const previewArea = document.getElementById('reportPreviewArea');
+  if (!sel) {
+    alert('No data to preview for the current SDR/range selection.');
+    return;
+  }
+  previewArea.innerHTML = `
+    <div class="report-preview-header">
+      <div class="commission-title">Report Preview</div>
+      <div class="report-preview-actions">
+        <button class="commission-calc-btn" onclick="exportQualifiedReport()">Print / Save as PDF</button>
+        <button class="commission-report-btn" onclick="closeReportPreview()">Close Preview</button>
+      </div>
+    </div>
+    <div class="report-preview-body">${buildQualifiedReportHtml(sel.days, sel.selected)}</div>
+  `;
+  previewArea.style.display = 'block';
+  previewArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function closeReportPreview() {
+  const previewArea = document.getElementById('reportPreviewArea');
+  previewArea.style.display = 'none';
+  previewArea.innerHTML = '';
+}
+function exportQualifiedReport() {
+  const sel = getReportSelection();
+  const printArea = document.getElementById('reportPrintArea');
+  if (!sel || !printArea) {
+    alert('No data to export for the current SDR/range selection.');
+    return;
+  }
+  printArea.innerHTML = buildQualifiedReportHtml(sel.days, sel.selected);
   window.print();
 }
 
