@@ -112,6 +112,15 @@
     font-size: 12px;
     cursor: pointer;
   }
+  .custom-range-inputs { display: flex; align-items: center; gap: 6px; }
+  .custom-range-inputs input[type="date"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
   .cumulative-toggle {
     display: flex;
     align-items: center;
@@ -395,12 +404,18 @@
         <option value="commission">Commission View</option>
       </select>
       <span>Range:</span>
-      <select id="rangeSelect" onchange="saveRangeFilter(); renderDashboard()">
+      <select id="rangeSelect" onchange="updateRangeUI(); saveRangeFilter(); renderDashboard()">
         <option value="all">All time</option>
         <option value="thisMonth">This month</option>
         <option value="14">Last 14 days</option>
         <option value="7">Last 7 days</option>
+        <option value="custom">Custom range...</option>
       </select>
+      <span id="customRangeInputs" class="custom-range-inputs" style="display:none">
+        <input type="date" id="rangeStart" onchange="saveRangeFilter(); renderDashboard()">
+        <span>–</span>
+        <input type="date" id="rangeEnd" onchange="saveRangeFilter(); renderDashboard()">
+      </span>
     </div>
   </div>
 
@@ -415,6 +430,11 @@
           <span class="chart-title">Meetings Booked — Daily</span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetings"></div>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="modeToggle-chartMeetings" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Combined</span>
+            </label>
           </div>
         </div>
         <canvas id="chartMeetings"></canvas>
@@ -422,14 +442,28 @@
       <div class="chart-card full">
         <div class="chart-header">
           <span class="chart-title">Meeting Booked Rate % — Trend</span>
-          <div class="chart-legend" id="legend-chartMeetingRate"></div>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartMeetingRate"></div>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="modeToggle-chartMeetingRate" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Combined</span>
+            </label>
+          </div>
         </div>
         <canvas id="chartMeetingRate"></canvas>
       </div>
       <div class="chart-card full">
         <div class="chart-header">
           <span class="chart-title">% Leads Qualified — Trend</span>
-          <div class="chart-legend" id="legend-chartQualPct"></div>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartQualPct"></div>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="modeToggle-chartQualPct" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Combined</span>
+            </label>
+          </div>
         </div>
         <canvas id="chartQualPct"></canvas>
       </div>
@@ -438,6 +472,11 @@
           <span class="chart-title">Lead Volume — Daily</span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartLeads"></div>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="modeToggle-chartLeads" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Combined</span>
+            </label>
             <label class="chart-cumulative-toggle">
               <input type="checkbox" id="cumulativeToggle-chartLeads" onchange="renderCharts(getFilteredDays())">
               <span class="toggle-track"></span>
@@ -450,14 +489,28 @@
       <div class="chart-card">
         <div class="chart-header">
           <span class="chart-title">Non-Responsive Rate % — Trend</span>
-          <div class="chart-legend" id="legend-chartNR"></div>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartNR"></div>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="modeToggle-chartNR" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Combined</span>
+            </label>
+          </div>
         </div>
         <canvas id="chartNR"></canvas>
       </div>
       <div class="chart-card">
         <div class="chart-header">
           <span class="chart-title">Active Pipeline — Daily</span>
-          <div class="chart-legend" id="legend-chartPipeline"></div>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartPipeline"></div>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="modeToggle-chartPipeline" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Combined</span>
+            </label>
+          </div>
         </div>
         <canvas id="chartPipeline"></canvas>
       </div>
@@ -565,7 +618,7 @@ function nowInDubai() {
 let allData = null;   // { date: { <sdrKey>: metrics, Team: metrics } } — derived from rawByDay via current lead-type filter
 let allDataB2B = null;   // same shape, always business-leads-only — used by Commission View's Lead Volume card
 let rawByDay = null;   // { date: { <sdrKey>: [rows] } } — unfiltered raw rows, persisted
-let currentView = 'Team';
+let selectedSDRs = new Set(SDRS.map(s => s.key));   // toggle-selected SDRs; all 4 selected by default
 let charts = {};
 let expandedCards = new Set();
 
@@ -662,6 +715,7 @@ function parseCSV(text, filename) {
   loadGoals();
   loadLeadTypeFilter();
   loadRangeFilter();
+  loadSelectedSDRs();
   renderDashboard();
 }
 
@@ -716,14 +770,32 @@ function loadLeadTypeFilter() {
   } catch(e) {}
   recomputeAllData();
 }
+function updateRangeUI() {
+  const isCustom = document.getElementById('rangeSelect').value === 'custom';
+  document.getElementById('customRangeInputs').style.display = isCustom ? 'inline-flex' : 'none';
+}
 function saveRangeFilter() {
-  try { localStorage.setItem('sdr_range', document.getElementById('rangeSelect').value); } catch(e) {}
+  try {
+    localStorage.setItem('sdr_range', JSON.stringify({
+      range: document.getElementById('rangeSelect').value,
+      start: document.getElementById('rangeStart').value,
+      end: document.getElementById('rangeEnd').value
+    }));
+  } catch(e) {}
 }
 function loadRangeFilter() {
   try {
-    const saved = localStorage.getItem('sdr_range');
-    if (saved) document.getElementById('rangeSelect').value = saved;
+    const raw = localStorage.getItem('sdr_range');
+    if (raw) {
+      // Back-compat: earlier versions stored a bare range string, not JSON.
+      let saved;
+      try { saved = JSON.parse(raw); } catch(e) { saved = { range: raw }; }
+      if (saved.range) document.getElementById('rangeSelect').value = saved.range;
+      if (saved.start) document.getElementById('rangeStart').value = saved.start;
+      if (saved.end) document.getElementById('rangeEnd').value = saved.end;
+    }
   } catch(e) {}
+  updateRangeUI();
 }
 
 // ─── PERSIST LOADED DATA ACROSS REFRESHES ─────────────────────────────────────
@@ -739,6 +811,7 @@ function restoreLoadedData() {
     rawByDay = saved.rawByDay;
     loadLeadTypeFilter();
     loadRangeFilter();
+    loadSelectedSDRs();
     const dates = Object.keys(allData).sort();
     const firstDate = dates[0];
     const lastDate = dates[dates.length - 1];
@@ -770,19 +843,48 @@ function computeMetrics(leads) {
   };
 }
 
-// ─── VIEW TOGGLE ──────────────────────────────────────────────────────────────
+// ─── VIEW TOGGLE (multi-select SDRs) ──────────────────────────────────────────
 function renderViewTabs() {
   const el = document.getElementById('viewTabs');
   if (!el) return;
-  const tabs = [{ key: 'Team', label: 'Team' }, ...SDRS.map(s => ({ key: s.key, label: s.label }))];
-  el.innerHTML = tabs.map(t =>
-    `<button class="view-tab${t.key === currentView ? ' active' : ''}" data-view="${t.key}" onclick="setView('${t.key}')">${t.label}</button>`
-  ).join('');
+  const allSelected = selectedSDRs.size === SDRS.length;
+  const tabs = [
+    `<button class="view-tab${allSelected ? ' active' : ''}" onclick="selectAllSDRs()">All</button>`,
+    ...SDRS.map(s =>
+      `<button class="view-tab${selectedSDRs.has(s.key) ? ' active' : ''}" data-sdr="${s.key}" onclick="toggleSDR('${s.key}')">${s.label}</button>`
+    )
+  ];
+  el.innerHTML = tabs.join('');
 }
-function setView(v) {
-  currentView = v;
-  document.querySelectorAll('.view-tab').forEach(t => t.classList.toggle('active', t.dataset.view === v));
+function toggleSDR(key) {
+  if (selectedSDRs.has(key)) {
+    if (selectedSDRs.size === 1) return; // must keep at least one selected
+    selectedSDRs.delete(key);
+  } else {
+    selectedSDRs.add(key);
+  }
+  saveSelectedSDRs();
+  renderViewTabs();
   renderDashboard();
+}
+function selectAllSDRs() {
+  selectedSDRs = new Set(SDRS.map(s => s.key));
+  saveSelectedSDRs();
+  renderViewTabs();
+  renderDashboard();
+}
+function saveSelectedSDRs() {
+  try { localStorage.setItem('sdr_selected', JSON.stringify(Array.from(selectedSDRs))); } catch(e) {}
+}
+function loadSelectedSDRs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('sdr_selected') || 'null');
+    if (Array.isArray(saved) && saved.length) {
+      const valid = saved.filter(k => SDR_BY_KEY[k]);
+      if (valid.length) selectedSDRs = new Set(valid);
+    }
+  } catch(e) {}
+  renderViewTabs();
 }
 
 // ─── FILTERED DATA ────────────────────────────────────────────────────────────
@@ -796,9 +898,53 @@ function getFilteredDays() {
     const ym = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
     return days.filter(d => d.startsWith(ym));
   }
+  if (rangeVal === 'custom') {
+    const start = document.getElementById('rangeStart').value;
+    const end = document.getElementById('rangeEnd').value;
+    if (!start || !end) return days; // no valid range picked yet — show all
+    return days.filter(d => d >= start && d <= end);
+  }
   const range = parseInt(rangeVal);
   if (isNaN(range)) return days;
   return days.slice(-range);
+}
+
+// True when the active range is exactly "1st of the current Dubai month through
+// today" — either via the "This month" quick-pick or a custom range that happens
+// to match it — used to gate month-end projections/Pace/Target lines.
+function isCurrentMonthToDate(rangeVal) {
+  if (rangeVal === 'thisMonth') return true;
+  if (rangeVal !== 'custom') return false;
+  const start = document.getElementById('rangeStart').value;
+  const end = document.getElementById('rangeEnd').value;
+  if (!start || !end) return false;
+  const now = nowInDubai();
+  const firstOfMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
+  const today = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+  return start === firstOfMonth && end === today;
+}
+
+// Returns the metrics bucket for an arbitrary set of SDR keys on a given day.
+// `view` may be a single key/'Team' string (fast path: precomputed bucket) or
+// an array of SDR keys (dynamically summed — used for multi-select subsets
+// that aren't the full roster or a single SDR).
+function metricsForSelection(dataset, day, view) {
+  const bucket = dataset[day];
+  if (!bucket) return null;
+  if (!Array.isArray(view)) return bucket[view] || null;
+  if (view.length === SDRS.length) return bucket.Team;
+  if (view.length === 1) return bucket[view[0]] || null;
+  const parts = view.map(k => bucket[k]).filter(Boolean);
+  if (!parts.length) return null;
+  const sum = f => parts.reduce((a, p) => a + (p[f] || 0), 0);
+  const leads = sum('leads'), meetings = sum('meetings'), qualified = sum('qualified'),
+        non_responsive = sum('non_responsive'), ae_dq = sum('ae_dq'), active_pipeline = sum('active_pipeline');
+  return {
+    leads, meetings, qualified, non_responsive, ae_dq, active_pipeline,
+    meeting_rate: leads ? meetings / leads * 100 : 0,
+    pct_qualified: leads ? qualified / leads * 100 : 0,
+    nr_rate: leads ? non_responsive / leads * 100 : 0
+  };
 }
 
 function sumMetric(days, view, key) {
@@ -806,7 +952,7 @@ function sumMetric(days, view, key) {
 }
 function sumMetricFrom(data, days, view, key) {
   return days.reduce((acc, d) => {
-    const m = data[d] && data[d][view];
+    const m = metricsForSelection(data, d, view);
     return acc + (m ? (m[key] || 0) : 0);
   }, 0);
 }
@@ -821,8 +967,10 @@ function meanMetric(days, view, key) {
 function meanRateCommission(days, view, numKey) {
   if (!days.length) return 0;
   const total = days.reduce((acc, d) => {
-    const num = (allData[d] && allData[d][view]) ? (allData[d][view][numKey] || 0) : 0;
-    const denom = (allDataB2B[d] && allDataB2B[d][view]) ? (allDataB2B[d][view].leads || 0) : 0;
+    const numBucket = metricsForSelection(allData, d, view);
+    const denomBucket = metricsForSelection(allDataB2B, d, view);
+    const num = numBucket ? (numBucket[numKey] || 0) : 0;
+    const denom = denomBucket ? (denomBucket.leads || 0) : 0;
     return acc + (denom ? (num / denom * 100) : 0);
   }, 0);
   return total / days.length;
@@ -837,7 +985,7 @@ function calendarSpanDays(days) {
 }
 
 function elapsedDaysForAvg(days, rangeVal) {
-  if (rangeVal === 'thisMonth') return nowInDubai().getUTCDate();
+  if (isCurrentMonthToDate(rangeVal)) return nowInDubai().getUTCDate();
   return calendarSpanDays(days) || 1;
 }
 
@@ -855,11 +1003,11 @@ function renderDashboard() {
 }
 
 function renderSummaryCards(days) {
-  const v = currentView;
+  const v = Array.from(selectedSDRs);
   const rangeVal = document.getElementById('rangeSelect').value;
   const elapsed = elapsedDaysForAvg(days, rangeVal);
   const daysInMo = daysInCurrentMonth();
-  const showProjection = rangeVal === 'thisMonth';
+  const showProjection = isCurrentMonthToDate(rangeVal);
   const lastDay = days[days.length - 1];
 
   // Totals for the current view
@@ -868,7 +1016,8 @@ function renderSummaryCards(days) {
   const totalQualified = sumMetric(days, v, 'qualified');
   const totalNR = sumMetric(days, v, 'non_responsive');
   const totalAEDQ = sumMetric(days, v, 'ae_dq');
-  const activePipeline = (lastDay && allData[lastDay] && allData[lastDay][v]) ? allData[lastDay][v].active_pipeline : 0;
+  const lastDayBucket = lastDay ? metricsForSelection(allData, lastDay, v) : null;
+  const activePipeline = lastDayBucket ? lastDayBucket.active_pipeline : 0;
 
   // Commission View: every rate/percentage card (Meeting Booked Rate, % Qualified,
   // NR Rate) keeps the combined B2B+B2C numerator but is judged against the
@@ -884,16 +1033,18 @@ function renderSummaryCards(days) {
 
   const d = derivedGoals();
 
-  // Per-SDR raw totals (used for split rows only in Team view). Each SDR's
-  // individual count goal is the KPI% applied to *their own* projected lead
-  // volume (not an even split of the team goal) — leads aren't split evenly.
-  const perSDR = SDRS.map(s => {
+  // Per-SDR raw totals for the *selected* SDRs only (used for split rows when
+  // 2+ SDRs are selected). Each SDR's individual count goal is the KPI%
+  // applied to *their own* projected lead volume (not an even split of the
+  // selection's total) — leads aren't split evenly.
+  const perSDR = SDRS.filter(s => selectedSDRs.has(s.key)).map(s => {
     const leads = sumMetric(days, s.key, 'leads');
     const meetings = sumMetric(days, s.key, 'meetings');
     const qualified = sumMetric(days, s.key, 'qualified');
     const nr = sumMetric(days, s.key, 'non_responsive');
     const aedq = sumMetric(days, s.key, 'ae_dq');
-    const pipeline = (lastDay && allData[lastDay] && allData[lastDay][s.key]) ? allData[lastDay][s.key].active_pipeline : 0;
+    const sPipelineBucket = lastDay ? metricsForSelection(allData, lastDay, s.key) : null;
+    const pipeline = sPipelineBucket ? sPipelineBucket.active_pipeline : 0;
     const leadVol = isCommission ? sumMetricFrom(allDataB2B, days, s.key, 'leads') : leads;
     const leadsProjected = elapsed ? (leadVol / elapsed * daysInMo) : 0;
     return {
@@ -947,7 +1098,7 @@ function goalStatusRow(actual, goalVal, isPct, lowerIsBetter, rowLabel) {
 
 // sdrList: array of { key, label, color, value, avg?, projected?, goalVal? }
 function splitRow(sdrList, isPct, lowerIsBetter) {
-  if (currentView !== 'Team') return '';
+  if (sdrList.length < 2) return '';
   const fmt = v => isPct ? v.toFixed(1) + '%' : Math.round(v);
   const goalNote = (val, goalVal) => {
     if (val == null || !goalVal) return '';
@@ -1027,16 +1178,29 @@ function isCumulative(id) {
   const el = document.getElementById('cumulativeToggle-' + id);
   return el ? el.checked : false;
 }
+function isCombinedMode(id) {
+  const el = document.getElementById('modeToggle-' + id);
+  return el ? el.checked : false;
+}
 
-function buildDatasets(days, metric, isRate, cumulative) {
-  const views = currentView === 'Team'
-    ? SDRS.map(s => ({ key: s.key, label: s.label, color: s.color }))
-    : [{ key: currentView, label: SDR_BY_KEY[currentView].label, color: SDR_BY_KEY[currentView].color }];
+function buildDatasets(days, metric, isRate, cumulative, combined) {
+  const keys = Array.from(selectedSDRs);
+  const views = (!combined && keys.length > 1)
+    ? SDRS.filter(s => selectedSDRs.has(s.key)).map(s => ({ key: s.key, label: s.label, color: s.color }))
+    : [{
+        key: keys,
+        label: keys.length === SDRS.length ? 'Team' : keys.map(k => SDR_BY_KEY[k].label).join('+'),
+        color: COLORS.Team
+      }];
 
   return views.map(v => {
     // A day missing from allData entirely (future day not yet reached) renders as a
     // gap (null); a day present with metric 0 is a real zero and stays 0.
-    let data = days.map(d => allData[d] ? (allData[d][v.key] ? (allData[d][v.key][metric] || 0) : 0) : null);
+    let data = days.map(d => {
+      if (!allData[d]) return null;
+      const m = metricsForSelection(allData, d, v.key);
+      return m ? (m[metric] || 0) : 0;
+    });
     if (cumulative) {
       let sum = 0, count = 0;
       data = data.map(val => {
@@ -1082,7 +1246,7 @@ function paceLine(days, metric) {
   const todayKey = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
   const elapsedDays = days.filter(d => d <= todayKey && allData[d]);
   if (!elapsedDays.length) return null;
-  const total = sumMetricFrom(allData, elapsedDays, 'Team', metric);
+  const total = sumMetricFrom(allData, elapsedDays, Array.from(selectedSDRs), metric);
   const v = parseFloat((total / elapsedDays.length).toFixed(1));
   if (!v) return null;
   return {
@@ -1099,8 +1263,9 @@ function paceLine(days, metric) {
 
 function makeChart(id, days, metric, goalKey, isRate, cumulativeAllowed, goalOverride, showPace) {
   const cumulative = cumulativeAllowed !== false && isCumulative(id);
+  const combined = isCombinedMode(id);
   const labels = days.map(d => d.slice(5)); // MM-DD
-  const datasets = buildDatasets(days, metric, isRate, cumulative);
+  const datasets = buildDatasets(days, metric, isRate, cumulative, combined);
   if (showPace && !isRate) {
     const pl = paceLine(days, metric);
     if (pl) datasets.push(pl);
@@ -1141,9 +1306,10 @@ function makeChart(id, days, metric, goalKey, isRate, cumulativeAllowed, goalOve
 
   const legendEl = document.getElementById('legend-' + id);
   if (legendEl) {
-    const items = currentView === 'Team'
-      ? SDRS.map(s => ({ label: s.label, color: s.color }))
-      : [{ label: SDR_BY_KEY[currentView].label, color: SDR_BY_KEY[currentView].color }];
+    const selKeys = Array.from(selectedSDRs);
+    const items = (!combined && selKeys.length > 1)
+      ? SDRS.filter(s => selectedSDRs.has(s.key)).map(s => ({ label: s.label, color: s.color }))
+      : [{ label: selKeys.length === SDRS.length ? 'Team' : selKeys.map(k => SDR_BY_KEY[k].label).join('+'), color: COLORS.Team }];
     if (gl) items.push({ label: 'Target', color: COLORS.Goal });
     if (showPace && !isRate) items.push({ label: 'Pace', color: COLORS.Pace });
     legendEl.innerHTML = items.map(it =>
@@ -1164,7 +1330,7 @@ function monthDayKeys() {
 function renderCharts(days) {
   const d = derivedGoals();
   const rangeVal = document.getElementById('rangeSelect').value;
-  const featuredDays = rangeVal === 'thisMonth' ? monthDayKeys() : days;
+  const featuredDays = isCurrentMonthToDate(rangeVal) ? monthDayKeys() : days;
   makeChart('chartMeetings', featuredDays, 'meetings', null, false, false, d.goalMeetings, true);
   makeChart('chartMeetingRate', featuredDays, 'meeting_rate', null, true, false, d.goalMeetingRate);
   makeChart('chartQualPct', featuredDays, 'pct_qualified', 'pct_qual', true, false);
