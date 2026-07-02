@@ -406,7 +406,9 @@
       <span>Range:</span>
       <select id="rangeSelect" onchange="updateRangeUI(); saveRangeFilter(); renderDashboard()">
         <option value="all">All time</option>
+        <option value="today">Today</option>
         <option value="thisMonth">This month</option>
+        <option value="lastMonth">Last month</option>
         <option value="14">Last 14 days</option>
         <option value="7">Last 7 days</option>
         <option value="custom">Custom range...</option>
@@ -919,15 +921,28 @@ function loadSelectedSDRs() {
 }
 
 // ─── FILTERED DATA ────────────────────────────────────────────────────────────
+function dubaiTodayKey() {
+  const now = nowInDubai();
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+}
+function dubaiYearMonth(monthOffset) {
+  const now = nowInDubai();
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + monthOffset, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
 function getFilteredDays() {
   if (!allData) return [];
   const days = Object.keys(allData).sort();
   const rangeVal = document.getElementById('rangeSelect').value;
   if (rangeVal === 'all') return days;
+  if (rangeVal === 'today') {
+    return days.filter(d => d === dubaiTodayKey());
+  }
   if (rangeVal === 'thisMonth') {
-    const now = nowInDubai();
-    const ym = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-    return days.filter(d => d.startsWith(ym));
+    return days.filter(d => d.startsWith(dubaiYearMonth(0)));
+  }
+  if (rangeVal === 'lastMonth') {
+    return days.filter(d => d.startsWith(dubaiYearMonth(-1)));
   }
   if (rangeVal === 'custom') {
     const start = document.getElementById('rangeStart').value;
