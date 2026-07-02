@@ -407,6 +407,8 @@
       <select id="rangeSelect" onchange="updateRangeUI(); saveRangeFilter(); renderDashboard()">
         <option value="all">All time</option>
         <option value="today">Today</option>
+        <option value="yesterday">Yesterday</option>
+        <option value="thisWeek">This week</option>
         <option value="thisMonth">This month</option>
         <option value="lastMonth">Last month</option>
         <option value="14">Last 14 days</option>
@@ -921,14 +923,36 @@ function loadSelectedSDRs() {
 }
 
 // ─── FILTERED DATA ────────────────────────────────────────────────────────────
-function dubaiTodayKey() {
+function dayKeyFromUTCDate(d) {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+function dubaiOffsetDayKey(offsetDays) {
   const now = nowInDubai();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + offsetDays));
+  return dayKeyFromUTCDate(d);
+}
+function dubaiTodayKey() {
+  return dubaiOffsetDayKey(0);
 }
 function dubaiYearMonth(monthOffset) {
   const now = nowInDubai();
   const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + monthOffset, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+// Week runs Saturday through Friday. Given a Dubai-local day key, returns the
+// Saturday on/before it (inclusive) as the week's start.
+function dubaiWeekStart(dayKey) {
+  const [y, m, d] = dayKey.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const dow = dt.getUTCDay(); // 0=Sun..6=Sat
+  const daysSinceSaturday = (dow + 1) % 7; // Sat->0, Sun->1, Mon->2, ..., Fri->6
+  dt.setUTCDate(dt.getUTCDate() - daysSinceSaturday);
+  return dayKeyFromUTCDate(dt);
+}
+function dubaiWeekEnd(weekStartKey) {
+  const [y, m, d] = weekStartKey.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + 6));
+  return dayKeyFromUTCDate(dt);
 }
 function getFilteredDays() {
   if (!allData) return [];
@@ -937,6 +961,14 @@ function getFilteredDays() {
   if (rangeVal === 'all') return days;
   if (rangeVal === 'today') {
     return days.filter(d => d === dubaiTodayKey());
+  }
+  if (rangeVal === 'yesterday') {
+    return days.filter(d => d === dubaiOffsetDayKey(-1));
+  }
+  if (rangeVal === 'thisWeek') {
+    const weekStart = dubaiWeekStart(dubaiTodayKey());
+    const weekEnd = dubaiWeekEnd(weekStart);
+    return days.filter(d => d >= weekStart && d <= weekEnd);
   }
   if (rangeVal === 'thisMonth') {
     return days.filter(d => d.startsWith(dubaiYearMonth(0)));
