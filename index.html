@@ -332,8 +332,10 @@
     transition: border-color 0.15s;
   }
   .goal-input:focus { outline: none; border-color: var(--accent); }
+  .goal-input[readonly] { color: var(--muted); background: var(--bg); cursor: not-allowed; }
   .goal-unit { font-size: 11px; color: var(--muted); }
   .goal-derived { font-size: 11px; color: var(--accent); font-weight: 600; min-height: 14px; }
+  .goal-override-label { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); cursor: pointer; }
   .pending-badge { background: var(--surface2); color: var(--muted); font-size: 10px; padding: 2px 7px; border-radius: 10px; display: inline-block; border: 1px solid var(--border); }
 
   /* COMMISSION CALCULATOR */
@@ -637,11 +639,15 @@
       <div class="goals-sub">Lead Volume is your monthly baseline. Meeting Booked Rate and % Qualified are KPI percentages — their count goals (and chart/card targets) are calculated automatically as % × Lead Volume. Saved automatically.</div>
       <div class="goals-grid">
         <div class="goal-item">
-          <div class="goal-label">Lead Volume / month <span class="goal-info" title="Baseline. All other count goals (Meetings Booked, Leads Qualified) are calculated as a percentage of this number.">ⓘ</span></div>
+          <div class="goal-label">Lead Volume / month <span class="goal-info" title="Baseline. All other count goals (Meetings Booked, Leads Qualified) are calculated as a percentage of this number. By default this auto-fills with whatever the Lead Volume card currently shows (for whichever filter/SDR/range you have selected) — check Manual override to type your own number instead.">ⓘ</span></div>
           <div class="goal-input-row">
-            <input class="goal-input" type="number" id="goal_leads" placeholder="e.g. 450" oninput="saveGoals(); renderDashboard()">
+            <input class="goal-input" type="number" id="goal_leads" placeholder="e.g. 450" readonly oninput="saveGoals(); renderDashboard()">
             <span class="goal-unit">leads</span>
           </div>
+          <label class="goal-override-label">
+            <input type="checkbox" id="goal_leads_override" onchange="toggleLeadsOverride()">
+            Manual override
+          </label>
           <div class="goal-derived" id="derived_leads"></div>
         </div>
         <div class="goal-item">
@@ -1243,6 +1249,10 @@ function renderSummaryCards(days) {
   const nrRate = leadVolTotal ? (totalNR / leadVolTotal * 100) : 0;
   const meetingRate = leadVolTotal ? (totalMeetings / leadVolTotal * 100) : 0;
 
+  // Lead Volume / month auto-syncs to whatever the Lead Volume card is
+  // currently showing (any filter/SDR/range combo), unless the user has
+  // checked "Manual override" to type their own number instead.
+  syncLeadVolumeGoal(leadVolTotal);
   const d = derivedGoals();
 
   // Per-SDR raw totals for the *selected* SDRs only (used for split rows when
@@ -1595,8 +1605,29 @@ function loadGoals() {
     if (saved.meeting_rate) document.getElementById('goal_meeting_rate').value = saved.meeting_rate;
     if (saved.pct_qual) document.getElementById('goal_pct_qual').value = saved.pct_qual;
     if (saved.nr_rate) document.getElementById('goal_nr_rate').value = saved.nr_rate;
+    const override = localStorage.getItem('sdr_goal_leads_override') === 'true';
+    document.getElementById('goal_leads_override').checked = override;
+    document.getElementById('goal_leads').readOnly = !override;
   } catch(e) {}
   renderDerivedGoalPreviews();
+}
+// Lead Volume / month auto-fills from the Lead Volume card unless the user
+// has checked "Manual override" (in which case it's a plain saved input,
+// same as the other goal fields).
+function isLeadsGoalOverridden() {
+  const el = document.getElementById('goal_leads_override');
+  return el ? el.checked : false;
+}
+function syncLeadVolumeGoal(leadVolTotal) {
+  if (isLeadsGoalOverridden()) return;
+  const input = document.getElementById('goal_leads');
+  if (input && input.value !== String(leadVolTotal)) input.value = leadVolTotal;
+}
+function toggleLeadsOverride() {
+  const override = isLeadsGoalOverridden();
+  document.getElementById('goal_leads').readOnly = !override;
+  try { localStorage.setItem('sdr_goal_leads_override', String(override)); } catch(e) {}
+  if (override) { saveGoals(); } else { renderDashboard(); }
 }
 
 // ─── COMMISSION CALCULATOR ─────────────────────────────────────────────────────
