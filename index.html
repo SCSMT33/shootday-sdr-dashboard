@@ -576,9 +576,12 @@ const SDRS = [
   { key: 'Levi',   name: 'Levi Ceballos',     label: 'Levi',   color: '#4a7fd4' }
 ];
 const SDR_BY_KEY = Object.fromEntries(SDRS.map(s => [s.key, s]));
+function normalizeSDRName(name) {
+  return (name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
 function sdrKeyByName(name) {
-  const n = (name || '').trim().toLowerCase();
-  const m = SDRS.find(s => s.name.trim().toLowerCase() === n);
+  const n = normalizeSDRName(name);
+  const m = SDRS.find(s => normalizeSDRName(s.name) === n);
   return m ? m.key : null;
 }
 
@@ -836,10 +839,25 @@ function isQualifiedStatus(status) {
   if (s.includes('disqualified')) return false;
   return true;
 }
+const MEETING_BOOKED_STATUSES = ['Meeting Scheduled', 'Meeting Done', 'Meeting Rejected', 'Meeting Not Atended'];
+function isMeetingBooked(r) {
+  return MEETING_BOOKED_STATUSES.includes(r['Meeting Status']);
+}
+// A lead counts as qualified if its Sales status qualifies on its own, OR it
+// already has a meeting booked (a booked meeting always implies the lead was
+// qualified, even if Sales status hasn't caught up — though not every
+// qualified lead has a meeting booked), OR — for legacy rows from before the
+// team stopped using SQL status — SQL status was explicitly marked Qualified.
+function isQualifiedLead(r) {
+  if (isQualifiedStatus(r['Sales status'])) return true;
+  if (isMeetingBooked(r)) return true;
+  if ((r['SQL status'] || '').trim().toLowerCase() === 'qualified') return true;
+  return false;
+}
 function computeMetrics(leads) {
   if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, active_pipeline: 0 };
-  const meetings = leads.filter(r => ['Meeting Scheduled','Meeting Done','Meeting Rejected','Meeting Not Atended'].includes(r['Meeting Status'])).length;
-  const qualified = leads.filter(r => isQualifiedStatus(r['Sales status'])).length;
+  const meetings = leads.filter(isMeetingBooked).length;
+  const qualified = leads.filter(isQualifiedLead).length;
   const non_responsive = leads.filter(r => r['Disqualified reason'] === 'Not responsive' || r['Sales status'] === 'Non respondant').length;
   const ae_dq = leads.filter(r => (r['Sales status'] || '').includes('Disqualified AE')).length;
   const active_pipeline = leads.filter(r => !['Closed','Disqualified','Lost','Deposit refund',''].includes(r['Sales status'])).length;
