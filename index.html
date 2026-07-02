@@ -12,8 +12,6 @@
     --surface2: #f1f2f6;
     --border: #e3e5ec;
     --accent: #4285f4;
-    --mj: #1a9e94;
-    --gospel: #e07b1a;
     --team: #4285f4;
     --goal: rgba(0,0,0,0.35);
     --text: #20232b;
@@ -182,20 +180,17 @@
   .card-label { color: var(--muted); font-size: 12px; font-weight: 500; letter-spacing: 0.01em; margin-bottom: 10px; padding-right: 20px; }
   .card-value { font-size: 30px; font-weight: 700; line-height: 1; margin-bottom: 6px; color: var(--text); }
   .card-sub { font-size: 12px; color: var(--muted); }
-  .card-sub .mj { color: var(--mj); }
-  .card-sub .gospel { color: var(--gospel); }
 
   .card-split {
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     margin-top: 12px;
     padding-top: 12px;
     border-top: 1px solid var(--border);
   }
-  .split-col { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+  .split-col { flex: 1; min-width: 60px; display: flex; flex-direction: column; gap: 2px; }
   .split-name { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
-  .split-name.mj { color: var(--mj); }
-  .split-name.gospel { color: var(--gospel); }
   .split-total { font-size: 17px; font-weight: 700; color: var(--text); }
   .split-avg { font-size: 11px; color: var(--muted); }
   .split-proj { font-size: 11px; color: var(--accent); font-weight: 600; margin-top: 1px; }
@@ -390,11 +385,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="controls">
-    <div class="view-tabs">
-      <button class="view-tab active" data-view="Team" onclick="setView('Team')">Team</button>
-      <button class="view-tab" data-view="MJ" onclick="setView('MJ')">MJ</button>
-      <button class="view-tab" data-view="Gospel" onclick="setView('Gospel')">Gospel</button>
-    </div>
+    <div class="view-tabs" id="viewTabs"></div>
     <div class="date-range">
       <span>Leads:</span>
       <select id="leadTypeSelect" onchange="saveLeadTypeFilter(); renderDashboard()">
@@ -522,10 +513,58 @@
 </div>
 
 <script>
+// ─── SDR ROSTER ────────────────────────────────────────────────────────────────
+// Single source of truth for every SDR shown in the dashboard. To add/remove an
+// SDR, edit only this array — CSV parsing, cards, and charts all derive from it.
+const SDRS = [
+  { key: 'MJ',     name: 'MJ Montero',       label: 'MJ',     color: '#1a9e94' },
+  { key: 'Gospel', name: 'Gospel Lim',        label: 'Gospel', color: '#e07b1a' },
+  { key: 'Mark',   name: 'Mark Paolo Santos', label: 'Mark',   color: '#c94f7c' },
+  { key: 'Levi',   name: 'Levi Ceballos',     label: 'Levi',   color: '#4a7fd4' }
+];
+const SDR_BY_KEY = Object.fromEntries(SDRS.map(s => [s.key, s]));
+function sdrKeyByName(name) {
+  const n = (name || '').trim().toLowerCase();
+  const m = SDRS.find(s => s.name.trim().toLowerCase() === n);
+  return m ? m.key : null;
+}
+
+// ─── DUBAI-TIME DAY BUCKETING ───────────────────────────────────────────────────
+// CSV "Creation Date" timestamps are exported in Romania local time, but the team
+// operates on Dubai time (UTC+4, no DST). Leads are bucketed into days by their
+// Dubai-local date, not the raw Romania timestamp.
+function isRomaniaDST(utcDate) {
+  const y = utcDate.getUTCFullYear();
+  const lastSunday = (month) => {
+    const d = new Date(Date.UTC(y, month + 1, 0)); // last day of month
+    d.setUTCDate(d.getUTCDate() - d.getUTCDay());
+    return d;
+  };
+  const dstStart = lastSunday(2); dstStart.setUTCHours(1, 0, 0, 0);  // last Sun of March
+  const dstEnd = lastSunday(9); dstEnd.setUTCHours(1, 0, 0, 0);      // last Sun of October
+  return utcDate >= dstStart && utcDate < dstEnd;
+}
+function toDubaiDayKey(raw) {
+  if (!raw) return '';
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (!m) return raw.substring(0, 10);
+  const y = +m[1], mo = +m[2], d = +m[3], h = +m[4], mi = +m[5];
+  const asUTC = new Date(Date.UTC(y, mo - 1, d, h, mi));
+  const romaniaOffset = isRomaniaDST(asUTC) ? 3 : 2;
+  const dubai = new Date(asUTC.getTime() - romaniaOffset * 3600000 + 4 * 3600000);
+  return `${dubai.getUTCFullYear()}-${String(dubai.getUTCMonth() + 1).padStart(2, '0')}-${String(dubai.getUTCDate()).padStart(2, '0')}`;
+}
+// "Now" expressed as Dubai wall-clock time, for "today"/"this month" boundaries —
+// keeps them consistent with the Dubai-bucketed day keys above.
+function nowInDubai() {
+  const now = new Date();
+  return new Date(now.getTime() + now.getTimezoneOffset() * 60000 + 4 * 3600000);
+}
+
 // ─── STATE ───────────────────────────────────────────────────────────────────
-let allData = null;   // { date: { MJ, Gospel, Team } } — derived from rawByDay via current lead-type filter
+let allData = null;   // { date: { <sdrKey>: metrics, Team: metrics } } — derived from rawByDay via current lead-type filter
 let allDataB2B = null;   // same shape, always business-leads-only — used by Commission View's Lead Volume card
-let rawByDay = null;   // { date: { MJ: [rows], Gospel: [rows] } } — unfiltered raw rows, persisted
+let rawByDay = null;   // { date: { <sdrKey>: [rows] } } — unfiltered raw rows, persisted
 let currentView = 'Team';
 let charts = {};
 let expandedCards = new Set();
@@ -595,16 +634,17 @@ function parseCSV(text, filename) {
   }
 
   // Filter to SDR-owned rows only
-  const sdrRows = rows.filter(r => r['SDR Owner'] === 'MJ Montero' || r['SDR Owner'] === 'Gospel Lim');
+  const sdrRows = rows.filter(r => sdrKeyByName(r['SDR Owner']));
 
-  // Group by day and SDR, keeping raw rows so the business-lead filter can be toggled live
+  // Group by Dubai-local day and SDR, keeping raw rows so the business-lead filter
+  // can be toggled live
   rawByDay = {};
   sdrRows.forEach(r => {
     const raw = r['Creation Date'] || '';
     if (!raw) return;
-    const day = raw.substring(0, 10);
-    if (!rawByDay[day]) rawByDay[day] = { MJ: [], Gospel: [] };
-    const key = r['SDR Owner'] === 'MJ Montero' ? 'MJ' : 'Gospel';
+    const day = toDubaiDayKey(raw);
+    if (!rawByDay[day]) rawByDay[day] = Object.fromEntries(SDRS.map(s => [s.key, []]));
+    const key = sdrKeyByName(r['SDR Owner']);
     rawByDay[day][key].push(r);
   });
 
@@ -648,20 +688,21 @@ function recomputeAllData() {
   allData = {};
   allDataB2B = {};
   Object.keys(rawByDay).sort().forEach(day => {
-    const mj = applyLeadTypeFilter(rawByDay[day].MJ);
-    const gospel = applyLeadTypeFilter(rawByDay[day].Gospel);
-    allData[day] = {
-      MJ: computeMetrics(mj),
-      Gospel: computeMetrics(gospel),
-      Team: computeMetrics([...mj, ...gospel])
-    };
-    const mjB2B = rawByDay[day].MJ.filter(isBusinessLead);
-    const gospelB2B = rawByDay[day].Gospel.filter(isBusinessLead);
-    allDataB2B[day] = {
-      MJ: computeMetrics(mjB2B),
-      Gospel: computeMetrics(gospelB2B),
-      Team: computeMetrics([...mjB2B, ...gospelB2B])
-    };
+    const filtered = {}, b2b = {};
+    const allFiltered = [], allB2B = [];
+    SDRS.forEach(s => {
+      const raw = rawByDay[day][s.key] || [];
+      filtered[s.key] = applyLeadTypeFilter(raw);
+      b2b[s.key] = raw.filter(isBusinessLead);
+      allFiltered.push(...filtered[s.key]);
+      allB2B.push(...b2b[s.key]);
+    });
+    allData[day] = { Team: computeMetrics(allFiltered) };
+    allDataB2B[day] = { Team: computeMetrics(allB2B) };
+    SDRS.forEach(s => {
+      allData[day][s.key] = computeMetrics(filtered[s.key]);
+      allDataB2B[day][s.key] = computeMetrics(b2b[s.key]);
+    });
   });
 }
 function saveLeadTypeFilter() {
@@ -730,6 +771,14 @@ function computeMetrics(leads) {
 }
 
 // ─── VIEW TOGGLE ──────────────────────────────────────────────────────────────
+function renderViewTabs() {
+  const el = document.getElementById('viewTabs');
+  if (!el) return;
+  const tabs = [{ key: 'Team', label: 'Team' }, ...SDRS.map(s => ({ key: s.key, label: s.label }))];
+  el.innerHTML = tabs.map(t =>
+    `<button class="view-tab${t.key === currentView ? ' active' : ''}" data-view="${t.key}" onclick="setView('${t.key}')">${t.label}</button>`
+  ).join('');
+}
 function setView(v) {
   currentView = v;
   document.querySelectorAll('.view-tab').forEach(t => t.classList.toggle('active', t.dataset.view === v));
@@ -743,8 +792,8 @@ function getFilteredDays() {
   const rangeVal = document.getElementById('rangeSelect').value;
   if (rangeVal === 'all') return days;
   if (rangeVal === 'thisMonth') {
-    const now = new Date();
-    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const now = nowInDubai();
+    const ym = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
     return days.filter(d => d.startsWith(ym));
   }
   const range = parseInt(rangeVal);
@@ -788,13 +837,13 @@ function calendarSpanDays(days) {
 }
 
 function elapsedDaysForAvg(days, rangeVal) {
-  if (rangeVal === 'thisMonth') return new Date().getDate();
+  if (rangeVal === 'thisMonth') return nowInDubai().getUTCDate();
   return calendarSpanDays(days) || 1;
 }
 
 function daysInCurrentMonth() {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const now = nowInDubai();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
 }
 
 // ─── RENDER DASHBOARD ─────────────────────────────────────────────────────────
@@ -821,15 +870,6 @@ function renderSummaryCards(days) {
   const totalAEDQ = sumMetric(days, v, 'ae_dq');
   const activePipeline = (lastDay && allData[lastDay] && allData[lastDay][v]) ? allData[lastDay][v].active_pipeline : 0;
 
-  // MJ / Gospel raw totals (used for split rows only in Team view)
-  const mjLeads = sumMetric(days, 'MJ', 'leads'), gospelLeads = sumMetric(days, 'Gospel', 'leads');
-  const mjMeetings = sumMetric(days, 'MJ', 'meetings'), gospelMeetings = sumMetric(days, 'Gospel', 'meetings');
-  const mjQualified = sumMetric(days, 'MJ', 'qualified'), gospelQualified = sumMetric(days, 'Gospel', 'qualified');
-  const mjNR = sumMetric(days, 'MJ', 'non_responsive'), gospelNR = sumMetric(days, 'Gospel', 'non_responsive');
-  const mjAEDQ = sumMetric(days, 'MJ', 'ae_dq'), gospelAEDQ = sumMetric(days, 'Gospel', 'ae_dq');
-  const mjPipeline = (lastDay && allData[lastDay] && allData[lastDay]['MJ']) ? allData[lastDay]['MJ'].active_pipeline : 0;
-  const gospelPipeline = (lastDay && allData[lastDay] && allData[lastDay]['Gospel']) ? allData[lastDay]['Gospel'].active_pipeline : 0;
-
   // Commission View: every rate/percentage card (Meeting Booked Rate, % Qualified,
   // NR Rate) keeps the combined B2B+B2C numerator but is judged against the
   // B2B-only lead volume as its denominator — same as the Lead Volume card uses.
@@ -837,39 +877,45 @@ function renderSummaryCards(days) {
   // is unaffected.
   const isCommission = leadTypeFilter() === 'commission';
   const leadVolTotal = isCommission ? sumMetricFrom(allDataB2B, days, v, 'leads') : totalLeads;
-  const leadVolMJ = isCommission ? sumMetricFrom(allDataB2B, days, 'MJ', 'leads') : mjLeads;
-  const leadVolGospel = isCommission ? sumMetricFrom(allDataB2B, days, 'Gospel', 'leads') : gospelLeads;
 
   const pctQual = leadVolTotal ? (totalQualified / leadVolTotal * 100) : 0;
   const nrRate = leadVolTotal ? (totalNR / leadVolTotal * 100) : 0;
   const meetingRate = leadVolTotal ? (totalMeetings / leadVolTotal * 100) : 0;
-  const mjPctQual = leadVolMJ ? (mjQualified / leadVolMJ * 100) : 0;
-  const gospelPctQual = leadVolGospel ? (gospelQualified / leadVolGospel * 100) : 0;
-  const mjNRRate = leadVolMJ ? (mjNR / leadVolMJ * 100) : 0;
-  const gospelNRRate = leadVolGospel ? (gospelNR / leadVolGospel * 100) : 0;
-  const mjMeetingRate = leadVolMJ ? (mjMeetings / leadVolMJ * 100) : 0;
-  const gospelMeetingRate = leadVolGospel ? (gospelMeetings / leadVolGospel * 100) : 0;
 
   const d = derivedGoals();
 
-  // Each SDR's individual count goal is the KPI% applied to *their own* projected
-  // lead volume (not an even split of the team goal) — leads aren't split 50/50.
-  const mjLeadsProjected = elapsed ? (leadVolMJ / elapsed * daysInMo) : 0;
-  const gospelLeadsProjected = elapsed ? (leadVolGospel / elapsed * daysInMo) : 0;
-  const mjMeetingsGoal = d.goalMeetingRate ? (d.goalMeetingRate / 100 * mjLeadsProjected) : null;
-  const gospelMeetingsGoal = d.goalMeetingRate ? (d.goalMeetingRate / 100 * gospelLeadsProjected) : null;
-  const mjQualifiedGoal = d.goalPctQual ? (d.goalPctQual / 100 * mjLeadsProjected) : null;
-  const gospelQualifiedGoal = d.goalPctQual ? (d.goalPctQual / 100 * gospelLeadsProjected) : null;
+  // Per-SDR raw totals (used for split rows only in Team view). Each SDR's
+  // individual count goal is the KPI% applied to *their own* projected lead
+  // volume (not an even split of the team goal) — leads aren't split evenly.
+  const perSDR = SDRS.map(s => {
+    const leads = sumMetric(days, s.key, 'leads');
+    const meetings = sumMetric(days, s.key, 'meetings');
+    const qualified = sumMetric(days, s.key, 'qualified');
+    const nr = sumMetric(days, s.key, 'non_responsive');
+    const aedq = sumMetric(days, s.key, 'ae_dq');
+    const pipeline = (lastDay && allData[lastDay] && allData[lastDay][s.key]) ? allData[lastDay][s.key].active_pipeline : 0;
+    const leadVol = isCommission ? sumMetricFrom(allDataB2B, days, s.key, 'leads') : leads;
+    const leadsProjected = elapsed ? (leadVol / elapsed * daysInMo) : 0;
+    return {
+      ...s, leads, meetings, qualified, nr, aedq, pipeline, leadVol, leadsProjected,
+      pctQual: leadVol ? (qualified / leadVol * 100) : 0,
+      nrRate: leadVol ? (nr / leadVol * 100) : 0,
+      meetingRate: leadVol ? (meetings / leadVol * 100) : 0,
+      meetingsGoal: d.goalMeetingRate ? (d.goalMeetingRate / 100 * leadsProjected) : null,
+      qualifiedGoal: d.goalPctQual ? (d.goalPctQual / 100 * leadsProjected) : null,
+      leadsGoal: d.goalLeads ? d.goalLeads * (leadVol / (leadVolTotal || 1)) : null
+    };
+  });
 
   document.getElementById('summaryCards').innerHTML = `
-    ${countCard('Lead Volume', leadVolTotal, leadVolMJ, leadVolGospel, elapsed, daysInMo, showProjection, isCommission ? 'B2B leads only' : undefined, d.goalLeads, d.goalLeads ? d.goalLeads * (leadVolMJ / (leadVolTotal || 1)) : null, d.goalLeads ? d.goalLeads * (leadVolGospel / (leadVolTotal || 1)) : null)}
-    ${countCard('Meetings Booked', totalMeetings, mjMeetings, gospelMeetings, elapsed, daysInMo, showProjection, undefined, d.goalMeetings, mjMeetingsGoal, gospelMeetingsGoal)}
-    ${rateCard('Meeting Booked Rate', meetingRate, mjMeetingRate, gospelMeetingRate, isCommission ? meanRateCommission(days, v, 'meetings') : meanMetric(days, v, 'meeting_rate'), isCommission ? 'meetings (B2B+B2C) ÷ B2B leads' : 'meetings ÷ total leads', d.goalMeetingRate, false)}
-    ${countCard('Leads Qualified', totalQualified, mjQualified, gospelQualified, elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified, mjQualifiedGoal, gospelQualifiedGoal)}
-    ${rateCard('% Leads Qualified', pctQual, mjPctQual, gospelPctQual, isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'share reaching Warm/Hot+', d.goalPctQual, false)}
-    ${rateCard('Non-Responsive Rate', nrRate, mjNRRate, gospelNRRate, isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true)}
-    ${countCard('Disqualified by AE', totalAEDQ, mjAEDQ, gospelAEDQ, elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual')}
-    ${pipelineCard('Active Pipeline', activePipeline, mjPipeline, gospelPipeline, meanMetric(days, v, 'active_pipeline'), lastDay)}
+    ${countCard('Lead Volume', leadVolTotal, perSDR.map(s => ({ ...s, value: s.leadVol, goal: s.leadsGoal })), elapsed, daysInMo, showProjection, isCommission ? 'B2B leads only' : undefined, d.goalLeads)}
+    ${countCard('Meetings Booked', totalMeetings, perSDR.map(s => ({ ...s, value: s.meetings, goal: s.meetingsGoal })), elapsed, daysInMo, showProjection, undefined, d.goalMeetings)}
+    ${rateCard('Meeting Booked Rate', meetingRate, perSDR.map(s => ({ ...s, value: s.meetingRate })), isCommission ? meanRateCommission(days, v, 'meetings') : meanMetric(days, v, 'meeting_rate'), isCommission ? 'meetings (B2B+B2C) ÷ B2B leads' : 'meetings ÷ total leads', d.goalMeetingRate, false)}
+    ${countCard('Leads Qualified', totalQualified, perSDR.map(s => ({ ...s, value: s.qualified, goal: s.qualifiedGoal })), elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified)}
+    ${rateCard('% Leads Qualified', pctQual, perSDR.map(s => ({ ...s, value: s.pctQual })), isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'share reaching Warm/Hot+', d.goalPctQual, false)}
+    ${rateCard('Non-Responsive Rate', nrRate, perSDR.map(s => ({ ...s, value: s.nrRate })), isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true)}
+    ${countCard('Disqualified by AE', totalAEDQ, perSDR.map(s => ({ ...s, value: s.aedq })), elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual')}
+    ${pipelineCard('Active Pipeline', activePipeline, perSDR.map(s => ({ ...s, value: s.pipeline })), meanMetric(days, v, 'active_pipeline'), lastDay)}
     ${pendingCard('Speed-to-Lead', 'Pending (needs Aircall sync)')}
     ${pendingCard('Cadence Adherence', 'Pending (manual score)')}
   `;
@@ -899,7 +945,8 @@ function goalStatusRow(actual, goalVal, isPct, lowerIsBetter, rowLabel) {
   </div>`;
 }
 
-function splitRow(mjValue, gospelValue, mjAvg, gospelAvg, isPct, mjProjected, gospelProjected, mjGoal, gospelGoal, lowerIsBetter) {
+// sdrList: array of { key, label, color, value, avg?, projected?, goalVal? }
+function splitRow(sdrList, isPct, lowerIsBetter) {
   if (currentView !== 'Team') return '';
   const fmt = v => isPct ? v.toFixed(1) + '%' : Math.round(v);
   const goalNote = (val, goalVal) => {
@@ -909,63 +956,58 @@ function splitRow(mjValue, gospelValue, mjAvg, gospelAvg, isPct, mjProjected, go
     return `<span class="split-goal ${onTrack ? 'on-track' : 'off-track'}">${isPct ? 'target ' + fmtGoal + '%' : 'goal ' + fmtGoal} ${onTrack ? '✓' : '✗'}</span>`;
   };
   return `<div class="card-split">
-    <div class="split-col">
-      <span class="split-name mj">MJ</span>
-      <span class="split-total">${fmt(mjValue)}</span>
-      ${mjAvg !== undefined ? `<span class="split-avg">${isPct ? '' : mjAvg.toFixed(1) + '/day'}</span>` : ''}
-      ${mjProjected != null ? `<span class="split-proj">→ ${mjProjected} proj.</span>` : ''}
-      ${goalNote(isPct ? mjValue : mjProjected, mjGoal)}
-    </div>
-    <div class="split-col">
-      <span class="split-name gospel">Gospel</span>
-      <span class="split-total">${fmt(gospelValue)}</span>
-      ${gospelAvg !== undefined ? `<span class="split-avg">${isPct ? '' : gospelAvg.toFixed(1) + '/day'}</span>` : ''}
-      ${gospelProjected != null ? `<span class="split-proj">→ ${gospelProjected} proj.</span>` : ''}
-      ${goalNote(isPct ? gospelValue : gospelProjected, gospelGoal)}
-    </div>
+    ${sdrList.map(s => `<div class="split-col">
+      <span class="split-name" style="color:${s.color}">${s.label}</span>
+      <span class="split-total">${fmt(s.value)}</span>
+      ${s.avg !== undefined ? `<span class="split-avg">${isPct ? '' : s.avg.toFixed(1) + '/day'}</span>` : ''}
+      ${s.projected != null ? `<span class="split-proj">→ ${s.projected} proj.</span>` : ''}
+      ${goalNote(isPct ? s.value : s.projected, s.goalVal)}
+    </div>`).join('')}
   </div>`;
 }
 
-function countCard(label, total, mjTotal, gospelTotal, elapsed, daysInMo, showProjection, extraSub, goalMonthly, mjGoal, gospelGoal) {
+function countCard(label, total, sdrList, elapsed, daysInMo, showProjection, extraSub, goalMonthly) {
   const avg = elapsed ? (total / elapsed) : 0;
-  const mjAvg = elapsed ? (mjTotal / elapsed) : 0;
-  const gospelAvg = elapsed ? (gospelTotal / elapsed) : 0;
+  const enriched = sdrList.map(s => {
+    const sAvg = elapsed ? (s.value / elapsed) : 0;
+    const projected = showProjection ? Math.round(sAvg * daysInMo) : null;
+    return { ...s, avg: sAvg, projected, goalVal: showProjection ? s.goal : null };
+  });
   const projected = showProjection ? Math.round(avg * daysInMo) : null;
-  const mjProjected = showProjection ? Math.round(mjAvg * daysInMo) : null;
-  const gospelProjected = showProjection ? Math.round(gospelAvg * daysInMo) : null;
   const goalRow = (showProjection && goalMonthly) ? goalStatusRow(projected, goalMonthly, false, false, 'Monthly Goal (team)') : '';
   return `<div class="card" data-label="${label}">
     ${expandBtn(label)}
     <div class="card-label">${label}</div>
     <div class="card-value">${total}</div>
     <div class="card-sub">${extraSub || ''}</div>
-    ${splitRow(mjTotal, gospelTotal, mjAvg, gospelAvg, false, mjProjected, gospelProjected, showProjection ? mjGoal : null, showProjection ? gospelGoal : null, false)}
+    ${splitRow(enriched, false, false)}
     <div class="card-avg-row"><span>Avg / day</span><span>${avg.toFixed(1)}</span></div>
     ${projected !== null ? `<div class="card-projected"><span>Projected (month, team)</span><span>${projected}</span></div>` : ''}
     ${goalRow}
   </div>`;
 }
 
-function rateCard(label, pct, mjPct, gospelPct, avgDaily, extraSub, goalVal, lowerIsBetter) {
+function rateCard(label, pct, sdrList, avgDaily, extraSub, goalVal, lowerIsBetter) {
   const goalRow = goalStatusRow(pct, goalVal, true, lowerIsBetter, 'Target (team)');
+  const enriched = sdrList.map(s => ({ ...s, goalVal }));
   return `<div class="card" data-label="${label}">
     ${expandBtn(label)}
     <div class="card-label">${label}</div>
     <div class="card-value">${pct.toFixed(1)}%</div>
     <div class="card-sub">${extraSub || ''}</div>
-    ${splitRow(mjPct, gospelPct, undefined, undefined, true, undefined, undefined, goalVal, goalVal, lowerIsBetter)}
+    ${splitRow(enriched, true, lowerIsBetter)}
     <div class="card-avg-row"><span>Avg / day</span><span>${avgDaily.toFixed(1)}%</span></div>
     ${goalRow}
   </div>`;
 }
 
-function pipelineCard(label, current, mjCurrent, gospelCurrent, avgDaily, lastDay) {
+function pipelineCard(label, current, sdrList, avgDaily, lastDay) {
   return `<div class="card" data-label="${label}">
     ${expandBtn(label)}
     <div class="card-label">${label}</div>
     <div class="card-value">${current}</div>
     <div class="card-sub">${lastDay ? `as of ${lastDay}` : 'needs follow-up'}</div>
-    ${splitRow(mjCurrent, gospelCurrent, undefined, undefined, false)}
+    ${splitRow(sdrList, false, false)}
     <div class="card-avg-row"><span>Avg / day (period)</span><span>${avgDaily.toFixed(1)}</span></div>
   </div>`;
 }
@@ -979,7 +1021,7 @@ function pendingCard(label, sub) {
 }
 
 // ─── CHARTS ───────────────────────────────────────────────────────────────────
-const COLORS = { MJ: '#1a9e94', Gospel: '#e07b1a', Team: '#6c63ff', Goal: 'rgba(0,0,0,0.35)', Pace: '#9c6dff' };
+const COLORS = { Team: '#6c63ff', Goal: 'rgba(0,0,0,0.35)', Pace: '#9c6dff' };
 
 function isCumulative(id) {
   const el = document.getElementById('cumulativeToggle-' + id);
@@ -988,8 +1030,8 @@ function isCumulative(id) {
 
 function buildDatasets(days, metric, isRate, cumulative) {
   const views = currentView === 'Team'
-    ? [{ key: 'MJ', label: 'MJ', color: COLORS.MJ }, { key: 'Gospel', label: 'Gospel', color: COLORS.Gospel }]
-    : [{ key: currentView, label: currentView, color: currentView === 'MJ' ? COLORS.MJ : COLORS.Gospel }];
+    ? SDRS.map(s => ({ key: s.key, label: s.label, color: s.color }))
+    : [{ key: currentView, label: SDR_BY_KEY[currentView].label, color: SDR_BY_KEY[currentView].color }];
 
   return views.map(v => {
     // A day missing from allData entirely (future day not yet reached) renders as a
@@ -1036,8 +1078,8 @@ function goalLine(days, value, isRate, cumulative) {
 // Flat dashed line at the team's actual daily run rate so far this period — lets the
 // goal Target line and the current Pace be compared at a glance on the same chart.
 function paceLine(days, metric) {
-  const today = new Date();
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const today = nowInDubai();
+  const todayKey = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
   const elapsedDays = days.filter(d => d <= todayKey && allData[d]);
   if (!elapsedDays.length) return null;
   const total = sumMetricFrom(allData, elapsedDays, 'Team', metric);
@@ -1100,8 +1142,8 @@ function makeChart(id, days, metric, goalKey, isRate, cumulativeAllowed, goalOve
   const legendEl = document.getElementById('legend-' + id);
   if (legendEl) {
     const items = currentView === 'Team'
-      ? [{ label: 'MJ', color: COLORS.MJ }, { label: 'Gospel', color: COLORS.Gospel }]
-      : [{ label: currentView, color: currentView === 'MJ' ? COLORS.MJ : COLORS.Gospel }];
+      ? SDRS.map(s => ({ label: s.label, color: s.color }))
+      : [{ label: SDR_BY_KEY[currentView].label, color: SDR_BY_KEY[currentView].color }];
     if (gl) items.push({ label: 'Target', color: COLORS.Goal });
     if (showPace && !isRate) items.push({ label: 'Pace', color: COLORS.Pace });
     legendEl.innerHTML = items.map(it =>
@@ -1113,8 +1155,8 @@ function makeChart(id, days, metric, goalKey, isRate, cumulativeAllowed, goalOve
 // All days of the current calendar month (including days not yet reached), so the
 // featured charts span the full month even before it's over.
 function monthDayKeys() {
-  const now = new Date();
-  const y = now.getFullYear(), m = now.getMonth();
+  const now = nowInDubai();
+  const y = now.getUTCFullYear(), m = now.getUTCMonth();
   const dim = daysInCurrentMonth();
   return Array.from({ length: dim }, (_, i) => `${y}-${String(m + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`);
 }
@@ -1180,6 +1222,7 @@ function loadGoals() {
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
+renderViewTabs();
 loadGoals();
 if (restoreLoadedData()) {
   renderDashboard();
