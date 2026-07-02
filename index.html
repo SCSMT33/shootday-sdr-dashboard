@@ -344,9 +344,22 @@
     padding: 20px;
     margin-top: 16px;
   }
+  .commission-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
   .commission-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
-  .commission-sub { font-size: 11px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+  .commission-sub { font-size: 11px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; max-width: 640px; }
   .commission-period { font-size: 12px; color: var(--accent); font-weight: 600; margin-bottom: 16px; }
+  .commission-report-btn {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .commission-report-btn:hover { border-color: var(--accent); color: var(--accent); }
   .commission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
   .commission-card { border: 1px solid var(--border); border-radius: 10px; padding: 16px; background: var(--surface2); }
   .commission-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
@@ -363,7 +376,10 @@
   .commission-bracket-table tr.active td { background: rgba(66, 133, 244, 0.12); font-weight: 700; color: var(--accent); }
   .commission-incentive-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; }
   .commission-incentive-row.total { font-weight: 700; font-size: 13px; border-top: 1px solid var(--border); margin-top: 6px; padding-top: 8px; }
-  .commission-base-row { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
+  .commission-incentive-row.ignored { color: var(--muted); text-decoration: line-through; }
+  .commission-base-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
+  .commission-override-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  .commission-override-label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
   .commission-base-input {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -422,6 +438,25 @@
     header { padding: 12px 16px; }
     main, .controls { padding-left: 16px; padding-right: 16px; }
     .header-right { width: 100%; justify-content: space-between; }
+  }
+
+  /* QUALIFIED LEADS REPORT (screen: hidden; print: the only thing shown) */
+  #reportPrintArea { display: none; }
+  .report-title { font-size: 20px; font-weight: 700; margin-bottom: 2px; }
+  .report-meta { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
+  .report-sdr-heading { font-size: 15px; font-weight: 700; margin: 22px 0 4px; border-bottom: 2px solid var(--text); padding-bottom: 4px; }
+  .report-section-heading { font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
+  .report-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 11px; }
+  .report-table th { text-align: left; padding: 5px 6px; border-bottom: 1px solid #999; background: #f1f2f6; }
+  .report-table td { padding: 5px 6px; border-bottom: 1px solid #ddd; }
+  .report-empty-note { font-size: 11px; color: var(--muted); font-style: italic; margin-bottom: 10px; }
+
+  @media print {
+    body > *:not(#reportPrintArea) { display: none !important; }
+    #reportPrintArea { display: block !important; }
+    .report-table { page-break-inside: auto; }
+    .report-table tr { page-break-inside: avoid; }
+    .report-sdr-heading { page-break-before: auto; page-break-after: avoid; }
   }
 </style>
 </head>
@@ -630,13 +665,21 @@
 
     <!-- COMMISSION CALCULATOR -->
     <div class="commission-section">
-      <div class="commission-title">Commission Calculator</div>
-      <div class="commission-sub">Recalculates for whichever SDR(s) and date range you've selected above (e.g. pick "Last month" and select just one person). Qualified Leads and Meetings are counted from all leads (B2B + B2C); both are always judged as a percentage of that person's B2B leads only, matching Commission View. New Sales Incentive and Lead Factor are not included here.</div>
+      <div class="commission-title-row">
+        <div>
+          <div class="commission-title">Commission Calculator</div>
+          <div class="commission-sub">Recalculates for whichever SDR(s) and date range you've selected above (e.g. pick "Last month" and select just one person). Qualified Leads and Meetings are counted from all leads (B2B + B2C); both are always judged as a percentage of that person's B2B leads only, matching Commission View. New Sales Incentive and Lead Factor are not included here.</div>
+        </div>
+        <button class="commission-report-btn" onclick="exportQualifiedReport()">Export Report (PDF)</button>
+      </div>
       <div class="commission-period" id="commissionPeriod"></div>
       <div class="commission-grid" id="commissionCards"></div>
     </div>
   </main>
 </div>
+
+<!-- Populated only when generating a report; hidden on screen, shown only when printing (see @media print) -->
+<div id="reportPrintArea"></div>
 
 <script>
 // ─── SDR ROSTER ────────────────────────────────────────────────────────────────
@@ -1596,25 +1639,30 @@ function commissionMetricsForSDR(days, sdrKey) {
 function loadCommissionBases() {
   try { return JSON.parse(localStorage.getItem('sdr_commission_bases') || '{}'); } catch(e) { return {}; }
 }
-function saveCommissionBase(key, value) {
+function saveCommissionInputs(key, base, bonus, override) {
   try {
     const bases = loadCommissionBases();
-    bases[key] = value;
+    bases[key] = { base, bonus, override };
     localStorage.setItem('sdr_commission_bases', JSON.stringify(bases));
   } catch(e) {}
 }
 function calculateCommission(key) {
   const baseInput = document.getElementById('commissionBase-' + key);
+  const bonusInput = document.getElementById('commissionBonus-' + key);
+  const overrideInput = document.getElementById('commissionOverride-' + key);
   const base = parseFloat(baseInput.value) || 0;
-  saveCommissionBase(key, baseInput.value);
+  const bonus = parseFloat(bonusInput.value) || 0;
+  const override = overrideInput.checked;
+  saveCommissionInputs(key, baseInput.value, bonusInput.value, override);
   const qIncentive = parseFloat(document.getElementById('commissionQIncentive-' + key).dataset.amount) || 0;
   const mIncentive = parseFloat(document.getElementById('commissionMIncentive-' + key).dataset.amount) || 0;
-  const total = base + qIncentive + mIncentive;
+  const total = override ? (base + bonus) : (base + bonus + qIncentive + mIncentive);
   const box = document.getElementById('commissionTotalBox-' + key);
   box.innerHTML = `
     <div class="commission-incentive-row"><span>Base</span><span>$${base.toLocaleString()}</span></div>
-    <div class="commission-incentive-row"><span>Qualified Leads Incentive</span><span>$${qIncentive.toLocaleString()}</span></div>
-    <div class="commission-incentive-row"><span>Meeting Incentive</span><span>$${mIncentive.toLocaleString()}</span></div>
+    <div class="commission-incentive-row"><span>Bonus</span><span>$${bonus.toLocaleString()}</span></div>
+    <div class="commission-incentive-row${override ? ' ignored' : ''}"><span>Qualified Leads Incentive${override ? ' (overridden)' : ''}</span><span>${override ? '—' : '$' + qIncentive.toLocaleString()}</span></div>
+    <div class="commission-incentive-row${override ? ' ignored' : ''}"><span>Meeting Incentive${override ? ' (overridden)' : ''}</span><span>${override ? '—' : '$' + mIncentive.toLocaleString()}</span></div>
     <div class="commission-incentive-row grand-total"><span>Total Compensation</span><span>$${total.toLocaleString()}</span></div>
   `;
 }
@@ -1625,7 +1673,9 @@ function commissionCard(sdr, days) {
   const qAmount = QUALIFIED_BRACKETS[qIdx].amount;
   const mAmount = MEETING_BRACKETS[mIdx].amount;
   const bases = loadCommissionBases();
-  const savedBase = bases[sdr.key] || '';
+  const savedRaw = bases[sdr.key];
+  // Back-compat: earlier versions stored a bare base string, not an object.
+  const saved = (savedRaw && typeof savedRaw === 'object') ? savedRaw : { base: savedRaw || '', bonus: '', override: false };
   return `<div class="commission-card">
     <div class="commission-card-header">
       <span class="split-name" style="color:${sdr.color}; font-size:13px;">${sdr.label}</span>
@@ -1659,13 +1709,21 @@ function commissionCard(sdr, days) {
     <div class="commission-incentive-row"><span>Bracket bonus</span><span id="commissionMIncentive-${sdr.key}" data-amount="${mAmount}">$${mAmount.toLocaleString()}</span></div>
     <div class="commission-base-row">
       <span class="commission-stat-label">Base $</span>
-      <input class="commission-base-input" type="number" id="commissionBase-${sdr.key}" value="${savedBase}" placeholder="e.g. 2000">
+      <input class="commission-base-input" type="number" id="commissionBase-${sdr.key}" value="${saved.base}" placeholder="e.g. 2000">
+      <span class="commission-stat-label">Bonus $</span>
+      <input class="commission-base-input" type="number" id="commissionBonus-${sdr.key}" value="${saved.bonus}" placeholder="e.g. 100">
+    </div>
+    <div class="commission-override-row">
+      <label class="commission-override-label">
+        <input type="checkbox" id="commissionOverride-${sdr.key}" ${saved.override ? 'checked' : ''}>
+        Override commission (Total = Base + Bonus only)
+      </label>
       <button class="commission-calc-btn" onclick="calculateCommission('${sdr.key}')">Calculate</button>
     </div>
     <div class="commission-total-box" id="commissionTotalBox-${sdr.key}">
       <div class="commission-incentive-row"><span>Qualified Leads Incentive</span><span>$${qAmount.toLocaleString()}</span></div>
       <div class="commission-incentive-row"><span>Meeting Incentive</span><span>$${mAmount.toLocaleString()}</span></div>
-      <div class="commission-incentive-row grand-total"><span>Total Compensation</span><span>enter Base and click Calculate</span></div>
+      <div class="commission-incentive-row grand-total"><span>Total Compensation</span><span>enter Base/Bonus and click Calculate</span></div>
     </div>
   </div>`;
 }
@@ -1688,6 +1746,67 @@ function renderCommissionCalculator(days) {
     return;
   }
   cardsEl.innerHTML = selected.map(s => commissionCard(s, days)).join('');
+}
+
+// ─── QUALIFIED LEADS REPORT (print / export as PDF) ────────────────────────────
+function escapeHtml(s) {
+  return (s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function reportRow(r) {
+  const leadType = isBusinessLead(r) ? 'B2B' : 'B2C';
+  return `<tr>
+    <td>${escapeHtml(r['Name'])}</td>
+    <td>${escapeHtml((r['Creation Date'] || '').slice(0, 10))}</td>
+    <td>${leadType}</td>
+    <td>${escapeHtml(r['Sales status'])}</td>
+    <td>${escapeHtml(r['SQL status'])}</td>
+    <td>${escapeHtml(r['Meeting Status'])}</td>
+    <td>${escapeHtml(r['Request Type'])}</td>
+  </tr>`;
+}
+function reportTable(rows) {
+  if (!rows.length) return `<div class="report-empty-note">None in this period.</div>`;
+  return `<table class="report-table">
+    <thead><tr><th>Name</th><th>Created</th><th>Lead Type</th><th>Sales Status</th><th>SQL Status</th><th>Meeting Status</th><th>Request Type</th></tr></thead>
+    <tbody>${rows.map(reportRow).join('')}</tbody>
+  </table>`;
+}
+// Builds a printable review report: for each currently selected SDR, every
+// qualified lead from the selected date range, split into "qualified with a
+// meeting booked" and "qualified but never booked" — for SDRs/leadership to
+// manually spot-check what counted toward the numbers.
+function exportQualifiedReport() {
+  const days = getFilteredDays();
+  const printArea = document.getElementById('reportPrintArea');
+  const selected = SDRS.filter(s => selectedSDRs.has(s.key));
+  if (!printArea || !rawByDay || !selected.length || !days.length) {
+    alert('No data to export for the current SDR/range selection.');
+    return;
+  }
+  const periodLabel = commissionPeriodLabel(days);
+  const sections = selected.map(sdr => {
+    const rows = [];
+    days.forEach(d => {
+      const dayRows = rawByDay[d] && rawByDay[d][sdr.key];
+      if (dayRows) rows.push(...dayRows);
+    });
+    const qualified = rows.filter(isQualifiedLead);
+    const qualifiedBooked = qualified.filter(isMeetingBooked);
+    const qualifiedNotBooked = qualified.filter(r => !isMeetingBooked(r));
+    return `
+      <div class="report-sdr-heading">${escapeHtml(sdr.name)}</div>
+      <div class="report-section-heading">Qualified &amp; Meeting Booked (${qualifiedBooked.length})</div>
+      ${reportTable(qualifiedBooked)}
+      <div class="report-section-heading">Qualified but Not Booked (${qualifiedNotBooked.length})</div>
+      ${reportTable(qualifiedNotBooked)}
+    `;
+  }).join('');
+  printArea.innerHTML = `
+    <div class="report-title">Qualified Leads Review Report</div>
+    <div class="report-meta">${escapeHtml(periodLabel)} · generated for manual review of every lead counted toward Qualified/Meeting numbers</div>
+    ${sections}
+  `;
+  window.print();
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
