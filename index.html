@@ -265,6 +265,16 @@
   .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
   canvas { max-height: 220px; }
 
+  .chart-granularity {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .chart-granularity:hover { color: var(--text); border-color: var(--accent); }
   .chart-cumulative-toggle {
     display: flex;
     align-items: center;
@@ -544,23 +554,14 @@
     <div class="charts-grid">
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">Meetings Booked — Daily</span>
-          <div class="chart-header-right">
-            <div class="chart-legend" id="legend-chartMeetings"></div>
-            <label class="chart-cumulative-toggle">
-              <input type="checkbox" id="modeToggle-chartMeetings" onchange="renderCharts(getFilteredDays())">
-              <span class="toggle-track"></span>
-              <span class="toggle-text">Combined</span>
-            </label>
-          </div>
-        </div>
-        <canvas id="chartMeetings"></canvas>
-      </div>
-      <div class="chart-card full">
-        <div class="chart-header">
-          <span class="chart-title">Meeting Booked Rate % — Trend</span>
+          <span class="chart-title">Meeting Booked Rate %</span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetingRate"></div>
+            <select class="chart-granularity" id="granularity-chartMeetingRate" onchange="renderCharts(getFilteredDays())">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
             <label class="chart-cumulative-toggle">
               <input type="checkbox" id="modeToggle-chartMeetingRate" onchange="renderCharts(getFilteredDays())">
               <span class="toggle-track"></span>
@@ -572,9 +573,14 @@
       </div>
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">% Leads Qualified — Trend</span>
+          <span class="chart-title">% Leads Qualified</span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartQualPct"></div>
+            <select class="chart-granularity" id="granularity-chartQualPct" onchange="renderCharts(getFilteredDays())">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
             <label class="chart-cumulative-toggle">
               <input type="checkbox" id="modeToggle-chartQualPct" onchange="renderCharts(getFilteredDays())">
               <span class="toggle-track"></span>
@@ -584,11 +590,92 @@
         </div>
         <canvas id="chartQualPct"></canvas>
       </div>
+      <div class="chart-card full">
+        <div class="chart-header">
+          <span class="chart-title">Non-Responsive Rate %</span>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartNR"></div>
+            <select class="chart-granularity" id="granularity-chartNR" onchange="renderCharts(getFilteredDays())">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="modeToggle-chartNR" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Combined</span>
+            </label>
+          </div>
+        </div>
+        <canvas id="chartNR"></canvas>
+      </div>
+      <div class="chart-card full">
+        <div class="chart-header">
+          <span class="chart-title">AE Disqualified Rate % <span class="goal-info" title="Leads the AE bounced back as wrongly qualified (Disqualified AE status) ÷ that SDR's qualified leads — measures hand-off quality.">ⓘ</span></span>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartAEDQ"></div>
+            <select class="chart-granularity" id="granularity-chartAEDQ" onchange="renderCharts(getFilteredDays())">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="modeToggle-chartAEDQ" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Combined</span>
+            </label>
+          </div>
+        </div>
+        <canvas id="chartAEDQ"></canvas>
+      </div>
+      <div class="chart-card full">
+        <div class="chart-header">
+          <span class="chart-title">SDR Disqualified Rate % <span class="goal-info" title="Leads the SDR themselves disqualified (plain Disqualified status) ÷ lead volume — the SDR's own screening-out rate.">ⓘ</span></span>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartSDRDQ"></div>
+            <select class="chart-granularity" id="granularity-chartSDRDQ" onchange="renderCharts(getFilteredDays())">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="modeToggle-chartSDRDQ" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Combined</span>
+            </label>
+          </div>
+        </div>
+        <canvas id="chartSDRDQ"></canvas>
+      </div>
       <div class="chart-card">
         <div class="chart-header">
-          <span class="chart-title">Lead Volume — Daily</span>
+          <span class="chart-title">Meetings Booked</span>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartMeetings"></div>
+            <select class="chart-granularity" id="granularity-chartMeetings" onchange="renderCharts(getFilteredDays())">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="modeToggle-chartMeetings" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Combined</span>
+            </label>
+          </div>
+        </div>
+        <canvas id="chartMeetings"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">Lead Volume</span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartLeads"></div>
+            <select class="chart-granularity" id="granularity-chartLeads" onchange="renderCharts(getFilteredDays())">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
             <label class="chart-cumulative-toggle">
               <input type="checkbox" id="modeToggle-chartLeads" onchange="renderCharts(getFilteredDays())">
               <span class="toggle-track"></span>
@@ -602,34 +689,6 @@
           </div>
         </div>
         <canvas id="chartLeads"></canvas>
-      </div>
-      <div class="chart-card">
-        <div class="chart-header">
-          <span class="chart-title">Non-Responsive Rate % — Trend</span>
-          <div class="chart-header-right">
-            <div class="chart-legend" id="legend-chartNR"></div>
-            <label class="chart-cumulative-toggle">
-              <input type="checkbox" id="modeToggle-chartNR" onchange="renderCharts(getFilteredDays())">
-              <span class="toggle-track"></span>
-              <span class="toggle-text">Combined</span>
-            </label>
-          </div>
-        </div>
-        <canvas id="chartNR"></canvas>
-      </div>
-      <div class="chart-card">
-        <div class="chart-header">
-          <span class="chart-title">Active Pipeline — Daily</span>
-          <div class="chart-header-right">
-            <div class="chart-legend" id="legend-chartPipeline"></div>
-            <label class="chart-cumulative-toggle">
-              <input type="checkbox" id="modeToggle-chartPipeline" onchange="renderCharts(getFilteredDays())">
-              <span class="toggle-track"></span>
-              <span class="toggle-text">Combined</span>
-            </label>
-          </div>
-        </div>
-        <canvas id="chartPipeline"></canvas>
       </div>
     </div>
 
@@ -998,11 +1057,13 @@ function isQualifiedLead(r) {
   return false;
 }
 function computeMetrics(leads) {
-  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, active_pipeline: 0 };
+  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0 };
   const meetings = leads.filter(isMeetingBooked).length;
   const qualified = leads.filter(isQualifiedLead).length;
   const non_responsive = leads.filter(r => r['Disqualified reason'] === 'Not responsive' || r['Sales status'] === 'Non respondant').length;
   const ae_dq = leads.filter(r => (r['Sales status'] || '').includes('Disqualified AE')).length;
+  // Plain "Disqualified" (the SDR's own call) — distinct from the AE-disqualified status above
+  const sdr_dq = leads.filter(r => (r['Sales status'] || '').trim().toLowerCase() === 'disqualified').length;
   const active_pipeline = leads.filter(r => !['Closed','Disqualified','Lost','Deposit refund',''].includes(r['Sales status'])).length;
   return {
     leads: leads.length,
@@ -1013,6 +1074,7 @@ function computeMetrics(leads) {
     non_responsive,
     nr_rate: leads.length ? parseFloat((non_responsive / leads.length * 100).toFixed(1)) : 0,
     ae_dq,
+    sdr_dq,
     active_pipeline
   };
 }
@@ -1155,9 +1217,9 @@ function metricsForSelection(dataset, day, view) {
   if (!parts.length) return null;
   const sum = f => parts.reduce((a, p) => a + (p[f] || 0), 0);
   const leads = sum('leads'), meetings = sum('meetings'), qualified = sum('qualified'),
-        non_responsive = sum('non_responsive'), ae_dq = sum('ae_dq'), active_pipeline = sum('active_pipeline');
+        non_responsive = sum('non_responsive'), ae_dq = sum('ae_dq'), sdr_dq = sum('sdr_dq'), active_pipeline = sum('active_pipeline');
   return {
-    leads, meetings, qualified, non_responsive, ae_dq, active_pipeline,
+    leads, meetings, qualified, non_responsive, ae_dq, sdr_dq, active_pipeline,
     meeting_rate: leads ? meetings / leads * 100 : 0,
     pct_qualified: leads ? qualified / leads * 100 : 0,
     nr_rate: leads ? non_responsive / leads * 100 : 0
@@ -1405,97 +1467,113 @@ function isCombinedMode(id) {
   return el ? el.checked : false;
 }
 
-function buildDatasets(days, metric, isRate, cumulative, combined) {
+function chartGranularity(id) {
+  const el = document.getElementById('granularity-' + id);
+  return el ? el.value : 'daily';
+}
+
+// Groups day keys into daily / weekly (Sat–Fri, Dubai) / monthly buckets, in order.
+function bucketize(days, granularity) {
+  if (granularity === 'weekly' || granularity === 'monthly') {
+    const map = new Map();
+    days.forEach(d => {
+      const key = granularity === 'weekly' ? dubaiWeekStart(d) : d.slice(0, 7);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(d);
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      .map(([k, ds]) => ({ label: granularity === 'weekly' ? 'wk ' + k.slice(5) : k, days: ds }));
+  }
+  return days.map(d => ({ label: d.slice(5), days: [d] }));
+}
+
+// Sums a metric over days for a view. 'leadVol' is the commission-aware lead
+// denominator — B2B-only leads in Commission View, the filtered pool otherwise —
+// identical to what the summary cards use, so chart rates and card rates always
+// measure the same thing.
+function chartSum(days, view, field) {
+  if (field === 'leadVol') {
+    const data = leadTypeFilter() === 'commission' ? allDataB2B : allData;
+    return sumMetricFrom(data, days, view, 'leads');
+  }
+  return sumMetricFrom(allData, days, view, field);
+}
+
+// spec: { type: 'rate'|'count', num, denom (rate), field (count), goal, pace, cumulativeAllowed }
+function makeChart(id, days, spec) {
+  const granularity = chartGranularity(id);
+  const combined = isCombinedMode(id);
+  const cumulative = !!spec.cumulativeAllowed && isCumulative(id);
+  const isRate = spec.type === 'rate';
+  const buckets = bucketize(days, granularity);
+  const labels = buckets.map(b => b.label);
+
   const keys = Array.from(selectedSDRs);
   const views = (!combined && keys.length > 1)
     ? SDRS.filter(s => selectedSDRs.has(s.key)).map(s => ({ key: s.key, label: s.label, color: s.color }))
-    : [{
-        key: keys,
-        label: keys.length === SDRS.length ? 'Team' : keys.map(k => SDR_BY_KEY[k].label).join('+'),
-        color: COLORS.Team
-      }];
+    : [{ key: keys, label: keys.length === SDRS.length ? 'Team' : keys.map(k => SDR_BY_KEY[k].label).join('+'), color: COLORS.Team }];
 
-  return views.map(v => {
-    // A day missing from allData entirely (future day not yet reached) renders as a
-    // gap (null); a day present with metric 0 is a real zero and stays 0.
-    let data = days.map(d => {
-      if (!allData[d]) return null;
-      const m = metricsForSelection(allData, d, v.key);
-      return m ? (m[metric] || 0) : 0;
+  const datasets = views.map(v => {
+    let data = buckets.map(b => {
+      // A bucket with no loaded data (future days) renders as a gap, not a zero.
+      const present = b.days.filter(d => allData[d]);
+      if (!present.length) return null;
+      if (isRate) {
+        // Sum numerator and denominator across the bucket, THEN divide —
+        // never average per-day rates (that would weight thin days equally).
+        const den = chartSum(present, v.key, spec.denom);
+        return den ? parseFloat((chartSum(present, v.key, spec.num) / den * 100).toFixed(1)) : 0;
+      }
+      return chartSum(present, v.key, spec.field);
     });
-    if (cumulative) {
-      let sum = 0, count = 0;
-      data = data.map(val => {
-        if (val == null) return null;
-        sum += val; count++;
-        return isRate ? parseFloat((sum / count).toFixed(1)) : sum;
-      });
+    if (cumulative && !isRate) {
+      let sum = 0;
+      data = data.map(val => (val == null ? null : (sum += val)));
     }
-    return {
-      label: v.label,
-      data,
-      borderColor: v.color,
-      backgroundColor: v.color + '22',
-      tension: 0,
-      pointRadius: 3,
-      pointHoverRadius: 5,
-      fill: false,
-      borderWidth: 2,
-      spanGaps: false
-    };
+    return { label: v.label, data, borderColor: v.color, backgroundColor: v.color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false };
   });
-}
 
-function goalLine(days, value, isRate, cumulative) {
-  if (!value) return null;
-  const v = parseFloat(value);
-  return {
-    label: 'Target',
-    data: cumulative && !isRate ? days.map((_, i) => parseFloat((v * (i + 1)).toFixed(1))) : days.map(() => v),
-    borderColor: COLORS.Goal,
-    borderDash: [5, 5],
-    borderWidth: 1.5,
-    pointRadius: 0,
-    fill: false,
-    tension: 0
-  };
-}
-
-// Flat dashed line at the team's actual daily run rate so far this period — lets the
-// goal Target line and the current Pace be compared at a glance on the same chart.
-function paceLine(days, metric) {
-  const today = nowInDubai();
-  const todayKey = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
-  const elapsedDays = days.filter(d => d <= todayKey && allData[d]);
-  if (!elapsedDays.length) return null;
-  const total = sumMetricFrom(allData, elapsedDays, Array.from(selectedSDRs), metric);
-  const v = parseFloat((total / elapsedDays.length).toFixed(1));
-  if (!v) return null;
-  return {
-    label: 'Pace',
-    data: days.map(() => v),
-    borderColor: COLORS.Pace || '#9c6dff',
-    borderDash: [2, 4],
-    borderWidth: 1.5,
-    pointRadius: 0,
-    fill: false,
-    tension: 0
-  };
-}
-
-function makeChart(id, days, metric, goalKey, isRate, cumulativeAllowed, goalOverride, showPace) {
-  const cumulative = cumulativeAllowed !== false && isCumulative(id);
-  const combined = isCombinedMode(id);
-  const labels = days.map(d => d.slice(5)); // MM-DD
-  const datasets = buildDatasets(days, metric, isRate, cumulative, combined);
-  if (showPace && !isRate) {
-    const pl = paceLine(days, metric);
-    if (pl) datasets.push(pl);
+  // Pace: the current selection's actual cumulative performance over elapsed
+  // days — the period-to-date rate for rate charts, the daily run rate scaled
+  // to each bucket's size for count charts. Built from the same commission-
+  // aware sums as the plotted lines, so it recalculates with every
+  // filter/SDR/range change rather than being a blind constant.
+  const elapsed = days.filter(d => d <= dubaiTodayKey() && allData[d]);
+  let paceDrawn = false;
+  if (spec.pace && elapsed.length) {
+    let paceData = null;
+    if (isRate) {
+      const den = chartSum(elapsed, keys, spec.denom);
+      const rate = den ? parseFloat((chartSum(elapsed, keys, spec.num) / den * 100).toFixed(1)) : 0;
+      if (rate) paceData = buckets.map(() => rate);
+    } else {
+      const perDay = chartSum(elapsed, keys, spec.field) / elapsed.length;
+      if (perDay) paceData = buckets.map(b => parseFloat((perDay * b.days.length).toFixed(1)));
+    }
+    if (paceData) {
+      datasets.push({ label: 'Pace', data: paceData, borderColor: COLORS.Pace, borderDash: [2, 4], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
+      paceDrawn = true;
+    }
   }
-  const rawGoal = goalOverride != null ? goalOverride : parseFloat(goals()[goalKey]);
-  const gv = (!isNaN(rawGoal) && rawGoal) ? (isRate ? rawGoal : rawGoal / daysInCurrentMonth()) : null;
-  const gl = (goalKey || goalOverride != null) ? goalLine(days, gv, isRate, cumulative) : null;
-  if (gl) datasets.push(gl);
+
+  // Target: the goal % as-is for rate charts (drawn against rates computed with
+  // the same denominator, so the comparison is apples-to-apples in every lead
+  // filter incl. Commission View); monthly count goals prorated per bucket size.
+  let goalDrawn = false;
+  if (spec.goal) {
+    let data;
+    if (isRate) {
+      data = buckets.map(() => spec.goal);
+    } else if (cumulative) {
+      let acc = 0;
+      data = buckets.map(b => parseFloat((acc += spec.goal / daysInCurrentMonth() * b.days.length).toFixed(1)));
+    } else {
+      data = buckets.map(b => parseFloat((spec.goal / daysInCurrentMonth() * b.days.length).toFixed(1)));
+    }
+    datasets.push({ label: 'Target', data, borderColor: COLORS.Goal, borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
+    goalDrawn = true;
+  }
 
   if (charts[id]) { charts[id].destroy(); }
   const ctx = document.getElementById(id).getContext('2d');
@@ -1528,12 +1606,9 @@ function makeChart(id, days, metric, goalKey, isRate, cumulativeAllowed, goalOve
 
   const legendEl = document.getElementById('legend-' + id);
   if (legendEl) {
-    const selKeys = Array.from(selectedSDRs);
-    const items = (!combined && selKeys.length > 1)
-      ? SDRS.filter(s => selectedSDRs.has(s.key)).map(s => ({ label: s.label, color: s.color }))
-      : [{ label: selKeys.length === SDRS.length ? 'Team' : selKeys.map(k => SDR_BY_KEY[k].label).join('+'), color: COLORS.Team }];
-    if (gl) items.push({ label: 'Target', color: COLORS.Goal });
-    if (showPace && !isRate) items.push({ label: 'Pace', color: COLORS.Pace });
+    const items = views.map(v => ({ label: v.label, color: v.color }));
+    if (goalDrawn) items.push({ label: 'Target', color: COLORS.Goal });
+    if (paceDrawn) items.push({ label: 'Pace', color: COLORS.Pace });
     legendEl.innerHTML = items.map(it =>
       `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
     ).join('');
@@ -1552,13 +1627,15 @@ function monthDayKeys() {
 function renderCharts(days) {
   const d = derivedGoals();
   const rangeVal = document.getElementById('rangeSelect').value;
-  const featuredDays = isCurrentMonthToDate(rangeVal) ? monthDayKeys() : days;
-  makeChart('chartMeetings', featuredDays, 'meetings', null, false, false, d.goalMeetings, true);
-  makeChart('chartMeetingRate', featuredDays, 'meeting_rate', null, true, false, d.goalMeetingRate);
-  makeChart('chartQualPct', featuredDays, 'pct_qualified', 'pct_qual', true, false);
-  makeChart('chartLeads', days, 'leads', 'leads', false, true);
-  makeChart('chartNR', days, 'nr_rate', 'nr_rate', true, true);
-  makeChart('chartPipeline', days, 'active_pipeline', null, false, false);
+  // In month-to-date views, span the whole month so future days show as gaps
+  const chartDays = isCurrentMonthToDate(rangeVal) ? monthDayKeys() : days;
+  makeChart('chartMeetingRate', chartDays, { type: 'rate', num: 'meetings', denom: 'leadVol', goal: d.goalMeetingRate, pace: true });
+  makeChart('chartQualPct', chartDays, { type: 'rate', num: 'qualified', denom: 'leadVol', goal: d.goalPctQual, pace: true });
+  makeChart('chartNR', chartDays, { type: 'rate', num: 'non_responsive', denom: 'leadVol', goal: d.goalNRRate, pace: true });
+  makeChart('chartAEDQ', chartDays, { type: 'rate', num: 'ae_dq', denom: 'qualified', pace: true });
+  makeChart('chartSDRDQ', chartDays, { type: 'rate', num: 'sdr_dq', denom: 'leadVol', pace: true });
+  makeChart('chartMeetings', chartDays, { type: 'count', field: 'meetings', goal: d.goalMeetings, pace: true });
+  makeChart('chartLeads', chartDays, { type: 'count', field: 'leadVol', goal: d.goalLeads, cumulativeAllowed: true });
 }
 
 // ─── GOALS ────────────────────────────────────────────────────────────────────
