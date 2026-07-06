@@ -924,6 +924,27 @@ function toUTCMillis(raw) {
   const romaniaOffset = isRomaniaDST(asUTC) ? 3 : 2;
   return asUTC.getTime() - romaniaOffset * 3600000;
 }
+
+// ─── SDR ROUTING SHIFTS (on-hours vs off-hours) ───────────────────────────────
+// Per the SDR Lead Routing Logic doc: an SDR's "on-hours" is their solo chunk
+// plus the overlap chunk with their teammate (i.e. whenever they're actually
+// receiving leads, whether 100% or round-robin'd); "off-hours" is everything
+// else — their teammate's solo chunk plus the overnight round-robin window.
+// Ranges are [startMinute, endMinuteExclusive) in UTC minutes-of-day; a range
+// that crosses midnight is split into two entries.
+const SDR_SHIFT_UTC = {
+  MJ:     [[840, 1320]],           // 14:00–22:00 UTC (9am-5pm EST solo+overlap)
+  Gospel: [[1020, 1440], [0, 60]], // 17:00–01:00 UTC (wraps midnight)
+  Mark:   [[420, 900]],            // 07:00–15:00 UTC (8am-4pm CET solo+overlap)
+  Levi:   [[600, 1080]]            // 10:00–18:00 UTC
+};
+function isOnHours(sdrKey, utcMs) {
+  const ranges = SDR_SHIFT_UTC[sdrKey];
+  if (!ranges || utcMs == null) return false;
+  const minuteOfDay = Math.floor(utcMs / 60000) % 1440;
+  return ranges.some(([start, end]) => minuteOfDay >= start && minuteOfDay < end);
+}
+
 // "Now" expressed as Dubai wall-clock time, for "today"/"this month" boundaries —
 // keeps them consistent with the Dubai-bucketed day keys above.
 function nowInDubai() {
@@ -1141,10 +1162,16 @@ function parseCallCSV(text, filename) {
 // aggregation in computeMetrics() picks it up with no restructuring.
 function matchSpeedToLead() {
   if (!rawByDay) return;
-  // Clear any previous match (e.g. calls CSV was reloaded)
-  Object.values(rawByDay).forEach(bucket => {
-    Object.values(bucket).forEach(rows => {
-      rows.forEach(r => { delete r._speedToLeadMinutes; delete r._speedToLeadMatched; delete r._speedToLeadMismatch; });
+  // Clear any previous match (e.g. calls CSV was reloaded), and (re)tag every
+  // row with whether it landed in its owning SDR's on-hours or off-hours
+  // routing window — this doesn't depend on call data, only on the Bookings
+  // CSV, so it's always current even before/without a Call History CSV.
+  Object.keys(rawByDay).forEach(day => {
+    SDRS.forEach(s => {
+      (rawByDay[day][s.key] || []).forEach(r => {
+        delete r._speedToLeadMinutes; delete r._speedToLeadMatched; delete r._speedToLeadMismatch;
+        r._onHours = isOnHours(s.key, toUTCMillis(r['Creation Date']));
+      });
     });
   });
   if (!rawCalls || !rawCalls.length) return;
@@ -1367,7 +1394,9 @@ function isQualifiedLead(r) {
   return false;
 }
 function computeMetrics(leads) {
-  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, speed_to_lead_minutes_sum: 0, speed_to_lead_matched: 0, speed_to_lead_mismatch: 0 };
+  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, speed_to_lead_minutes_sum: 0, speed_to_lead_matched: 0, speed_to_lead_mismatch: 0,
+    speed_to_lead_on_minutes_sum: 0, speed_to_lead_on_matched: 0, speed_to_lead_on_total: 0,
+    speed_to_lead_off_minutes_sum: 0, speed_to_lead_off_matched: 0, speed_to_lead_off_total: 0 };
   const meetings = leads.filter(isMeetingBooked).length;
   const meetings_not_attended = leads.filter(isMeetingNotAttended).length;
   const meetings_resolved = leads.filter(isMeetingResolved).length;
@@ -1381,6 +1410,17 @@ function computeMetrics(leads) {
   const speedToLeadRows = leads.filter(r => r._speedToLeadMatched);
   const speed_to_lead_minutes_sum = speedToLeadRows.reduce((acc, r) => acc + r._speedToLeadMinutes, 0);
   const speed_to_lead_mismatch = leads.filter(r => r._speedToLeadMismatch).length;
+  // On-hours/off-hours split, per the SDR Lead Routing Logic shift windows —
+  // lets Speed-to-Lead be viewed separately for leads that landed during an
+  // SDR's on-shift window vs everything else (partner's solo shift + overnight).
+  const onLeads = leads.filter(r => r._onHours);
+  const offLeads = leads.filter(r => !r._onHours);
+  const stlSplit = rows => ({
+    speed_to_lead_minutes_sum: rows.filter(r => r._speedToLeadMatched).reduce((acc, r) => acc + r._speedToLeadMinutes, 0),
+    speed_to_lead_matched: rows.filter(r => r._speedToLeadMatched).length,
+    speed_to_lead_total: rows.length
+  });
+  const onSplit = stlSplit(onLeads), offSplit = stlSplit(offLeads);
   return {
     leads: leads.length,
     meetings,
@@ -1396,7 +1436,13 @@ function computeMetrics(leads) {
     meetings_resolved,
     speed_to_lead_minutes_sum,
     speed_to_lead_matched: speedToLeadRows.length,
-    speed_to_lead_mismatch
+    speed_to_lead_mismatch,
+    speed_to_lead_on_minutes_sum: onSplit.speed_to_lead_minutes_sum,
+    speed_to_lead_on_matched: onSplit.speed_to_lead_matched,
+    speed_to_lead_on_total: onSplit.speed_to_lead_total,
+    speed_to_lead_off_minutes_sum: offSplit.speed_to_lead_minutes_sum,
+    speed_to_lead_off_matched: offSplit.speed_to_lead_matched,
+    speed_to_lead_off_total: offSplit.speed_to_lead_total
   };
 }
 
@@ -1539,10 +1585,14 @@ function metricsForSelection(dataset, day, view) {
   const sum = f => parts.reduce((a, p) => a + (p[f] || 0), 0);
   const leads = sum('leads'), meetings = sum('meetings'), qualified = sum('qualified'),
         non_responsive = sum('non_responsive'), ae_dq = sum('ae_dq'), sdr_dq = sum('sdr_dq'), active_pipeline = sum('active_pipeline'),
-        speed_to_lead_minutes_sum = sum('speed_to_lead_minutes_sum'), speed_to_lead_matched = sum('speed_to_lead_matched'), speed_to_lead_mismatch = sum('speed_to_lead_mismatch');
+        speed_to_lead_minutes_sum = sum('speed_to_lead_minutes_sum'), speed_to_lead_matched = sum('speed_to_lead_matched'), speed_to_lead_mismatch = sum('speed_to_lead_mismatch'),
+        speed_to_lead_on_minutes_sum = sum('speed_to_lead_on_minutes_sum'), speed_to_lead_on_matched = sum('speed_to_lead_on_matched'), speed_to_lead_on_total = sum('speed_to_lead_on_total'),
+        speed_to_lead_off_minutes_sum = sum('speed_to_lead_off_minutes_sum'), speed_to_lead_off_matched = sum('speed_to_lead_off_matched'), speed_to_lead_off_total = sum('speed_to_lead_off_total');
   return {
     leads, meetings, qualified, non_responsive, ae_dq, sdr_dq, active_pipeline,
     speed_to_lead_minutes_sum, speed_to_lead_matched, speed_to_lead_mismatch,
+    speed_to_lead_on_minutes_sum, speed_to_lead_on_matched, speed_to_lead_on_total,
+    speed_to_lead_off_minutes_sum, speed_to_lead_off_matched, speed_to_lead_off_total,
     meeting_rate: leads ? meetings / leads * 100 : 0,
     pct_qualified: leads ? qualified / leads * 100 : 0,
     nr_rate: leads ? non_responsive / leads * 100 : 0
@@ -1622,6 +1672,12 @@ function renderSummaryCards(days) {
   const totalSTLMinutes = sumMetric(days, v, 'speed_to_lead_minutes_sum');
   const totalSTLMatched = sumMetric(days, v, 'speed_to_lead_matched');
   const totalSTLMismatch = sumMetric(days, v, 'speed_to_lead_mismatch');
+  const totalSTLOnMinutes = sumMetric(days, v, 'speed_to_lead_on_minutes_sum');
+  const totalSTLOnMatched = sumMetric(days, v, 'speed_to_lead_on_matched');
+  const totalSTLOnTotal = sumMetric(days, v, 'speed_to_lead_on_total');
+  const totalSTLOffMinutes = sumMetric(days, v, 'speed_to_lead_off_minutes_sum');
+  const totalSTLOffMatched = sumMetric(days, v, 'speed_to_lead_off_matched');
+  const totalSTLOffTotal = sumMetric(days, v, 'speed_to_lead_off_total');
   const lastDayBucket = lastDay ? metricsForSelection(allData, lastDay, v) : null;
   const activePipeline = lastDayBucket ? lastDayBucket.active_pipeline : 0;
 
@@ -1679,7 +1735,9 @@ function renderSummaryCards(days) {
     ${rateCard('Non-Responsive Rate', nrRate, perSDR.map(s => ({ ...s, value: s.nrRate })), isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true)}
     ${countCard('Disqualified by AE', totalAEDQ, perSDR.map(s => ({ ...s, value: s.aedq })), elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual')}
     ${pipelineCard('Active Pipeline', activePipeline, perSDR.map(s => ({ ...s, value: s.pipeline })), meanMetric(days, v, 'active_pipeline'), lastDay)}
-    ${rawCalls ? speedToLeadCard('Speed-to-Lead', totalSTLMinutes, totalSTLMatched, totalLeads, totalSTLMismatch, perSDR, d.goalSpeedToLead) : pendingCard('Speed-to-Lead', 'Load a Call History CSV to enable')}
+    ${rawCalls ? speedToLeadCard('Speed-to-Lead', totalSTLMinutes, totalSTLMatched, totalLeads, totalSTLMismatch, perSDR, d.goalSpeedToLead,
+        { minutes: totalSTLOnMinutes, matched: totalSTLOnMatched, total: totalSTLOnTotal },
+        { minutes: totalSTLOffMinutes, matched: totalSTLOffMatched, total: totalSTLOffTotal }) : pendingCard('Speed-to-Lead', 'Load a Call History CSV to enable')}
     ${pendingCard('Cadence Adherence', 'Pending (manual score)')}
   `;
   applyExpandedState();
@@ -1789,18 +1847,28 @@ function fmtMinutes(mins) {
   if (rounded < 60) return `${rounded}m`;
   return `${Math.floor(rounded / 60)}h ${rounded % 60}m`;
 }
+// Renders one "On-hours"/"Off-hours" line: avg + match count, for whichever
+// SDR(s) are currently selected (Team, a single SDR, or an arbitrary combo
+// like Mark+Levi) — split is { minutes, matched, total }.
+function speedToLeadHoursRow(rowLabel, split) {
+  const avg = split.matched ? split.minutes / split.matched : null;
+  return `<div class="card-avg-row"><span>${rowLabel}</span><span>${avg != null ? fmtMinutes(avg) : '—'} <span style="color:var(--muted);font-weight:400">(${split.matched}/${split.total})</span></span></div>`;
+}
 // sdrList: array of { key, label, color, minutesSum, matched }
-function speedToLeadCard(label, minutesSum, matched, totalLeads, mismatch, sdrList, goalVal) {
+// onSplit/offSplit: { minutes, matched, total } for the current SDR selection
+function speedToLeadCard(label, minutesSum, matched, totalLeads, mismatch, sdrList, goalVal, onSplit, offSplit) {
   const avg = matched ? minutesSum / matched : null;
   const matchedPct = totalLeads ? (matched / totalLeads * 100).toFixed(0) : '0';
   const goalRow = (avg != null) ? goalStatusRow(avg, goalVal, false, true, 'Target (team)') : '';
   const enriched = sdrList.map(s => ({ ...s, value: s.matched ? s.minutesSum / s.matched : 0, goalVal }));
   return `<div class="card" data-label="${label}">
     ${expandBtn(label)}
-    <div class="card-label">${label} <span class="goal-info" title="Time from a lead's creation to that SDR's first outbound call to it, matched by phone number from the Aircall call-history export. Leads with no matching call yet are excluded from the average (see match rate below), not penalized.">ⓘ</span></div>
+    <div class="card-label">${label} <span class="goal-info" title="Time from a lead's creation to that SDR's first outbound call to it, matched by phone number from the Aircall call-history export. Leads with no matching call yet are excluded from the average (see match rate below), not penalized. On-hours/Off-hours split per the SDR Lead Routing Logic doc — on-hours is that SDR's solo shift plus their overlap window; off-hours is everything else, including the overnight round-robin.">ⓘ</span></div>
     <div class="card-value">${avg != null ? fmtMinutes(avg) : '—'}</div>
     <div class="card-sub">${matched}/${totalLeads} leads called (${matchedPct}%)${mismatch ? ` · ${mismatch} flagged: different SDR than lead owner` : ''}</div>
     ${splitRow(enriched, false, true)}
+    ${speedToLeadHoursRow('On-hours avg', onSplit)}
+    ${speedToLeadHoursRow('Off-hours avg', offSplit)}
     ${goalRow}
   </div>`;
 }
