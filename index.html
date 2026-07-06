@@ -380,6 +380,7 @@
   .ae-baseline-loaded-note { font-size: 12px; color: var(--muted); }
   .ae-baseline-facts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 18px; }
   .ae-baseline-empty { color: var(--muted); font-size: 13px; padding: 10px 0; }
+  .ae-baseline-subheading { font-size: 12px; font-weight: 600; margin: 18px 0 8px; }
   #loadAEBaselineBtn {
     background: var(--accent);
     color: #fff;
@@ -2808,6 +2809,21 @@ function renderCommissionCalculator(days) {
   cardsEl.innerHTML = selected.map(s => commissionCard(s, days)).join('');
 }
 
+// Full-history (not range-filtered) per-SDR averages — for direct comparison
+// against the per-AE table below, over the entire loaded Bookings dataset
+// rather than whatever the top Range: filter currently has selected, so the
+// two tables stay a stable, same-shape benchmark side by side.
+function computeSDRAllTimeMetrics() {
+  if (!rawByDay) return null;
+  const allDays = Object.keys(rawByDay).sort();
+  const perSDR = SDRS.map(s => {
+    const rows = [];
+    allDays.forEach(d => { const r = rawByDay[d][s.key]; if (r) rows.push(...r); });
+    return { sdr: s, metrics: computeMetrics(applyLeadTypeFilter(rows)) };
+  });
+  return { perSDR, firstDay: allDays[0], lastDay: allDays[allDays.length - 1] };
+}
+
 // ─── AE BASELINE SECTION RENDER ────────────────────────────────────────────────
 function aeBaselineFactTile(label, value, sub) {
   return `<div class="commission-stat">
@@ -2815,6 +2831,23 @@ function aeBaselineFactTile(label, value, sub) {
     <div class="commission-stat-value">${value}</div>
     ${sub ? `<div class="commission-stat-sub">${sub}</div>` : ''}
   </div>`;
+}
+// One row of the comparison tables — same column shape for both the per-AE
+// and per-SDR breakdowns, so the two are directly comparable at a glance.
+function benchmarkRow(label, m) {
+  return `<tr>
+    <td>${escapeHtml(label)}</td>
+    <td>${m.leads}</td>
+    <td>${m.meetings}</td>
+    <td>${m.meeting_rate.toFixed(1)}%</td>
+    <td>${m.qualified}</td>
+    <td>${m.pct_qualified.toFixed(1)}%</td>
+    <td>${m.nr_rate.toFixed(1)}%</td>
+    <td>${m.leads ? (m.sdr_dq / m.leads * 100).toFixed(1) : '0.0'}%</td>
+  </tr>`;
+}
+function benchmarkTableHeader(firstColLabel) {
+  return `<thead><tr><th>${firstColLabel}</th><th>Leads</th><th>Meetings</th><th>Meeting Rate</th><th>Qualified</th><th>% Qualified</th><th>NR Rate</th><th>Disqualified Rate</th></tr></thead>`;
 }
 function renderAEBaselineSection() {
   const uploadRow = document.getElementById('aeBaselineUploadRow');
@@ -2824,11 +2857,19 @@ function renderAEBaselineSection() {
   const headerNote = document.getElementById('aeBaselineHeaderNote');
   if (!uploadRow || !contentEl) return;
 
+  const sdrAllTime = computeSDRAllTimeMetrics();
+  const sdrTableHtml = sdrAllTime ? `
+    <div class="ae-baseline-subheading">SDR Averages <span class="goal-info" title="Full loaded Bookings history (${sdrAllTime.firstDay} – ${sdrAllTime.lastDay}) for each SDR — not affected by the Range: filter above, so it stays a stable benchmark next to the AE table, computed the same way (and respecting the same B2B/B2C/All Leads: filter).">ⓘ</span></div>
+    <table class="report-table">
+      ${benchmarkTableHeader('SDR')}
+      <tbody>${sdrAllTime.perSDR.map(({ sdr, metrics: m }) => benchmarkRow(sdr.name, m)).join('')}</tbody>
+    </table>` : '';
+
   if (!rawAEBaseline || !rawAEBaseline.length) {
     loadedNote.textContent = '';
     clearBtn.style.display = 'none';
     headerNote.textContent = 'Click to expand — load once, compare SDR performance to the pre-SDR AE era';
-    contentEl.innerHTML = `<div class="ae-baseline-empty">No AE Baseline CSV loaded yet.</div>`;
+    contentEl.innerHTML = `<div class="ae-baseline-empty">No AE Baseline CSV loaded yet.</div>` + sdrTableHtml;
     return;
   }
 
@@ -2848,22 +2889,14 @@ function renderAEBaselineSection() {
     ${aeBaselineFactTile('Disqualified Rate', ae.sdrDqRate.toFixed(1) + '%', 'AE\'s own disqualifications ÷ leads')}
   </div>`;
 
-  const perAERows = ae.perAE.map(({ owner, metrics: m }) => `<tr>
-    <td>${escapeHtml(owner)}</td>
-    <td>${m.leads}</td>
-    <td>${m.meetings}</td>
-    <td>${m.meeting_rate.toFixed(1)}%</td>
-    <td>${m.qualified}</td>
-    <td>${m.pct_qualified.toFixed(1)}%</td>
-    <td>${m.nr_rate.toFixed(1)}%</td>
-    <td>${m.leads ? (m.sdr_dq / m.leads * 100).toFixed(1) : '0.0'}%</td>
-  </tr>`).join('');
-  const tableHtml = `<table class="report-table">
-    <thead><tr><th>AE</th><th>Leads</th><th>Meetings</th><th>Meeting Rate</th><th>Qualified</th><th>% Qualified</th><th>NR Rate</th><th>Disqualified Rate</th></tr></thead>
-    <tbody>${perAERows}</tbody>
-  </table>`;
+  const aeTableHtml = `
+    <div class="ae-baseline-subheading">AE Averages <span class="goal-info" title="${escapeHtml(ae.firstDay)} – ${escapeHtml(ae.lastDay)} (${ae.spanDays} days), the entire loaded AE Baseline export.">ⓘ</span></div>
+    <table class="report-table">
+      ${benchmarkTableHeader('AE')}
+      <tbody>${ae.perAE.map(({ owner, metrics: m }) => benchmarkRow(owner, m)).join('')}</tbody>
+    </table>`;
 
-  contentEl.innerHTML = factsHtml + tableHtml;
+  contentEl.innerHTML = factsHtml + aeTableHtml + sdrTableHtml;
 }
 
 // ─── QUALIFIED LEADS REPORT (print / export as PDF) ────────────────────────────
