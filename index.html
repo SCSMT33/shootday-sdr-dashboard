@@ -63,7 +63,7 @@
   .logo span { color: var(--muted); font-weight: 400; font-size: 14px; }
   .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .last-updated { color: var(--text); font-size: 15px; font-weight: 600; }
-  #refreshBtn {
+  #refreshBtn, #loadCallsBtn {
     background: var(--accent);
     color: #fff;
     border: none;
@@ -77,18 +77,7 @@
     gap: 6px;
     transition: opacity 0.15s;
   }
-  #refreshBtn:hover { opacity: 0.85; }
-  #loadCallsBtn {
-    background: var(--surface2);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 7px 16px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-  }
-  #loadCallsBtn:hover { border-color: var(--accent); color: var(--accent); }
+  #refreshBtn:hover, #loadCallsBtn:hover { opacity: 0.85; }
   #clearDataBtn {
     background: var(--surface2);
     color: var(--muted);
@@ -586,6 +575,11 @@
   <div class="controls">
     <div class="view-tabs" id="viewTabs"></div>
     <div class="date-range">
+      <span>Charts:</span>
+      <select id="chartStyleSelect" onchange="saveChartStyle(); renderCharts(getFilteredDays())">
+        <option value="bar">Bars</option>
+        <option value="line">Lines</option>
+      </select>
       <span>Leads:</span>
       <select id="leadTypeSelect" onchange="saveLeadTypeFilter(); renderDashboard()">
         <option value="business">B2B leads only</option>
@@ -626,7 +620,7 @@
             <div class="chart-legend" id="legend-chartMeetingRate"></div>
             <select class="chart-granularity" id="granularity-chartMeetingRate" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
+              <option value="weekly" selected>Weekly</option>
               <option value="monthly">Monthly</option>
             </select>
             <label class="chart-cumulative-toggle">
@@ -645,7 +639,7 @@
             <div class="chart-legend" id="legend-chartQualPct"></div>
             <select class="chart-granularity" id="granularity-chartQualPct" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
+              <option value="weekly" selected>Weekly</option>
               <option value="monthly">Monthly</option>
             </select>
             <label class="chart-cumulative-toggle">
@@ -664,7 +658,7 @@
             <div class="chart-legend" id="legend-chartNR"></div>
             <select class="chart-granularity" id="granularity-chartNR" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
+              <option value="weekly" selected>Weekly</option>
               <option value="monthly">Monthly</option>
             </select>
             <label class="chart-cumulative-toggle">
@@ -683,7 +677,7 @@
             <div class="chart-legend" id="legend-chartAEDQ"></div>
             <select class="chart-granularity" id="granularity-chartAEDQ" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
+              <option value="weekly" selected>Weekly</option>
               <option value="monthly">Monthly</option>
             </select>
             <label class="chart-cumulative-toggle">
@@ -702,7 +696,7 @@
             <div class="chart-legend" id="legend-chartSDRDQ"></div>
             <select class="chart-granularity" id="granularity-chartSDRDQ" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
+              <option value="weekly" selected>Weekly</option>
               <option value="monthly">Monthly</option>
             </select>
             <label class="chart-cumulative-toggle">
@@ -721,7 +715,7 @@
             <div class="chart-legend" id="legend-chartSpeedToLead"></div>
             <select class="chart-granularity" id="granularity-chartSpeedToLead" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
+              <option value="weekly" selected>Weekly</option>
               <option value="monthly">Monthly</option>
             </select>
             <label class="chart-cumulative-toggle">
@@ -740,7 +734,7 @@
             <div class="chart-legend" id="legend-chartMeetings"></div>
             <select class="chart-granularity" id="granularity-chartMeetings" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
+              <option value="weekly" selected>Weekly</option>
               <option value="monthly">Monthly</option>
             </select>
             <label class="chart-cumulative-toggle">
@@ -759,7 +753,7 @@
             <div class="chart-legend" id="legend-chartLeads"></div>
             <select class="chart-granularity" id="granularity-chartLeads" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
+              <option value="weekly" selected>Weekly</option>
               <option value="monthly">Monthly</option>
             </select>
             <label class="chart-cumulative-toggle">
@@ -876,6 +870,11 @@ const SDRS = [
   { key: 'Levi',   name: 'Levi Ceballos',     label: 'Levi',   color: '#4a7fd4' }
 ];
 const SDR_BY_KEY = Object.fromEntries(SDRS.map(s => [s.key, s]));
+// Quick-select team groups: US (MJ/Gospel) vs OUS = "outside US" (Mark/Levi).
+const TEAM_GROUPS = [
+  { key: 'US', label: 'US Team', members: ['MJ', 'Gospel'] },
+  { key: 'OUS', label: 'OUS Team', members: ['Mark', 'Levi'] }
+];
 function normalizeSDRName(name) {
   return (name || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
@@ -1283,6 +1282,22 @@ function loadLeadTypeFilter() {
   } catch(e) {}
   recomputeAllData();
 }
+// ─── CHART STYLE (bar vs line, applies to every trend chart) ──────────────────
+function isBarMode() {
+  const el = document.getElementById('chartStyleSelect');
+  return el ? el.value === 'bar' : true;
+}
+function saveChartStyle() {
+  try { localStorage.setItem('sdr_chart_style', document.getElementById('chartStyleSelect').value); } catch(e) {}
+}
+function loadChartStyle() {
+  try {
+    const saved = localStorage.getItem('sdr_chart_style');
+    // Defaults to bars — easier to read week-over-week/month-over-month
+    // improvement at a glance than a line chart.
+    document.getElementById('chartStyleSelect').value = saved || 'bar';
+  } catch(e) {}
+}
 function updateRangeUI() {
   const isCustom = document.getElementById('rangeSelect').value === 'custom';
   document.getElementById('customRangeInputs').style.display = isCustom ? 'inline-flex' : 'none';
@@ -1495,6 +1510,10 @@ function renderViewTabs() {
   const allSelected = selectedSDRs.size === SDRS.length;
   const tabs = [
     `<button class="view-tab${allSelected ? ' active' : ''}" onclick="selectAllSDRs()">All</button>`,
+    ...TEAM_GROUPS.map(g => {
+      const isActive = selectedSDRs.size === g.members.length && g.members.every(k => selectedSDRs.has(k));
+      return `<button class="view-tab${isActive ? ' active' : ''}" onclick="selectTeamGroup('${g.key}')">${g.label}</button>`;
+    }),
     ...SDRS.map(s =>
       `<button class="view-tab${selectedSDRs.has(s.key) ? ' active' : ''}" data-sdr="${s.key}" onclick="toggleSDR('${s.key}')">${s.label}</button>`
     )
@@ -1514,6 +1533,16 @@ function toggleSDR(key) {
 }
 function selectAllSDRs() {
   selectedSDRs = new Set(SDRS.map(s => s.key));
+  saveSelectedSDRs();
+  renderViewTabs();
+  renderDashboard();
+}
+// One-click select of a whole team group (US: MJ+Gospel, OUS: Mark+Levi) —
+// replaces the current selection rather than toggling, so it's a single click.
+function selectTeamGroup(groupKey) {
+  const group = TEAM_GROUPS.find(g => g.key === groupKey);
+  if (!group) return;
+  selectedSDRs = new Set(group.members);
   saveSelectedSDRs();
   renderViewTabs();
   renderDashboard();
@@ -1965,6 +1994,7 @@ function makeChart(id, days, spec) {
   const combined = isCombinedMode(id);
   const cumulative = !!spec.cumulativeAllowed && isCumulative(id);
   const isRate = spec.type === 'rate';
+  const barMode = isBarMode();
   const buckets = bucketize(days, granularity);
   const labels = buckets.map(b => b.label);
 
@@ -1990,7 +2020,9 @@ function makeChart(id, days, spec) {
       let sum = 0;
       data = data.map(val => (val == null ? null : (sum += val)));
     }
-    return { label: v.label, data, borderColor: v.color, backgroundColor: v.color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false };
+    return barMode
+      ? { label: v.label, data, backgroundColor: v.color, borderRadius: 3, borderWidth: 0 }
+      : { label: v.label, data, borderColor: v.color, backgroundColor: v.color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false };
   });
 
   // Pace: the current selection's actual cumulative performance over elapsed
@@ -2011,7 +2043,9 @@ function makeChart(id, days, spec) {
       if (perDay) paceData = buckets.map(b => parseFloat((perDay * b.days.length).toFixed(1)));
     }
     if (paceData) {
-      datasets.push({ label: 'Pace', data: paceData, borderColor: COLORS.Pace, borderDash: [2, 4], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
+      // Explicit type:'line' so Pace still overlays as a dashed line even
+      // when the chart's overall type is 'bar' (Chart.js mixed-type support).
+      datasets.push({ label: 'Pace', data: paceData, type: 'line', borderColor: COLORS.Pace, borderDash: [2, 4], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
       paceDrawn = true;
     }
   }
@@ -2030,14 +2064,14 @@ function makeChart(id, days, spec) {
     } else {
       data = buckets.map(b => parseFloat((spec.goal / daysInCurrentMonth() * b.days.length).toFixed(1)));
     }
-    datasets.push({ label: 'Target', data, borderColor: COLORS.Goal, borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
+    datasets.push({ label: 'Target', data, type: 'line', borderColor: COLORS.Goal, borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
     goalDrawn = true;
   }
 
   if (charts[id]) { charts[id].destroy(); }
   const ctx = document.getElementById(id).getContext('2d');
   charts[id] = new Chart(ctx, {
-    type: 'line',
+    type: barMode ? 'bar' : 'line',
     data: { labels, datasets },
     options: {
       responsive: true,
@@ -2115,6 +2149,7 @@ function renderSpeedToLeadChart(days) {
 
   const granularity = chartGranularity(id);
   const combined = isCombinedMode(id);
+  const barMode = isBarMode();
   const buckets = bucketize(days, granularity);
   const labels = buckets.map(b => b.label);
 
@@ -2129,7 +2164,9 @@ function renderSpeedToLeadChart(days) {
       if (!present.length) return null;
       return median(speedToLeadMinutesValues(present, v.key));
     });
-    return { label: v.label, data, borderColor: v.color, backgroundColor: v.color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false };
+    return barMode
+      ? { label: v.label, data, backgroundColor: v.color, borderRadius: 3, borderWidth: 0 }
+      : { label: v.label, data, borderColor: v.color, backgroundColor: v.color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false };
   });
 
   // Pace: median over elapsed (<= today) days for the whole current selection.
@@ -2137,21 +2174,21 @@ function renderSpeedToLeadChart(days) {
   const paceMedian = median(speedToLeadMinutesValues(elapsed, keys));
   let paceDrawn = false;
   if (paceMedian != null) {
-    datasets.push({ label: 'Pace', data: buckets.map(() => parseFloat(paceMedian.toFixed(1))), borderColor: COLORS.Pace, borderDash: [2, 4], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
+    datasets.push({ label: 'Pace', data: buckets.map(() => parseFloat(paceMedian.toFixed(1))), type: 'line', borderColor: COLORS.Pace, borderDash: [2, 4], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
     paceDrawn = true;
   }
 
   const d = derivedGoals();
   let goalDrawn = false;
   if (d.goalSpeedToLead) {
-    datasets.push({ label: 'Target', data: buckets.map(() => d.goalSpeedToLead), borderColor: COLORS.Goal, borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
+    datasets.push({ label: 'Target', data: buckets.map(() => d.goalSpeedToLead), type: 'line', borderColor: COLORS.Goal, borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
     goalDrawn = true;
   }
 
   if (charts[id]) charts[id].destroy();
   const ctx = document.getElementById(id).getContext('2d');
   charts[id] = new Chart(ctx, {
-    type: 'line',
+    type: barMode ? 'bar' : 'line',
     data: { labels, datasets },
     options: {
       responsive: true,
@@ -2608,6 +2645,7 @@ function exportQualifiedReport() {
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 renderViewTabs();
 loadGoals();
+loadChartStyle();
 if (restoreLoadedData()) {
   renderDashboard();
 } else {
