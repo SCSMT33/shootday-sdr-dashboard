@@ -78,6 +78,17 @@
     transition: opacity 0.15s;
   }
   #refreshBtn:hover { opacity: 0.85; }
+  #loadCallsBtn {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  #loadCallsBtn:hover { border-color: var(--accent); color: var(--accent); }
   #clearDataBtn {
     background: var(--surface2);
     color: var(--muted);
@@ -552,6 +563,10 @@
     </button>
     <button id="clearDataBtn" title="Clear loaded data" onclick="clearLoadedData()">&#128465;</button>
     <input type="file" id="fileInput" accept=".csv" onchange="handleFile(event)">
+    <button id="loadCallsBtn" title="Load Aircall call-history CSV for Speed-to-Lead" onclick="document.getElementById('callsFileInput').click()">
+      &#x1F4DE; Load Call History CSV
+    </button>
+    <input type="file" id="callsFileInput" accept=".csv" onchange="handleCallsFile(event)">
   </div>
 </header>
 
@@ -699,6 +714,25 @@
         </div>
         <canvas id="chartSDRDQ"></canvas>
       </div>
+      <div class="chart-card full" id="chartCardSpeedToLead">
+        <div class="chart-header">
+          <span class="chart-title">Speed-to-Lead (avg minutes) <span class="goal-info" title="Average minutes from lead creation to first outbound call, matched by phone number from the Aircall call-history export. Requires a Call History CSV to be loaded; leads with no matching call yet are excluded from the average.">ⓘ</span></span>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartSpeedToLead"></div>
+            <select class="chart-granularity" id="granularity-chartSpeedToLead" onchange="renderCharts(getFilteredDays())">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="modeToggle-chartSpeedToLead" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Combined</span>
+            </label>
+          </div>
+        </div>
+        <canvas id="chartSpeedToLead"></canvas>
+      </div>
       <div class="chart-card">
         <div class="chart-header">
           <span class="chart-title">Meetings Booked</span>
@@ -794,8 +828,11 @@
           </div>
         </div>
         <div class="goal-item">
-          <div class="goal-label">Speed-to-Lead</div>
-          <div class="goal-input-row"><span class="pending-badge">Pending (needs Aircall sync)</span></div>
+          <div class="goal-label">Speed-to-Lead max <span class="goal-info" title="Target average minutes from lead creation to first outbound call. Requires a Call History CSV to be loaded.">ⓘ</span></div>
+          <div class="goal-input-row">
+            <input class="goal-input" type="number" id="goal_speed_to_lead" placeholder="e.g. 15" oninput="saveGoals(); renderDashboard()">
+            <span class="goal-unit">min</span>
+          </div>
         </div>
         <div class="goal-item">
           <div class="goal-label">Cadence Adherence</div>
@@ -835,16 +872,18 @@
 const SDRS = [
   { key: 'MJ',     name: 'MJ Montero',       label: 'MJ',     color: '#1a9e94' },
   { key: 'Gospel', name: 'Gospel Lim',        label: 'Gospel', color: '#e07b1a' },
-  { key: 'Mark',   name: 'Mark Paolo Santos', label: 'Mark',   color: '#c94f7c' },
+  { key: 'Mark',   name: 'Mark Paolo Santos', label: 'Mark',   color: '#c94f7c', aliases: ['Mark Santos'] },
   { key: 'Levi',   name: 'Levi Ceballos',     label: 'Levi',   color: '#4a7fd4' }
 ];
 const SDR_BY_KEY = Object.fromEntries(SDRS.map(s => [s.key, s]));
 function normalizeSDRName(name) {
   return (name || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
+// Matches against an SDR's canonical name or any of its aliases — e.g. the
+// Aircall export spells Mark Paolo Santos as "Mark Santos".
 function sdrKeyByName(name) {
   const n = normalizeSDRName(name);
-  const m = SDRS.find(s => normalizeSDRName(s.name) === n);
+  const m = SDRS.find(s => normalizeSDRName(s.name) === n || (s.aliases || []).some(a => normalizeSDRName(a) === n));
   return m ? m.key : null;
 }
 
@@ -873,6 +912,18 @@ function toDubaiDayKey(raw) {
   const dubai = new Date(asUTC.getTime() - romaniaOffset * 3600000 + 4 * 3600000);
   return `${dubai.getUTCFullYear()}-${String(dubai.getUTCMonth() + 1).padStart(2, '0')}-${String(dubai.getUTCDate()).padStart(2, '0')}`;
 }
+// Same Romania-local -> UTC conversion as toDubaiDayKey, but returns a precise
+// epoch-ms instant (not a day key) — used to compare a lead's creation time
+// against Aircall's already-UTC call timestamps for Speed-to-Lead.
+function toUTCMillis(raw) {
+  if (!raw) return null;
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (!m) return null;
+  const y = +m[1], mo = +m[2], d = +m[3], h = +m[4], mi = +m[5];
+  const asUTC = new Date(Date.UTC(y, mo - 1, d, h, mi));
+  const romaniaOffset = isRomaniaDST(asUTC) ? 3 : 2;
+  return asUTC.getTime() - romaniaOffset * 3600000;
+}
 // "Now" expressed as Dubai wall-clock time, for "today"/"this month" boundaries —
 // keeps them consistent with the Dubai-bucketed day keys above.
 function nowInDubai() {
@@ -884,6 +935,8 @@ function nowInDubai() {
 let allData = null;   // { date: { <sdrKey>: metrics, Team: metrics } } — derived from rawByDay via current lead-type filter
 let allDataB2B = null;   // same shape, always business-leads-only — used by Commission View's Lead Volume card
 let rawByDay = null;   // { date: { <sdrKey>: [rows] } } — unfiltered raw rows, persisted
+let rawCalls = null;   // [{ phoneDigits, utcMs, sdrKey }] from the Aircall call-history CSV, persisted
+let callsFilename = null;
 let selectedSDRs = new Set(SDRS.map(s => s.key));   // toggle-selected SDRs; all 4 selected by default
 let charts = {};
 let expandedCards = new Set();
@@ -1002,6 +1055,7 @@ function parseCSV(text, filename) {
     rawByDay[day][key].push(r);
   });
 
+  matchSpeedToLead();
   recomputeAllData();
 
   const dates = Object.keys(allData).sort();
@@ -1018,6 +1072,122 @@ function parseCSV(text, filename) {
   loadRangeFilter();
   loadSelectedSDRs();
   renderDashboard();
+}
+
+// ─── CALL HISTORY (AIRCALL) — SPEED-TO-LEAD ───────────────────────────────────
+function normalizePhoneDigits(p) {
+  return (p || '').replace(/\D/g, '');
+}
+function handleCallsFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  readCallsFile(file);
+}
+function readCallsFile(file) {
+  showLoadingOverlay();
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const text = ev.target.result;
+    setTimeout(() => {
+      try {
+        parseCallCSV(text, file.name);
+      } finally {
+        hideLoadingOverlay();
+      }
+    }, 30);
+  };
+  reader.onerror = () => {
+    hideLoadingOverlay();
+    alert('Could not read that file. Please try again.');
+  };
+  reader.readAsText(file);
+}
+// Aircall "datetime (utc)" is already UTC (unlike Bookings' Romania-local
+// Creation Date) — no timezone conversion needed, just parse it as UTC.
+function parseAircallUTC(raw) {
+  const m = (raw || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+  if (!m) return null;
+  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+}
+function parseCallCSV(text, filename) {
+  const raw = text.replace(/^﻿/, '');
+  const table = parseCSVText(raw);
+  if (!table.length) return;
+  const headers = table[0].map(h => h.trim());
+  const calls = [];
+  for (let i = 1; i < table.length; i++) {
+    const vals = table[i];
+    const row = {};
+    headers.forEach((h, idx) => { row[h] = (vals[idx] || '').trim(); });
+    if (row.direction !== 'outbound') continue;
+    const sdrKey = sdrKeyByName(row.user);
+    if (!sdrKey) continue; // not a recognized SDR (e.g. a manager placing a call)
+    const phoneDigits = normalizePhoneDigits(row['to']) || normalizePhoneDigits(row['customer number']);
+    if (!phoneDigits) continue;
+    const utcMs = parseAircallUTC(row['datetime (utc)']);
+    if (utcMs == null) continue;
+    calls.push({ phoneDigits, utcMs, sdrKey });
+  }
+  rawCalls = calls;
+  callsFilename = filename;
+  saveLoadedData(); // re-save combined blob including the new call data
+  matchSpeedToLead();
+  recomputeAllData();
+  renderDashboard();
+}
+// Matches every SDR-owned booking row (in rawByDay) to the first outbound call
+// placed to its phone number, at/after the lead's creation instant. Attaches
+// the result directly onto each row object so the normal per-day/per-SDR
+// aggregation in computeMetrics() picks it up with no restructuring.
+function matchSpeedToLead() {
+  if (!rawByDay) return;
+  // Clear any previous match (e.g. calls CSV was reloaded)
+  Object.values(rawByDay).forEach(bucket => {
+    Object.values(bucket).forEach(rows => {
+      rows.forEach(r => { delete r._speedToLeadMinutes; delete r._speedToLeadMatched; delete r._speedToLeadMismatch; });
+    });
+  });
+  if (!rawCalls || !rawCalls.length) return;
+
+  const callsByPhone = new Map();
+  rawCalls.forEach(c => {
+    if (!callsByPhone.has(c.phoneDigits)) callsByPhone.set(c.phoneDigits, []);
+    callsByPhone.get(c.phoneDigits).push(c);
+  });
+  callsByPhone.forEach(list => list.sort((a, b) => a.utcMs - b.utcMs));
+
+  // Flatten every SDR-owned row with its phone + creation instant, grouped by
+  // phone so repeat-customer numbers get a bounded window (one call can't be
+  // attributed to two different lead records that share a number).
+  const rowsByPhone = new Map();
+  Object.keys(rawByDay).forEach(day => {
+    SDRS.forEach(s => {
+      (rawByDay[day][s.key] || []).forEach(row => {
+        const phoneDigits = normalizePhoneDigits(row['Phone']);
+        const creationUtcMs = toUTCMillis(row['Creation Date']);
+        if (!phoneDigits || creationUtcMs == null) return;
+        if (!rowsByPhone.has(phoneDigits)) rowsByPhone.set(phoneDigits, []);
+        rowsByPhone.get(phoneDigits).push({ row, creationUtcMs, sdrKey: s.key });
+      });
+    });
+  });
+
+  rowsByPhone.forEach((entries, phoneDigits) => {
+    entries.sort((a, b) => a.creationUtcMs - b.creationUtcMs);
+    const calls = callsByPhone.get(phoneDigits);
+    entries.forEach((entry, idx) => {
+      const windowEnd = idx + 1 < entries.length ? entries[idx + 1].creationUtcMs : Infinity;
+      entry.row._speedToLeadMatched = false;
+      if (!calls) return;
+      const candidates = calls.filter(c => c.utcMs >= entry.creationUtcMs && c.utcMs < windowEnd);
+      if (!candidates.length) return;
+      const sameSDR = candidates.find(c => c.sdrKey === entry.sdrKey);
+      const call = sameSDR || candidates[0];
+      entry.row._speedToLeadMinutes = (call.utcMs - entry.creationUtcMs) / 60000;
+      entry.row._speedToLeadMatched = true;
+      entry.row._speedToLeadMismatch = !sameSDR;
+    });
+  });
 }
 
 // ─── BUSINESS-LEAD FILTER ──────────────────────────────────────────────────────
@@ -1100,13 +1270,19 @@ function loadRangeFilter() {
 }
 
 // ─── PERSIST LOADED DATA ACROSS REFRESHES ─────────────────────────────────────
+// filename is optional — omit it (e.g. after just reloading the calls CSV) to
+// keep whatever Bookings filename was already persisted.
 function saveLoadedData(filename) {
   try {
-    localStorage.setItem('sdr_data', JSON.stringify({ rawByDay, filename }));
+    const prev = JSON.parse(localStorage.getItem('sdr_data') || 'null');
+    const finalFilename = filename !== undefined ? filename : (prev && prev.filename);
+    localStorage.setItem('sdr_data', JSON.stringify({ rawByDay, filename: finalFilename, rawCalls, callsFilename }));
   } catch (e) {}
 }
 // Wipes the loaded CSV (in-memory and persisted) and drops back to the
 // upload screen, so a fresh file can be loaded without stale data lingering.
+// Also clears any loaded call-history data, since Speed-to-Lead matches are
+// meaningless without the Bookings data they were matched against.
 function clearLoadedData() {
   if (!rawByDay && !localStorage.getItem('sdr_data')) return;
   if (!confirm('Clear the currently loaded CSV data? This cannot be undone.')) return;
@@ -1114,9 +1290,12 @@ function clearLoadedData() {
   rawByDay = null;
   allData = null;
   allDataB2B = null;
+  rawCalls = null;
+  callsFilename = null;
   Object.values(charts).forEach(c => c.destroy());
   charts = {};
   document.getElementById('fileInput').value = '';
+  document.getElementById('callsFileInput').value = '';
   document.getElementById('lastUpdated').textContent = 'No data loaded';
   document.getElementById('dashboard').style.display = 'none';
   document.getElementById('noData').style.display = 'block';
@@ -1127,6 +1306,9 @@ function restoreLoadedData() {
     const saved = JSON.parse(localStorage.getItem('sdr_data') || 'null');
     if (!saved || !saved.rawByDay) return false;
     rawByDay = saved.rawByDay;
+    rawCalls = saved.rawCalls || null;
+    callsFilename = saved.callsFilename || null;
+    matchSpeedToLead();
     loadLeadTypeFilter();
     loadRangeFilter();
     loadSelectedSDRs();
@@ -1185,7 +1367,7 @@ function isQualifiedLead(r) {
   return false;
 }
 function computeMetrics(leads) {
-  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0 };
+  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, speed_to_lead_minutes_sum: 0, speed_to_lead_matched: 0, speed_to_lead_mismatch: 0 };
   const meetings = leads.filter(isMeetingBooked).length;
   const meetings_not_attended = leads.filter(isMeetingNotAttended).length;
   const meetings_resolved = leads.filter(isMeetingResolved).length;
@@ -1195,6 +1377,10 @@ function computeMetrics(leads) {
   // Plain "Disqualified" (the SDR's own call) — distinct from the AE-disqualified status above
   const sdr_dq = leads.filter(r => (r['Sales status'] || '').trim().toLowerCase() === 'disqualified').length;
   const active_pipeline = leads.filter(r => !['Closed','Disqualified','Lost','Deposit refund',''].includes(r['Sales status'])).length;
+  // Set by matchSpeedToLead() onto each row before computeMetrics runs.
+  const speedToLeadRows = leads.filter(r => r._speedToLeadMatched);
+  const speed_to_lead_minutes_sum = speedToLeadRows.reduce((acc, r) => acc + r._speedToLeadMinutes, 0);
+  const speed_to_lead_mismatch = leads.filter(r => r._speedToLeadMismatch).length;
   return {
     leads: leads.length,
     meetings,
@@ -1207,7 +1393,10 @@ function computeMetrics(leads) {
     sdr_dq,
     active_pipeline,
     meetings_not_attended,
-    meetings_resolved
+    meetings_resolved,
+    speed_to_lead_minutes_sum,
+    speed_to_lead_matched: speedToLeadRows.length,
+    speed_to_lead_mismatch
   };
 }
 
@@ -1349,9 +1538,11 @@ function metricsForSelection(dataset, day, view) {
   if (!parts.length) return null;
   const sum = f => parts.reduce((a, p) => a + (p[f] || 0), 0);
   const leads = sum('leads'), meetings = sum('meetings'), qualified = sum('qualified'),
-        non_responsive = sum('non_responsive'), ae_dq = sum('ae_dq'), sdr_dq = sum('sdr_dq'), active_pipeline = sum('active_pipeline');
+        non_responsive = sum('non_responsive'), ae_dq = sum('ae_dq'), sdr_dq = sum('sdr_dq'), active_pipeline = sum('active_pipeline'),
+        speed_to_lead_minutes_sum = sum('speed_to_lead_minutes_sum'), speed_to_lead_matched = sum('speed_to_lead_matched'), speed_to_lead_mismatch = sum('speed_to_lead_mismatch');
   return {
     leads, meetings, qualified, non_responsive, ae_dq, sdr_dq, active_pipeline,
+    speed_to_lead_minutes_sum, speed_to_lead_matched, speed_to_lead_mismatch,
     meeting_rate: leads ? meetings / leads * 100 : 0,
     pct_qualified: leads ? qualified / leads * 100 : 0,
     nr_rate: leads ? non_responsive / leads * 100 : 0
@@ -1428,6 +1619,9 @@ function renderSummaryCards(days) {
   const totalQualified = sumMetric(days, v, 'qualified');
   const totalNR = sumMetric(days, v, 'non_responsive');
   const totalAEDQ = sumMetric(days, v, 'ae_dq');
+  const totalSTLMinutes = sumMetric(days, v, 'speed_to_lead_minutes_sum');
+  const totalSTLMatched = sumMetric(days, v, 'speed_to_lead_matched');
+  const totalSTLMismatch = sumMetric(days, v, 'speed_to_lead_mismatch');
   const lastDayBucket = lastDay ? metricsForSelection(allData, lastDay, v) : null;
   const activePipeline = lastDayBucket ? lastDayBucket.active_pipeline : 0;
 
@@ -1459,12 +1653,14 @@ function renderSummaryCards(days) {
     const qualified = sumMetric(days, s.key, 'qualified');
     const nr = sumMetric(days, s.key, 'non_responsive');
     const aedq = sumMetric(days, s.key, 'ae_dq');
+    const minutesSum = sumMetric(days, s.key, 'speed_to_lead_minutes_sum');
+    const matched = sumMetric(days, s.key, 'speed_to_lead_matched');
     const sPipelineBucket = lastDay ? metricsForSelection(allData, lastDay, s.key) : null;
     const pipeline = sPipelineBucket ? sPipelineBucket.active_pipeline : 0;
     const leadVol = isCommission ? sumMetricFrom(allDataB2B, days, s.key, 'leads') : leads;
     const leadsProjected = elapsed ? (leadVol / elapsed * daysInMo) : 0;
     return {
-      ...s, leads, meetings, qualified, nr, aedq, pipeline, leadVol, leadsProjected,
+      ...s, leads, meetings, qualified, nr, aedq, pipeline, leadVol, leadsProjected, minutesSum, matched,
       pctQual: leadVol ? (qualified / leadVol * 100) : 0,
       nrRate: leadVol ? (nr / leadVol * 100) : 0,
       meetingRate: leadVol ? (meetings / leadVol * 100) : 0,
@@ -1483,7 +1679,7 @@ function renderSummaryCards(days) {
     ${rateCard('Non-Responsive Rate', nrRate, perSDR.map(s => ({ ...s, value: s.nrRate })), isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true)}
     ${countCard('Disqualified by AE', totalAEDQ, perSDR.map(s => ({ ...s, value: s.aedq })), elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual')}
     ${pipelineCard('Active Pipeline', activePipeline, perSDR.map(s => ({ ...s, value: s.pipeline })), meanMetric(days, v, 'active_pipeline'), lastDay)}
-    ${pendingCard('Speed-to-Lead', 'Pending (needs Aircall sync)')}
+    ${rawCalls ? speedToLeadCard('Speed-to-Lead', totalSTLMinutes, totalSTLMatched, totalLeads, totalSTLMismatch, perSDR, d.goalSpeedToLead) : pendingCard('Speed-to-Lead', 'Load a Call History CSV to enable')}
     ${pendingCard('Cadence Adherence', 'Pending (manual score)')}
   `;
   applyExpandedState();
@@ -1587,6 +1783,28 @@ function pendingCard(label, sub) {
   </div>`;
 }
 
+// Formats a minute count as "Xm" under an hour, "Xh Ym" at/above one hour.
+function fmtMinutes(mins) {
+  const rounded = Math.round(mins);
+  if (rounded < 60) return `${rounded}m`;
+  return `${Math.floor(rounded / 60)}h ${rounded % 60}m`;
+}
+// sdrList: array of { key, label, color, minutesSum, matched }
+function speedToLeadCard(label, minutesSum, matched, totalLeads, mismatch, sdrList, goalVal) {
+  const avg = matched ? minutesSum / matched : null;
+  const matchedPct = totalLeads ? (matched / totalLeads * 100).toFixed(0) : '0';
+  const goalRow = (avg != null) ? goalStatusRow(avg, goalVal, false, true, 'Target (team)') : '';
+  const enriched = sdrList.map(s => ({ ...s, value: s.matched ? s.minutesSum / s.matched : 0, goalVal }));
+  return `<div class="card" data-label="${label}">
+    ${expandBtn(label)}
+    <div class="card-label">${label} <span class="goal-info" title="Time from a lead's creation to that SDR's first outbound call to it, matched by phone number from the Aircall call-history export. Leads with no matching call yet are excluded from the average (see match rate below), not penalized.">ⓘ</span></div>
+    <div class="card-value">${avg != null ? fmtMinutes(avg) : '—'}</div>
+    <div class="card-sub">${matched}/${totalLeads} leads called (${matchedPct}%)${mismatch ? ` · ${mismatch} flagged: different SDR than lead owner` : ''}</div>
+    ${splitRow(enriched, false, true)}
+    ${goalRow}
+  </div>`;
+}
+
 // ─── CHARTS ───────────────────────────────────────────────────────────────────
 const COLORS = { Team: '#6c63ff', Goal: 'rgba(0,0,0,0.35)', Pace: '#9c6dff' };
 
@@ -1638,6 +1856,12 @@ function makeChart(id, days, spec) {
   const combined = isCombinedMode(id);
   const cumulative = !!spec.cumulativeAllowed && isCumulative(id);
   const isRate = spec.type === 'rate';
+  // 'avg' is like 'rate' (numerator/denominator, summed then divided, never
+  // averaged per-bucket) but without the *100 — e.g. Speed-to-Lead minutes.
+  const isAvg = spec.type === 'avg';
+  const isRatio = isRate || isAvg;
+  const ratioScale = isRate ? 100 : 1;
+  const unitSuffix = isRate ? '%' : (isAvg ? ' min' : '');
   const buckets = bucketize(days, granularity);
   const labels = buckets.map(b => b.label);
 
@@ -1651,15 +1875,17 @@ function makeChart(id, days, spec) {
       // A bucket with no loaded data (future days) renders as a gap, not a zero.
       const present = b.days.filter(d => allData[d]);
       if (!present.length) return null;
-      if (isRate) {
+      if (isRatio) {
         // Sum numerator and denominator across the bucket, THEN divide —
         // never average per-day rates (that would weight thin days equally).
         const den = chartSum(present, v.key, spec.denom);
-        return den ? parseFloat((chartSum(present, v.key, spec.num) / den * 100).toFixed(1)) : 0;
+        // For 'avg' (Speed-to-Lead), a bucket with zero matched calls is a gap,
+        // not a 0 — 0 minutes would misleadingly read as an instant callback.
+        return den ? parseFloat((chartSum(present, v.key, spec.num) / den * ratioScale).toFixed(1)) : (isAvg ? null : 0);
       }
       return chartSum(present, v.key, spec.field);
     });
-    if (cumulative && !isRate) {
+    if (cumulative && !isRatio) {
       let sum = 0;
       data = data.map(val => (val == null ? null : (sum += val)));
     }
@@ -1675,9 +1901,9 @@ function makeChart(id, days, spec) {
   let paceDrawn = false;
   if (spec.pace && elapsed.length) {
     let paceData = null;
-    if (isRate) {
+    if (isRatio) {
       const den = chartSum(elapsed, keys, spec.denom);
-      const rate = den ? parseFloat((chartSum(elapsed, keys, spec.num) / den * 100).toFixed(1)) : 0;
+      const rate = den ? parseFloat((chartSum(elapsed, keys, spec.num) / den * ratioScale).toFixed(1)) : 0;
       if (rate) paceData = buckets.map(() => rate);
     } else {
       const perDay = chartSum(elapsed, keys, spec.field) / elapsed.length;
@@ -1695,7 +1921,7 @@ function makeChart(id, days, spec) {
   let goalDrawn = false;
   if (spec.goal) {
     let data;
-    if (isRate) {
+    if (isRatio) {
       data = buckets.map(() => spec.goal);
     } else if (cumulative) {
       let acc = 0;
@@ -1725,7 +1951,7 @@ function makeChart(id, days, spec) {
           titleColor: '#ffffff',
           bodyColor: '#cfd2e3',
           callbacks: {
-            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}${isRate ? '%' : ''}`
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}${unitSuffix}`
           }
         }
       },
@@ -1768,6 +1994,13 @@ function renderCharts(days) {
   makeChart('chartSDRDQ', chartDays, { type: 'rate', num: 'sdr_dq', denom: 'leadVol', pace: true });
   makeChart('chartMeetings', chartDays, { type: 'count', field: 'meetings', goal: d.goalMeetings, pace: true });
   makeChart('chartLeads', chartDays, { type: 'count', field: 'leadVol', goal: d.goalLeads, cumulativeAllowed: true });
+  const stlCard = document.getElementById('chartCardSpeedToLead');
+  if (rawCalls) {
+    if (stlCard) stlCard.style.display = '';
+    makeChart('chartSpeedToLead', chartDays, { type: 'avg', num: 'speed_to_lead_minutes_sum', denom: 'speed_to_lead_matched', goal: d.goalSpeedToLead, pace: true });
+  } else if (stlCard) {
+    stlCard.style.display = 'none';
+  }
   renderMeetingAttendanceChart(days);
 }
 
@@ -1859,6 +2092,7 @@ function goals() {
     meeting_rate: document.getElementById('goal_meeting_rate').value,
     pct_qual: document.getElementById('goal_pct_qual').value,
     nr_rate: document.getElementById('goal_nr_rate').value,
+    speed_to_lead: document.getElementById('goal_speed_to_lead').value,
   };
 }
 // Lead Volume is the baseline goal; Meetings Booked and Leads Qualified count
@@ -1873,6 +2107,7 @@ function derivedGoals() {
     goalMeetingRate,
     goalPctQual,
     goalNRRate: parseFloat(g.nr_rate) || null,
+    goalSpeedToLead: parseFloat(g.speed_to_lead) || null,
     goalMeetings: (goalLeads && goalMeetingRate) ? goalLeads * goalMeetingRate / 100 : null,
     goalQualified: (goalLeads && goalPctQual) ? goalLeads * goalPctQual / 100 : null,
   };
@@ -1896,6 +2131,7 @@ function loadGoals() {
     if (saved.meeting_rate) document.getElementById('goal_meeting_rate').value = saved.meeting_rate;
     if (saved.pct_qual) document.getElementById('goal_pct_qual').value = saved.pct_qual;
     if (saved.nr_rate) document.getElementById('goal_nr_rate').value = saved.nr_rate;
+    if (saved.speed_to_lead) document.getElementById('goal_speed_to_lead').value = saved.speed_to_lead;
     const override = localStorage.getItem('sdr_goal_leads_override') === 'true';
     document.getElementById('goal_leads_override').checked = override;
     document.getElementById('goal_leads').readOnly = !override;
