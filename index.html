@@ -547,13 +547,9 @@
   </div>
   <div class="header-right">
     <span class="last-updated" id="lastUpdated">No data loaded</span>
-    <button id="refreshBtn" onclick="document.getElementById('fileInput').click()">
-      &#x27F3; Load CSV
-    </button>
+    <button id="refreshBtn" onclick="document.getElementById('fileInput').click()">Load Airtable</button>
     <input type="file" id="fileInput" accept=".csv" onchange="handleFile(event)">
-    <button id="loadCallsBtn" title="Load Aircall call-history CSV for Speed-to-Lead" onclick="document.getElementById('callsFileInput').click()">
-      &#x1F4DE; Load Call History CSV
-    </button>
+    <button id="loadCallsBtn" title="Load Aircall call-history CSV for Speed-to-Lead" onclick="document.getElementById('callsFileInput').click()">Load Aircall</button>
     <input type="file" id="callsFileInput" accept=".csv" onchange="handleCallsFile(event)">
     <button id="clearDataBtn" title="Clear loaded data" onclick="clearLoadedData()">&#128465;</button>
   </div>
@@ -615,7 +611,7 @@
     <div class="charts-grid">
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">Meeting Booked Rate % <span class="goal-info" id="info-chartMeetingRate" title="Meetings Booked ÷ Lead Volume for each bucket — numerator and denominator are summed across the whole bucket first, then divided (never an average of daily rates, which would over-weight thin days). Dashed Target line = your Meeting Booked Rate target goal; dashed Pace line = the actual rate over elapsed days so far in this range.">ⓘ</span></span>
+          <span class="chart-title">Meeting Booked Rate % <span class="goal-info" id="info-chartMeetingRate" title="Meetings Booked ÷ Lead Volume for each bucket — numerator and denominator are summed across the whole bucket first, then divided (never an average of daily rates, which would over-weight thin days). Dashed Target line = your Meeting Booked Rate target goal; dashed Pace line = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetingRate"></div>
             <select class="chart-granularity" id="granularity-chartMeetingRate" onchange="renderCharts(getFilteredDays())">
@@ -634,7 +630,7 @@
       </div>
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">% Leads Qualified <span class="goal-info" id="info-chartQualPct" title="Qualified leads ÷ Lead Volume per bucket, summed then divided (not an average of daily rates). Qualified = any Sales status except Non respondant/Cold/Pending/Disqualified(-variant), OR a booked meeting, OR legacy SQL status = Qualified. Dashed Target = your % Qualified target goal; dashed Pace = the actual rate over elapsed days so far.">ⓘ</span></span>
+          <span class="chart-title">% Leads Qualified <span class="goal-info" id="info-chartQualPct" title="Qualified leads ÷ Lead Volume per bucket, summed then divided (not an average of daily rates). Qualified = any Sales status except Non respondant/Cold/Pending/Disqualified(-variant), OR a booked meeting, OR legacy SQL status = Qualified. Dashed Target = your % Qualified target goal; dashed Pace = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartQualPct"></div>
             <select class="chart-granularity" id="granularity-chartQualPct" onchange="renderCharts(getFilteredDays())">
@@ -653,7 +649,7 @@
       </div>
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">Non-Responsive Rate % <span class="goal-info" id="info-chartNR" title="Leads marked Sales status = Non respondant or Disqualified reason = Not responsive, ÷ Lead Volume per bucket, summed then divided. Lower is better. Dashed Target only appears if you've set a Non-Responsive Rate max goal; dashed Pace = the actual rate over elapsed days so far.">ⓘ</span></span>
+          <span class="chart-title">Non-Responsive Rate % <span class="goal-info" id="info-chartNR" title="Leads marked Sales status = Non respondant or Disqualified reason = Not responsive, ÷ Lead Volume per bucket, summed then divided. Lower is better. Dashed Target only appears if you've set a Non-Responsive Rate max goal; dashed Pace = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartNR"></div>
             <select class="chart-granularity" id="granularity-chartNR" onchange="renderCharts(getFilteredDays())">
@@ -672,7 +668,7 @@
       </div>
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">AE Disqualified Rate % <span class="goal-info" id="info-chartAEDQ" title="Leads the AE bounced back as wrongly qualified (Disqualified AE status) ÷ that SDR's qualified leads — measures hand-off quality. Summed then divided per bucket, not averaged day to day. No monthly goal for this one, so no Target line, but Pace shows the actual rate over elapsed days so far.">ⓘ</span></span>
+          <span class="chart-title">AE Disqualified Rate % <span class="goal-info" id="info-chartAEDQ" title="Leads the AE bounced back as wrongly qualified (Disqualified AE status) ÷ that SDR's qualified leads — measures hand-off quality. Summed then divided per bucket, not averaged day to day. No monthly goal for this one, so no Target line, but Pace shows a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartAEDQ"></div>
             <select class="chart-granularity" id="granularity-chartAEDQ" onchange="renderCharts(getFilteredDays())">
@@ -691,7 +687,7 @@
       </div>
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">SDR Disqualified Rate % <span class="goal-info" id="info-chartSDRDQ" title="Leads the SDR themselves disqualified (plain Disqualified status) ÷ lead volume — the SDR's own screening-out rate. Summed then divided per bucket, not averaged day to day. No monthly goal for this one, so no Target line, but Pace shows the actual rate over elapsed days so far.">ⓘ</span></span>
+          <span class="chart-title">SDR Disqualified Rate % <span class="goal-info" id="info-chartSDRDQ" title="Leads the SDR themselves disqualified (plain Disqualified status) ÷ lead volume — the SDR's own screening-out rate. Summed then divided per bucket, not averaged day to day. No monthly goal for this one, so no Target line, but Pace shows a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartSDRDQ"></div>
             <select class="chart-granularity" id="granularity-chartSDRDQ" onchange="renderCharts(getFilteredDays())">
@@ -710,9 +706,14 @@
       </div>
       <div class="chart-card full" id="chartCardSpeedToLead">
         <div class="chart-header">
-          <span class="chart-title">Speed-to-Lead (median minutes) <span class="goal-info" id="info-chartSpeedToLead" title="Median minutes from lead creation to first outbound call, matched by phone number from the Aircall call-history export. Median (not mean) so a few stale/unreliable matches can't skew it. Leads created before the Call History export's own earliest call — or matched to a call over 48h later — are excluded entirely. Requires a Call History CSV to be loaded. Dashed Target = your Speed-to-Lead goal; dashed Pace = the actual median over elapsed days so far.">ⓘ</span></span>
+          <span class="chart-title">Speed-to-Lead (median minutes) <span class="goal-info" id="info-chartSpeedToLead" title="Median minutes from lead creation to first outbound call, matched by phone number from the Aircall call-history export. Median (not mean) so a few stale/unreliable matches can't skew it. Leads created before the Call History export's own earliest call — or matched to a call over 48h later — are excluded entirely. Requires a Call History CSV to be loaded. Dashed Target = your Speed-to-Lead goal; dashed Pace = a trailing 3-bucket rolling median (3 weeks/days/months, matching whatever granularity is selected), and can be limited to On-hours-only or Off-hours-only leads with the dropdown next to the legend.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartSpeedToLead"></div>
+            <select class="chart-granularity" id="hoursFilter-chartSpeedToLead" onchange="renderCharts(getFilteredDays())">
+              <option value="both">On + Off hours</option>
+              <option value="on">On-hours only</option>
+              <option value="off">Off-hours only</option>
+            </select>
             <select class="chart-granularity" id="granularity-chartSpeedToLead" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
               <option value="weekly" selected>Weekly</option>
@@ -729,7 +730,7 @@
       </div>
       <div class="chart-card">
         <div class="chart-header">
-          <span class="chart-title">Meetings Booked <span class="goal-info" id="info-chartMeetings" title="Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = the actual per-bucket run rate over elapsed days so far.">ⓘ</span></span>
+          <span class="chart-title">Meetings Booked <span class="goal-info" id="info-chartMeetings" title="Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetings"></div>
             <select class="chart-granularity" id="granularity-chartMeetings" onchange="renderCharts(getFilteredDays())">
@@ -2025,27 +2026,29 @@ function makeChart(id, days, spec) {
       : { label: v.label, data, borderColor: v.color, backgroundColor: v.color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false };
   });
 
-  // Pace: the current selection's actual cumulative performance over elapsed
-  // days — the period-to-date rate for rate charts, the daily run rate scaled
-  // to each bucket's size for count charts. Built from the same commission-
-  // aware sums as the plotted lines, so it recalculates with every
-  // filter/SDR/range change rather than being a blind constant.
-  const elapsed = days.filter(d => d <= dubaiTodayKey() && allData[d]);
+  // Pace: a trailing 3-bucket rolling rate/run-rate (3 weeks/days/months,
+  // whichever granularity is selected), recomputed at every bucket instead of
+  // one flat number for the whole range — so a single thin/volatile recent
+  // bucket can't make the Pace line misrepresent the broader trend. Built from
+  // the same commission-aware sums as the plotted lines.
   let paceDrawn = false;
-  if (spec.pace && elapsed.length) {
-    let paceData = null;
-    if (isRate) {
-      const den = chartSum(elapsed, keys, spec.denom);
-      const rate = den ? parseFloat((chartSum(elapsed, keys, spec.num) / den * 100).toFixed(1)) : 0;
-      if (rate) paceData = buckets.map(() => rate);
-    } else {
-      const perDay = chartSum(elapsed, keys, spec.field) / elapsed.length;
-      if (perDay) paceData = buckets.map(b => parseFloat((perDay * b.days.length).toFixed(1)));
-    }
-    if (paceData) {
+  if (spec.pace) {
+    const paceData = buckets.map((b, i) => {
+      const windowBuckets = buckets.slice(Math.max(0, i - 2), i + 1);
+      const windowDays = windowBuckets.reduce((acc, wb) => acc.concat(wb.days), []).filter(d => d <= dubaiTodayKey() && allData[d]);
+      if (!windowDays.length) return null;
+      if (isRate) {
+        const den = chartSum(windowDays, keys, spec.denom);
+        return den ? parseFloat((chartSum(windowDays, keys, spec.num) / den * 100).toFixed(1)) : null;
+      }
+      const windowDayCount = windowBuckets.reduce((a, wb) => a + wb.days.length, 0);
+      const perDay = windowDayCount ? chartSum(windowDays, keys, spec.field) / windowDayCount : 0;
+      return parseFloat((perDay * b.days.length).toFixed(1));
+    });
+    if (paceData.some(v => v != null)) {
       // Explicit type:'line' so Pace still overlays as a dashed line even
       // when the chart's overall type is 'bar' (Chart.js mixed-type support).
-      datasets.push({ label: 'Pace', data: paceData, type: 'line', borderColor: COLORS.Pace, borderDash: [2, 4], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
+      datasets.push({ label: 'Pace', data: paceData, type: 'line', borderColor: COLORS.Pace, borderDash: [2, 4], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0, spanGaps: true });
       paceDrawn = true;
     }
   }
@@ -2151,7 +2154,9 @@ function chartViewContext(id, simpleMode) {
   const splitNote = (!combined && selectedSDRs.size > 1) ? 'one bar/line per selected SDR' : 'combined into one series';
   const granularity = chartGranularity(id);
   const style = isBarMode() ? 'bars' : 'lines';
-  return ` Currently showing: ${filterLabel}, ${sdrLabel} (${splitNote}), ${granularity} buckets, as ${style}.`;
+  const hoursFilterEl = document.getElementById('hoursFilter-' + id);
+  const hoursNote = hoursFilterEl ? ({ on: ', on-hours only', off: ', off-hours only' }[hoursFilterEl.value] || '') : '';
+  return ` Currently showing: ${filterLabel}, ${sdrLabel} (${splitNote}), ${granularity} buckets, as ${style}${hoursNote}.`;
 }
 function updateChartInfoTooltip(id, simpleMode) {
   const el = document.getElementById('info-' + id);
@@ -2179,6 +2184,10 @@ function renderSpeedToLeadChart(days) {
   const granularity = chartGranularity(id);
   const combined = isCombinedMode(id);
   const barMode = isBarMode();
+  // On-hours/Off-hours filter, specific to this chart (per your ask) — undefined
+  // means both, matching speedToLeadMinutesValues()'s onHoursFilter param.
+  const hoursFilterVal = document.getElementById('hoursFilter-' + id).value;
+  const onHoursFilter = hoursFilterVal === 'on' ? true : hoursFilterVal === 'off' ? false : undefined;
   const buckets = bucketize(days, granularity);
   const labels = buckets.map(b => b.label);
 
@@ -2191,19 +2200,27 @@ function renderSpeedToLeadChart(days) {
     const data = buckets.map(b => {
       const present = b.days.filter(d => allData[d]);
       if (!present.length) return null;
-      return median(speedToLeadMinutesValues(present, v.key));
+      return median(speedToLeadMinutesValues(present, v.key, onHoursFilter));
     });
     return barMode
       ? { label: v.label, data, backgroundColor: v.color, borderRadius: 3, borderWidth: 0 }
       : { label: v.label, data, borderColor: v.color, backgroundColor: v.color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false };
   });
 
-  // Pace: median over elapsed (<= today) days for the whole current selection.
-  const elapsed = days.filter(d => d <= dubaiTodayKey() && allData[d]);
-  const paceMedian = median(speedToLeadMinutesValues(elapsed, keys));
+  // Pace: a trailing 3-bucket rolling median (3 weeks/days/months, whichever
+  // granularity is selected) recomputed at every bucket, instead of one flat
+  // number for the whole range — so a single thin/volatile recent bucket
+  // can't make the Pace line misrepresent the broader trend.
   let paceDrawn = false;
-  if (paceMedian != null) {
-    datasets.push({ label: 'Pace', data: buckets.map(() => parseFloat(paceMedian.toFixed(1))), type: 'line', borderColor: COLORS.Pace, borderDash: [2, 4], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
+  const paceData = buckets.map((b, i) => {
+    const windowBuckets = buckets.slice(Math.max(0, i - 2), i + 1);
+    const windowDays = windowBuckets.reduce((acc, wb) => acc.concat(wb.days), []).filter(d => d <= dubaiTodayKey() && allData[d]);
+    if (!windowDays.length) return null;
+    const m = median(speedToLeadMinutesValues(windowDays, keys, onHoursFilter));
+    return m != null ? parseFloat(m.toFixed(1)) : null;
+  });
+  if (paceData.some(v => v != null)) {
+    datasets.push({ label: 'Pace', data: paceData, type: 'line', borderColor: COLORS.Pace, borderDash: [2, 4], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0, spanGaps: true });
     paceDrawn = true;
   }
 
