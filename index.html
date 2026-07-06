@@ -442,6 +442,38 @@
   .upload-zone p { font-size: 13px; margin-top: 8px; }
   .upload-icon { font-size: 32px; margin-bottom: 10px; }
 
+  /* LOADING OVERLAY — shown while a CSV is being parsed, so a big file never
+     looks like the page/browser has frozen with no feedback. */
+  .loading-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 22, 30, 0.55);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+  }
+  .loading-overlay.active { display: flex; }
+  .loading-box {
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 28px 36px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 600;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+  }
+  .loading-spinner {
+    width: 28px; height: 28px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    margin: 0 auto 12px;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
   #noData { display: none; }
   #dashboard { display: none; }
 
@@ -487,7 +519,14 @@
   }
 </style>
 </head>
-<body>
+<body ondragover="dragOver(event)" ondragleave="dragLeaveBody(event)" ondrop="dropFile(event)">
+
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="loading-box">
+    <div class="loading-spinner"></div>
+    <div>Processing CSV…</div>
+  </div>
+</div>
 
 <header>
   <div class="logo">
@@ -833,18 +872,53 @@ function handleFile(e) {
   if (!file) return;
   readFile(file);
 }
-function dragOver(e) { e.preventDefault(); document.getElementById('uploadZone').classList.add('drag'); }
-function dragLeave(e) { document.getElementById('uploadZone').classList.remove('drag'); }
+function dragOver(e) {
+  e.preventDefault();
+  const zone = document.getElementById('uploadZone');
+  if (zone) zone.classList.add('drag');
+}
+function dragLeave(e) {
+  const zone = document.getElementById('uploadZone');
+  if (zone) zone.classList.remove('drag');
+}
+// Body-level dragleave is noisy (fires between child elements) — only clear
+// the upload-zone highlight, don't otherwise react.
+function dragLeaveBody(e) { dragLeave(e); }
 function dropFile(e) {
   e.preventDefault();
   dragLeave(e);
-  const file = e.dataTransfer.files[0];
+  const file = (e.dataTransfer && e.dataTransfer.files) ? e.dataTransfer.files[0] : null;
   if (!file) return;
   readFile(file);
 }
+function showLoadingOverlay() {
+  const el = document.getElementById('loadingOverlay');
+  if (el) el.classList.add('active');
+}
+function hideLoadingOverlay() {
+  const el = document.getElementById('loadingOverlay');
+  if (el) el.classList.remove('active');
+}
 function readFile(file) {
+  showLoadingOverlay();
   const reader = new FileReader();
-  reader.onload = ev => parseCSV(ev.target.result, file.name);
+  reader.onload = ev => {
+    const text = ev.target.result;
+    // Let the browser paint the loading overlay before the (synchronous, CPU-
+    // heavy) parse/recompute work runs — otherwise the whole page appears to
+    // freeze with no feedback while a large CSV is being processed.
+    setTimeout(() => {
+      try {
+        parseCSV(text, file.name);
+      } finally {
+        hideLoadingOverlay();
+      }
+    }, 30);
+  };
+  reader.onerror = () => {
+    hideLoadingOverlay();
+    alert('Could not read that file. Please try again.');
+  };
   reader.readAsText(file);
 }
 
