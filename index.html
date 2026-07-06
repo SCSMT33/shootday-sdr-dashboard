@@ -1582,8 +1582,15 @@ function isQualifiedStatus(status) {
   return true;
 }
 const MEETING_BOOKED_STATUSES = ['Meeting Scheduled', 'Meeting Done', 'Meeting Rejected', 'Meeting Not Atended'];
+// A closed (won) deal always implies a meeting happened, even when Meeting
+// Status was left blank — common in the pre-SDR AE-era data (66% of Closed
+// deals there have no Meeting Status at all) but also catches a handful of
+// blank-status Closed rows in current SDR data too, so this applies uniformly
+// rather than being an AE-only special case. "Meeting Requested" is
+// deliberately NOT treated as booked — 76% of those rows end up Disqualified
+// afterward, suggesting it means "asked for," not "confirmed."
 function isMeetingBooked(r) {
-  return MEETING_BOOKED_STATUSES.includes(r['Meeting Status']);
+  return MEETING_BOOKED_STATUSES.includes(r['Meeting Status']) || r['Sales status'] === 'Closed';
 }
 // Of all booked meetings, the subset that didn't actually happen — used by the
 // Meeting Attendance chart to show what fraction of each SDR's booked meetings
