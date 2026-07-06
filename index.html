@@ -360,6 +360,50 @@
   .goal-override-label { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); cursor: pointer; }
   .pending-badge { background: var(--surface2); color: var(--muted); font-size: 10px; padding: 2px 7px; border-radius: 10px; display: inline-block; border: 1px solid var(--border); }
 
+  /* AE BASELINE */
+  .ae-baseline-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 16px;
+  }
+  .ae-baseline-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; gap: 12px; }
+  .ae-baseline-header-left { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .ae-baseline-title { font-size: 13px; font-weight: 600; }
+  .ae-baseline-sub { font-size: 11px; color: var(--muted); }
+  .ae-baseline-chevron { color: var(--muted); font-size: 12px; transition: transform 0.15s; }
+  .ae-baseline-section.expanded .ae-baseline-chevron { transform: rotate(90deg); }
+  .ae-baseline-body { display: none; margin-top: 16px; }
+  .ae-baseline-section.expanded .ae-baseline-body { display: block; }
+  .ae-baseline-upload-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .ae-baseline-loaded-note { font-size: 12px; color: var(--muted); }
+  .ae-baseline-facts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .ae-baseline-empty { color: var(--muted); font-size: 13px; padding: 10px 0; }
+  #loadAEBaselineBtn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  #loadAEBaselineBtn:hover { opacity: 0.85; }
+  #clearAEBaselineBtn {
+    background: var(--surface2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 9px;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  #clearAEBaselineBtn:hover { color: var(--red); border-color: var(--red); }
+  #aeBaselineFileInput { display: none; }
+
   /* COMMISSION CALCULATOR */
   .commission-section {
     background: var(--surface);
@@ -575,6 +619,11 @@
       <select id="chartStyleSelect" onchange="saveChartStyle(); renderCharts(getFilteredDays())">
         <option value="bar">Bars</option>
         <option value="line">Lines</option>
+      </select>
+      <span>AE Baseline:</span>
+      <select id="aeBaselineToggle" onchange="saveAEBaselineToggle(); renderDashboard()">
+        <option value="off">Off</option>
+        <option value="on">On</option>
       </select>
       <span>Leads:</span>
       <select id="leadTypeSelect" onchange="saveLeadTypeFilter(); renderDashboard()">
@@ -836,6 +885,26 @@
       </div>
     </div>
 
+    <!-- AE BASELINE (pre-SDR historical benchmark) -->
+    <div class="ae-baseline-section" id="aeBaselineSection">
+      <div class="ae-baseline-header" onclick="toggleAEBaselineSection()">
+        <div class="ae-baseline-header-left">
+          <span class="ae-baseline-title">AE Baseline <span class="goal-info" title="A frozen, one-time Airtable export from before SDRs existed, when Account Executives (Owner field) ran full-cycle deals themselves — no SDR-to-AE handoff, so there's no AE-Disqualified-Rate or Speed-to-Lead equivalent (no Aircall data from that era). Every other metric is computed with the exact same qualification/meeting-status logic used for SDRs, respecting the Leads: B2B/B2C/All filter above, so it's an apples-to-apples 'what did performance look like before SDRs' benchmark. Load once — this data doesn't change, so there's no need to re-upload it.">ⓘ</span></span>
+          <span class="ae-baseline-sub" id="aeBaselineHeaderNote">Click to expand — load once, compare SDR performance to the pre-SDR AE era</span>
+        </div>
+        <span class="ae-baseline-chevron">&#9654;</span>
+      </div>
+      <div class="ae-baseline-body">
+        <div class="ae-baseline-upload-row" id="aeBaselineUploadRow">
+          <button id="loadAEBaselineBtn" onclick="event.stopPropagation(); document.getElementById('aeBaselineFileInput').click()">Load AE Baseline CSV</button>
+          <input type="file" id="aeBaselineFileInput" accept=".csv" onchange="handleAEBaselineFile(event)">
+          <span class="ae-baseline-loaded-note" id="aeBaselineLoadedNote"></span>
+          <button id="clearAEBaselineBtn" class="ae-baseline-clear-btn" title="Clear AE baseline data" onclick="event.stopPropagation(); clearAEBaselineData()" style="display:none">&#128465;</button>
+        </div>
+        <div id="aeBaselineContent"><div class="ae-baseline-empty">No AE Baseline CSV loaded yet.</div></div>
+      </div>
+    </div>
+
     <!-- COMMISSION CALCULATOR -->
     <div class="commission-section">
       <div class="commission-title-row">
@@ -958,6 +1027,8 @@ let allDataB2B = null;   // same shape, always business-leads-only — used by C
 let rawByDay = null;   // { date: { <sdrKey>: [rows] } } — unfiltered raw rows, persisted
 let rawCalls = null;   // [{ phoneDigits, utcMs, sdrKey }] from the Aircall call-history CSV, persisted
 let callsFilename = null;
+let rawAEBaseline = null;   // flat array of pre-SDR AE-owned rows, persisted — loaded once, rarely refreshed
+let aeBaselineFilename = null;
 let selectedSDRs = new Set(SDRS.map(s => s.key));   // toggle-selected SDRs; all 4 selected by default
 let charts = {};
 let expandedCards = new Set();
@@ -1230,6 +1301,121 @@ function matchSpeedToLead() {
       entry.row._speedToLeadMismatch = !sameSDR;
     });
   });
+}
+
+// ─── AE BASELINE (frozen pre-SDR historical benchmark) ────────────────────────
+// Same CSV schema as Bookings, but from before SDRs existed — keyed by "Owner"
+// (the AE who ran the whole deal solo) instead of "SDR Owner" (which is blank
+// on every row). Loaded once, rarely refreshed, kept entirely separate from
+// the SDR/Calls data pipeline.
+function handleAEBaselineFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  readAEBaselineFile(file);
+}
+function readAEBaselineFile(file) {
+  showLoadingOverlay();
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const text = ev.target.result;
+    setTimeout(() => {
+      try {
+        parseAEBaselineCSV(text, file.name);
+      } finally {
+        hideLoadingOverlay();
+      }
+    }, 30);
+  };
+  reader.onerror = () => {
+    hideLoadingOverlay();
+    alert('Could not read that file. Please try again.');
+  };
+  reader.readAsText(file);
+}
+function parseAEBaselineCSV(text, filename) {
+  const raw = text.replace(/^﻿/, '');
+  const table = parseCSVText(raw);
+  if (!table.length) return;
+  const headers = table[0].map(h => h.trim());
+  const rows = [];
+  for (let i = 1; i < table.length; i++) {
+    const vals = table[i];
+    const row = {};
+    headers.forEach((h, idx) => { row[h] = (vals[idx] || '').trim(); });
+    if (row['Owner']) rows.push(row);
+  }
+  rawAEBaseline = rows;
+  aeBaselineFilename = filename;
+  saveAEBaselineData();
+  renderAEBaselineSection();
+  renderDashboard();
+}
+function saveAEBaselineData() {
+  try { localStorage.setItem('sdr_ae_baseline', JSON.stringify({ rows: rawAEBaseline, filename: aeBaselineFilename })); } catch (e) {}
+}
+function clearAEBaselineData() {
+  if (!rawAEBaseline && !localStorage.getItem('sdr_ae_baseline')) return;
+  if (!confirm('Clear the loaded AE Baseline data? This cannot be undone.')) return;
+  try { localStorage.removeItem('sdr_ae_baseline'); } catch (e) {}
+  rawAEBaseline = null;
+  aeBaselineFilename = null;
+  document.getElementById('aeBaselineFileInput').value = '';
+  renderAEBaselineSection();
+  renderDashboard();
+}
+function restoreAEBaselineData() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('sdr_ae_baseline') || 'null');
+    if (!saved || !saved.rows) return;
+    rawAEBaseline = saved.rows;
+    aeBaselineFilename = saved.filename;
+  } catch (e) {}
+}
+function toggleAEBaselineSection() {
+  document.getElementById('aeBaselineSection').classList.toggle('expanded');
+}
+function isAEBaselineOn() {
+  const el = document.getElementById('aeBaselineToggle');
+  return !!rawAEBaseline && !!el && el.value === 'on';
+}
+function saveAEBaselineToggle() {
+  try { localStorage.setItem('sdr_ae_baseline_toggle', document.getElementById('aeBaselineToggle').value); } catch (e) {}
+}
+function loadAEBaselineToggle() {
+  try {
+    const saved = localStorage.getItem('sdr_ae_baseline_toggle');
+    if (saved) document.getElementById('aeBaselineToggle').value = saved;
+  } catch (e) {}
+}
+// Computes the flat, whole-range AE benchmark: an overall bucket (all 7 AEs
+// combined) plus a per-AE breakdown, using the exact same computeMetrics()
+// logic as every SDR number, over whatever rows survive the current
+// B2B/B2C/All Leads: filter. Not date-bucketed like the SDR charts — this is
+// a single frozen historical average, not a trend.
+function computeAEBaselineMetrics() {
+  if (!rawAEBaseline || !rawAEBaseline.length) return null;
+  const filtered = applyLeadTypeFilter(rawAEBaseline);
+  const overall = computeMetrics(filtered);
+  const dayKeys = Array.from(new Set(rawAEBaseline.map(r => toDubaiDayKey(r['Creation Date'])).filter(Boolean))).sort();
+  const spanDays = calendarSpanDays(dayKeys) || 1;
+  const byOwner = {};
+  filtered.forEach(r => {
+    const owner = r['Owner'];
+    if (!byOwner[owner]) byOwner[owner] = [];
+    byOwner[owner].push(r);
+  });
+  const perAE = Object.keys(byOwner).sort().map(owner => ({ owner, metrics: computeMetrics(byOwner[owner]) }));
+  return {
+    overall,
+    perAE,
+    spanDays,
+    firstDay: dayKeys[0],
+    lastDay: dayKeys[dayKeys.length - 1],
+    leadsPerDay: overall.leads / spanDays,
+    meetingsPerDay: overall.meetings / spanDays,
+    qualifiedPerDay: overall.qualified / spanDays,
+    sdrDqRate: overall.leads ? (overall.sdr_dq / overall.leads * 100) : 0
+  };
 }
 
 // ─── BUSINESS-LEAD FILTER ──────────────────────────────────────────────────────
@@ -1725,6 +1911,7 @@ function renderDashboard() {
   renderSummaryCards(days);
   renderCharts(days);
   renderCommissionCalculator(days);
+  renderAEBaselineSection();
 }
 
 function renderSummaryCards(days) {
@@ -1734,6 +1921,7 @@ function renderSummaryCards(days) {
   const daysInMo = daysInCurrentMonth();
   const showProjection = isCurrentMonthToDate(rangeVal);
   const lastDay = days[days.length - 1];
+  const ae = isAEBaselineOn() ? computeAEBaselineMetrics() : null;
 
   // Totals for the current view
   const totalLeads = sumMetric(days, v, 'leads');
@@ -1800,12 +1988,12 @@ function renderSummaryCards(days) {
   });
 
   document.getElementById('summaryCards').innerHTML = `
-    ${countCard('Lead Volume', leadVolTotal, perSDR.map(s => ({ ...s, value: s.leadVol, goal: s.leadsGoal })), elapsed, daysInMo, showProjection, isCommission ? 'B2B leads only' : undefined, d.goalLeads)}
-    ${countCard('Meetings Booked', totalMeetings, perSDR.map(s => ({ ...s, value: s.meetings, goal: s.meetingsGoal })), elapsed, daysInMo, showProjection, undefined, d.goalMeetings)}
-    ${rateCard('Meeting Booked Rate', meetingRate, perSDR.map(s => ({ ...s, value: s.meetingRate })), isCommission ? meanRateCommission(days, v, 'meetings') : meanMetric(days, v, 'meeting_rate'), isCommission ? 'meetings (B2B+B2C) ÷ B2B leads' : 'meetings ÷ total leads', d.goalMeetingRate, false)}
-    ${countCard('Leads Qualified', totalQualified, perSDR.map(s => ({ ...s, value: s.qualified, goal: s.qualifiedGoal })), elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified)}
-    ${rateCard('% Leads Qualified', pctQual, perSDR.map(s => ({ ...s, value: s.pctQual })), isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'excludes non-responsive/cold/pending/disqualified', d.goalPctQual, false)}
-    ${rateCard('Non-Responsive Rate', nrRate, perSDR.map(s => ({ ...s, value: s.nrRate })), isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true)}
+    ${countCard('Lead Volume', leadVolTotal, perSDR.map(s => ({ ...s, value: s.leadVol, goal: s.leadsGoal })), elapsed, daysInMo, showProjection, isCommission ? 'B2B leads only' : undefined, d.goalLeads, ae ? ae.leadsPerDay : null)}
+    ${countCard('Meetings Booked', totalMeetings, perSDR.map(s => ({ ...s, value: s.meetings, goal: s.meetingsGoal })), elapsed, daysInMo, showProjection, undefined, d.goalMeetings, ae ? ae.meetingsPerDay : null)}
+    ${rateCard('Meeting Booked Rate', meetingRate, perSDR.map(s => ({ ...s, value: s.meetingRate })), isCommission ? meanRateCommission(days, v, 'meetings') : meanMetric(days, v, 'meeting_rate'), isCommission ? 'meetings (B2B+B2C) ÷ B2B leads' : 'meetings ÷ total leads', d.goalMeetingRate, false, ae ? ae.overall.meeting_rate : null)}
+    ${countCard('Leads Qualified', totalQualified, perSDR.map(s => ({ ...s, value: s.qualified, goal: s.qualifiedGoal })), elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified, ae ? ae.qualifiedPerDay : null)}
+    ${rateCard('% Leads Qualified', pctQual, perSDR.map(s => ({ ...s, value: s.pctQual })), isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'excludes non-responsive/cold/pending/disqualified', d.goalPctQual, false, ae ? ae.overall.pct_qualified : null)}
+    ${rateCard('Non-Responsive Rate', nrRate, perSDR.map(s => ({ ...s, value: s.nrRate })), isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true, ae ? ae.overall.nr_rate : null)}
     ${countCard('Disqualified by AE', totalAEDQ, perSDR.map(s => ({ ...s, value: s.aedq })), elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual')}
     ${pipelineCard('Active Pipeline', activePipeline, perSDR.map(s => ({ ...s, value: s.pipeline })), meanMetric(days, v, 'active_pipeline'), lastDay)}
     ${rawCalls ? speedToLeadCard('Speed-to-Lead', stlMedian, totalSTLMatched, totalSTLEligible, totalSTLMismatch, perSDR, d.goalSpeedToLead,
@@ -1860,7 +2048,9 @@ function splitRow(sdrList, isPct, lowerIsBetter) {
   </div>`;
 }
 
-function countCard(label, total, sdrList, elapsed, daysInMo, showProjection, extraSub, goalMonthly) {
+// aeBaselinePerDay: pre-SDR AE-era avg/day for this metric, shown only when
+// the AE Baseline toggle is on and the data is loaded.
+function countCard(label, total, sdrList, elapsed, daysInMo, showProjection, extraSub, goalMonthly, aeBaselinePerDay) {
   const avg = elapsed ? (total / elapsed) : 0;
   const enriched = sdrList.map(s => {
     const sAvg = elapsed ? (s.value / elapsed) : 0;
@@ -1869,6 +2059,7 @@ function countCard(label, total, sdrList, elapsed, daysInMo, showProjection, ext
   });
   const projected = showProjection ? Math.round(avg * daysInMo) : null;
   const goalRow = (showProjection && goalMonthly) ? goalStatusRow(projected, goalMonthly, false, false, 'Monthly Goal (team)') : '';
+  const aeRow = (isAEBaselineOn() && aeBaselinePerDay != null) ? `<div class="card-avg-row"><span>AE Baseline (avg/day)</span><span style="color:${COLORS.AEBaseline}">${aeBaselinePerDay.toFixed(1)}</span></div>` : '';
   return `<div class="card" data-label="${label}">
     ${expandBtn(label)}
     <div class="card-label">${label}</div>
@@ -1876,14 +2067,16 @@ function countCard(label, total, sdrList, elapsed, daysInMo, showProjection, ext
     <div class="card-sub">${extraSub || ''}</div>
     ${splitRow(enriched, false, false)}
     <div class="card-avg-row"><span>Avg / day</span><span>${avg.toFixed(1)}</span></div>
+    ${aeRow}
     ${projected !== null ? `<div class="card-projected"><span>Projected (month, team)</span><span>${projected}</span></div>` : ''}
     ${goalRow}
   </div>`;
 }
 
-function rateCard(label, pct, sdrList, avgDaily, extraSub, goalVal, lowerIsBetter) {
+function rateCard(label, pct, sdrList, avgDaily, extraSub, goalVal, lowerIsBetter, aeBaselinePct) {
   const goalRow = goalStatusRow(pct, goalVal, true, lowerIsBetter, 'Target (team)');
   const enriched = sdrList.map(s => ({ ...s, goalVal }));
+  const aeRow = (isAEBaselineOn() && aeBaselinePct != null) ? `<div class="card-avg-row"><span>AE Baseline</span><span style="color:${COLORS.AEBaseline}">${aeBaselinePct.toFixed(1)}%</span></div>` : '';
   return `<div class="card" data-label="${label}">
     ${expandBtn(label)}
     <div class="card-label">${label}</div>
@@ -1891,6 +2084,7 @@ function rateCard(label, pct, sdrList, avgDaily, extraSub, goalVal, lowerIsBette
     <div class="card-sub">${extraSub || ''}</div>
     ${splitRow(enriched, true, lowerIsBetter)}
     <div class="card-avg-row"><span>Avg / day</span><span>${avgDaily.toFixed(1)}%</span></div>
+    ${aeRow}
     ${goalRow}
   </div>`;
 }
@@ -1945,7 +2139,7 @@ function speedToLeadCard(label, medianMinutes, matched, eligible, mismatch, sdrL
 }
 
 // ─── CHARTS ───────────────────────────────────────────────────────────────────
-const COLORS = { Team: '#6c63ff', Goal: 'rgba(0,0,0,0.35)', Pace: '#9c6dff' };
+const COLORS = { Team: '#6c63ff', Goal: 'rgba(0,0,0,0.35)', Pace: '#9c6dff', AEBaseline: '#a0522d' };
 
 function isCumulative(id) {
   const el = document.getElementById('cumulativeToggle-' + id);
@@ -2071,6 +2265,20 @@ function makeChart(id, days, spec) {
     goalDrawn = true;
   }
 
+  // AE Baseline: a flat historical benchmark from the pre-SDR era (see the
+  // AE Baseline section) — spec.aeBaseline is already the right shape for
+  // this chart (a % for rate charts, an avg-per-day count for count charts),
+  // computed once in renderCharts(). Skipped for cumulative counts, where a
+  // flat per-day rate doesn't translate to a meaningful running total.
+  let aeBaselineDrawn = false;
+  if (isAEBaselineOn() && spec.aeBaseline != null && !cumulative) {
+    const data = isRate
+      ? buckets.map(() => spec.aeBaseline)
+      : buckets.map(b => parseFloat((spec.aeBaseline * b.days.length).toFixed(1)));
+    datasets.push({ label: 'AE Baseline', data, type: 'line', borderColor: COLORS.AEBaseline, borderDash: [3, 3], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
+    aeBaselineDrawn = true;
+  }
+
   if (charts[id]) { charts[id].destroy(); }
   const ctx = document.getElementById(id).getContext('2d');
   charts[id] = new Chart(ctx, {
@@ -2105,6 +2313,7 @@ function makeChart(id, days, spec) {
     const items = views.map(v => ({ label: v.label, color: v.color }));
     if (goalDrawn) items.push({ label: 'Target', color: COLORS.Goal });
     if (paceDrawn) items.push({ label: 'Pace', color: COLORS.Pace });
+    if (aeBaselineDrawn) items.push({ label: 'AE Baseline', color: COLORS.AEBaseline });
     legendEl.innerHTML = items.map(it =>
       `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
     ).join('');
@@ -2125,13 +2334,19 @@ function renderCharts(days) {
   const rangeVal = document.getElementById('rangeSelect').value;
   // In month-to-date views, span the whole month so future days show as gaps
   const chartDays = isCurrentMonthToDate(rangeVal) ? monthDayKeys() : days;
-  makeChart('chartMeetingRate', chartDays, { type: 'rate', num: 'meetings', denom: 'leadVol', goal: d.goalMeetingRate, pace: true });
-  makeChart('chartQualPct', chartDays, { type: 'rate', num: 'qualified', denom: 'leadVol', goal: d.goalPctQual, pace: true });
-  makeChart('chartNR', chartDays, { type: 'rate', num: 'non_responsive', denom: 'leadVol', goal: d.goalNRRate, pace: true });
+  // AE Baseline is a single frozen historical average (not date-bucketed),
+  // computed once here and handed to each chart as spec.aeBaseline — a flat
+  // % for rate charts, an avg-per-day count for count charts. No equivalent
+  // exists for AE-Disqualified-Rate (no SDR-to-AE handoff existed pre-SDR),
+  // so chartAEDQ intentionally gets no aeBaseline.
+  const ae = isAEBaselineOn() ? computeAEBaselineMetrics() : null;
+  makeChart('chartMeetingRate', chartDays, { type: 'rate', num: 'meetings', denom: 'leadVol', goal: d.goalMeetingRate, pace: true, aeBaseline: ae ? ae.overall.meeting_rate : null });
+  makeChart('chartQualPct', chartDays, { type: 'rate', num: 'qualified', denom: 'leadVol', goal: d.goalPctQual, pace: true, aeBaseline: ae ? ae.overall.pct_qualified : null });
+  makeChart('chartNR', chartDays, { type: 'rate', num: 'non_responsive', denom: 'leadVol', goal: d.goalNRRate, pace: true, aeBaseline: ae ? ae.overall.nr_rate : null });
   makeChart('chartAEDQ', chartDays, { type: 'rate', num: 'ae_dq', denom: 'qualified', pace: true });
-  makeChart('chartSDRDQ', chartDays, { type: 'rate', num: 'sdr_dq', denom: 'leadVol', pace: true });
-  makeChart('chartMeetings', chartDays, { type: 'count', field: 'meetings', goal: d.goalMeetings, pace: true });
-  makeChart('chartLeads', chartDays, { type: 'count', field: 'leadVol', goal: d.goalLeads, cumulativeAllowed: true });
+  makeChart('chartSDRDQ', chartDays, { type: 'rate', num: 'sdr_dq', denom: 'leadVol', pace: true, aeBaseline: ae ? ae.sdrDqRate : null });
+  makeChart('chartMeetings', chartDays, { type: 'count', field: 'meetings', goal: d.goalMeetings, pace: true, aeBaseline: ae ? ae.meetingsPerDay : null });
+  makeChart('chartLeads', chartDays, { type: 'count', field: 'leadVol', goal: d.goalLeads, cumulativeAllowed: true, aeBaseline: ae ? ae.leadsPerDay : null });
   renderSpeedToLeadChart(chartDays);
   renderMeetingAttendanceChart(days);
   ['chartMeetingRate', 'chartQualPct', 'chartNR', 'chartAEDQ', 'chartSDRDQ', 'chartSpeedToLead', 'chartMeetings', 'chartLeads']
@@ -2156,7 +2371,8 @@ function chartViewContext(id, simpleMode) {
   const style = isBarMode() ? 'bars' : 'lines';
   const hoursFilterEl = document.getElementById('hoursFilter-' + id);
   const hoursNote = hoursFilterEl ? ({ on: ', on-hours only', off: ', off-hours only' }[hoursFilterEl.value] || '') : '';
-  return ` Currently showing: ${filterLabel}, ${sdrLabel} (${splitNote}), ${granularity} buckets, as ${style}${hoursNote}.`;
+  const aeNote = isAEBaselineOn() ? ', AE Baseline overlay on' : (rawAEBaseline ? ', AE Baseline overlay off' : '');
+  return ` Currently showing: ${filterLabel}, ${sdrLabel} (${splitNote}), ${granularity} buckets, as ${style}${hoursNote}${aeNote}.`;
 }
 function updateChartInfoTooltip(id, simpleMode) {
   const el = document.getElementById('info-' + id);
@@ -2592,6 +2808,64 @@ function renderCommissionCalculator(days) {
   cardsEl.innerHTML = selected.map(s => commissionCard(s, days)).join('');
 }
 
+// ─── AE BASELINE SECTION RENDER ────────────────────────────────────────────────
+function aeBaselineFactTile(label, value, sub) {
+  return `<div class="commission-stat">
+    <div class="commission-stat-label">${label}</div>
+    <div class="commission-stat-value">${value}</div>
+    ${sub ? `<div class="commission-stat-sub">${sub}</div>` : ''}
+  </div>`;
+}
+function renderAEBaselineSection() {
+  const uploadRow = document.getElementById('aeBaselineUploadRow');
+  const loadedNote = document.getElementById('aeBaselineLoadedNote');
+  const clearBtn = document.getElementById('clearAEBaselineBtn');
+  const contentEl = document.getElementById('aeBaselineContent');
+  const headerNote = document.getElementById('aeBaselineHeaderNote');
+  if (!uploadRow || !contentEl) return;
+
+  if (!rawAEBaseline || !rawAEBaseline.length) {
+    loadedNote.textContent = '';
+    clearBtn.style.display = 'none';
+    headerNote.textContent = 'Click to expand — load once, compare SDR performance to the pre-SDR AE era';
+    contentEl.innerHTML = `<div class="ae-baseline-empty">No AE Baseline CSV loaded yet.</div>`;
+    return;
+  }
+
+  const ae = computeAEBaselineMetrics();
+  loadedNote.textContent = `${aeBaselineFilename} · ${ae.firstDay} – ${ae.lastDay} (${ae.spanDays} days) · ${rawAEBaseline.length} rows`;
+  clearBtn.style.display = '';
+  headerNote.textContent = `${ae.firstDay} – ${ae.lastDay} · ${ae.perAE.length} AEs · toggle "AE Baseline: On" above to overlay it on the charts`;
+
+  const o = ae.overall;
+  const factsHtml = `<div class="ae-baseline-facts-grid">
+    ${aeBaselineFactTile('Lead Volume', o.leads, `${ae.leadsPerDay.toFixed(1)}/day avg`)}
+    ${aeBaselineFactTile('Meetings Booked', o.meetings, `${ae.meetingsPerDay.toFixed(1)}/day avg`)}
+    ${aeBaselineFactTile('Meeting Booked Rate', o.meeting_rate.toFixed(1) + '%')}
+    ${aeBaselineFactTile('Leads Qualified', o.qualified, `${o.pct_qualified.toFixed(1)}% of leads`)}
+    ${aeBaselineFactTile('% Leads Qualified', o.pct_qualified.toFixed(1) + '%')}
+    ${aeBaselineFactTile('Non-Responsive Rate', o.nr_rate.toFixed(1) + '%')}
+    ${aeBaselineFactTile('Disqualified Rate', ae.sdrDqRate.toFixed(1) + '%', 'AE\'s own disqualifications ÷ leads')}
+  </div>`;
+
+  const perAERows = ae.perAE.map(({ owner, metrics: m }) => `<tr>
+    <td>${escapeHtml(owner)}</td>
+    <td>${m.leads}</td>
+    <td>${m.meetings}</td>
+    <td>${m.meeting_rate.toFixed(1)}%</td>
+    <td>${m.qualified}</td>
+    <td>${m.pct_qualified.toFixed(1)}%</td>
+    <td>${m.nr_rate.toFixed(1)}%</td>
+    <td>${m.leads ? (m.sdr_dq / m.leads * 100).toFixed(1) : '0.0'}%</td>
+  </tr>`).join('');
+  const tableHtml = `<table class="report-table">
+    <thead><tr><th>AE</th><th>Leads</th><th>Meetings</th><th>Meeting Rate</th><th>Qualified</th><th>% Qualified</th><th>NR Rate</th><th>Disqualified Rate</th></tr></thead>
+    <tbody>${perAERows}</tbody>
+  </table>`;
+
+  contentEl.innerHTML = factsHtml + tableHtml;
+}
+
 // ─── QUALIFIED LEADS REPORT (print / export as PDF) ────────────────────────────
 function escapeHtml(s) {
   return (s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -2692,6 +2966,9 @@ function exportQualifiedReport() {
 renderViewTabs();
 loadGoals();
 loadChartStyle();
+loadAEBaselineToggle();
+restoreAEBaselineData();
+renderAEBaselineSection();
 if (restoreLoadedData()) {
   renderDashboard();
 } else {
