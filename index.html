@@ -615,7 +615,7 @@
     <div class="charts-grid">
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">Meeting Booked Rate %</span>
+          <span class="chart-title">Meeting Booked Rate % <span class="goal-info" id="info-chartMeetingRate" title="Meetings Booked ÷ Lead Volume for each bucket — numerator and denominator are summed across the whole bucket first, then divided (never an average of daily rates, which would over-weight thin days). Dashed Target line = your Meeting Booked Rate target goal; dashed Pace line = the actual rate over elapsed days so far in this range.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetingRate"></div>
             <select class="chart-granularity" id="granularity-chartMeetingRate" onchange="renderCharts(getFilteredDays())">
@@ -634,7 +634,7 @@
       </div>
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">% Leads Qualified</span>
+          <span class="chart-title">% Leads Qualified <span class="goal-info" id="info-chartQualPct" title="Qualified leads ÷ Lead Volume per bucket, summed then divided (not an average of daily rates). Qualified = any Sales status except Non respondant/Cold/Pending/Disqualified(-variant), OR a booked meeting, OR legacy SQL status = Qualified. Dashed Target = your % Qualified target goal; dashed Pace = the actual rate over elapsed days so far.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartQualPct"></div>
             <select class="chart-granularity" id="granularity-chartQualPct" onchange="renderCharts(getFilteredDays())">
@@ -653,7 +653,7 @@
       </div>
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">Non-Responsive Rate %</span>
+          <span class="chart-title">Non-Responsive Rate % <span class="goal-info" id="info-chartNR" title="Leads marked Sales status = Non respondant or Disqualified reason = Not responsive, ÷ Lead Volume per bucket, summed then divided. Lower is better. Dashed Target only appears if you've set a Non-Responsive Rate max goal; dashed Pace = the actual rate over elapsed days so far.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartNR"></div>
             <select class="chart-granularity" id="granularity-chartNR" onchange="renderCharts(getFilteredDays())">
@@ -672,7 +672,7 @@
       </div>
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">AE Disqualified Rate % <span class="goal-info" title="Leads the AE bounced back as wrongly qualified (Disqualified AE status) ÷ that SDR's qualified leads — measures hand-off quality.">ⓘ</span></span>
+          <span class="chart-title">AE Disqualified Rate % <span class="goal-info" id="info-chartAEDQ" title="Leads the AE bounced back as wrongly qualified (Disqualified AE status) ÷ that SDR's qualified leads — measures hand-off quality. Summed then divided per bucket, not averaged day to day. No monthly goal for this one, so no Target line, but Pace shows the actual rate over elapsed days so far.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartAEDQ"></div>
             <select class="chart-granularity" id="granularity-chartAEDQ" onchange="renderCharts(getFilteredDays())">
@@ -691,7 +691,7 @@
       </div>
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">SDR Disqualified Rate % <span class="goal-info" title="Leads the SDR themselves disqualified (plain Disqualified status) ÷ lead volume — the SDR's own screening-out rate.">ⓘ</span></span>
+          <span class="chart-title">SDR Disqualified Rate % <span class="goal-info" id="info-chartSDRDQ" title="Leads the SDR themselves disqualified (plain Disqualified status) ÷ lead volume — the SDR's own screening-out rate. Summed then divided per bucket, not averaged day to day. No monthly goal for this one, so no Target line, but Pace shows the actual rate over elapsed days so far.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartSDRDQ"></div>
             <select class="chart-granularity" id="granularity-chartSDRDQ" onchange="renderCharts(getFilteredDays())">
@@ -710,7 +710,7 @@
       </div>
       <div class="chart-card full" id="chartCardSpeedToLead">
         <div class="chart-header">
-          <span class="chart-title">Speed-to-Lead (median minutes) <span class="goal-info" title="Median minutes from lead creation to first outbound call, matched by phone number from the Aircall call-history export. Median (not mean) so a few stale/unreliable matches can't skew it. Leads created before the Call History export's own earliest call — or matched to a call over 48h later — are excluded entirely. Requires a Call History CSV to be loaded.">ⓘ</span></span>
+          <span class="chart-title">Speed-to-Lead (median minutes) <span class="goal-info" id="info-chartSpeedToLead" title="Median minutes from lead creation to first outbound call, matched by phone number from the Aircall call-history export. Median (not mean) so a few stale/unreliable matches can't skew it. Leads created before the Call History export's own earliest call — or matched to a call over 48h later — are excluded entirely. Requires a Call History CSV to be loaded. Dashed Target = your Speed-to-Lead goal; dashed Pace = the actual median over elapsed days so far.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartSpeedToLead"></div>
             <select class="chart-granularity" id="granularity-chartSpeedToLead" onchange="renderCharts(getFilteredDays())">
@@ -729,7 +729,7 @@
       </div>
       <div class="chart-card">
         <div class="chart-header">
-          <span class="chart-title">Meetings Booked</span>
+          <span class="chart-title">Meetings Booked <span class="goal-info" id="info-chartMeetings" title="Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = the actual per-bucket run rate over elapsed days so far.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetings"></div>
             <select class="chart-granularity" id="granularity-chartMeetings" onchange="renderCharts(getFilteredDays())">
@@ -748,7 +748,7 @@
       </div>
       <div class="chart-card">
         <div class="chart-header">
-          <span class="chart-title">Lead Volume</span>
+          <span class="chart-title">Lead Volume <span class="goal-info" id="info-chartLeads" title="Count of leads created per bucket, after your Leads: filter (B2B/B2C/All/Commission) is applied. Cumulative toggle switches from per-bucket counts to a running total across the range. Dashed Target = your Lead Volume goal, prorated to each bucket's size; no Pace shown for a straight count chart like this one.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartLeads"></div>
             <select class="chart-granularity" id="granularity-chartLeads" onchange="renderCharts(getFilteredDays())">
@@ -772,7 +772,7 @@
       </div>
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">Meeting Attendance by SDR <span class="goal-info" title="Bar height = resolved meetings (Meeting Done + Meeting Not Atended + Meeting Rejected) for that SDR, over the selected date range — Meeting Scheduled is excluded since it hasn't happened yet. The dark bottom segment is the portion that was Meeting Not Atended or Meeting Rejected — the % shown is that segment's share of the SDR's resolved meetings. Always shows all 4 SDRs side by side regardless of the view-tab selection above.">ⓘ</span></span>
+          <span class="chart-title">Meeting Attendance by SDR <span class="goal-info" id="info-chartMeetingAttendance" title="Bar height = resolved meetings (Meeting Done + Meeting Not Atended + Meeting Rejected) for that SDR, over the selected date range — Meeting Scheduled is excluded since it hasn't happened yet. The dark bottom segment is the portion that was Meeting Not Atended or Meeting Rejected — the % shown is that segment's share of the SDR's resolved meetings. Always shows all 4 SDRs side by side regardless of the view-tab selection above.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetingAttendance"></div>
           </div>
@@ -2131,6 +2131,35 @@ function renderCharts(days) {
   makeChart('chartLeads', chartDays, { type: 'count', field: 'leadVol', goal: d.goalLeads, cumulativeAllowed: true });
   renderSpeedToLeadChart(chartDays);
   renderMeetingAttendanceChart(days);
+  ['chartMeetingRate', 'chartQualPct', 'chartNR', 'chartAEDQ', 'chartSDRDQ', 'chartSpeedToLead', 'chartMeetings', 'chartLeads']
+    .forEach(id => updateChartInfoTooltip(id));
+  updateChartInfoTooltip('chartMeetingAttendance', true);
+}
+
+// Appends a live "Currently showing: ..." summary to a chart's ⓘ tooltip,
+// on top of the calculation-logic text authored in the HTML — so the icon
+// always reflects the filter/SDR-selection/granularity/style you're actually
+// looking at, not just a static explanation you have to mentally translate.
+// meetingAttendance ignores granularity/style/SDR-selection by design, so its
+// context is limited to the Leads filter (simpleMode = true).
+function chartViewContext(id, simpleMode) {
+  const filter = leadTypeFilter();
+  const filterLabel = { business: 'B2B leads only', b2c: 'B2C leads only', all: 'All leads', commission: 'Commission View' }[filter] || filter;
+  if (simpleMode) return ` Currently showing: ${filterLabel}.`;
+  const sdrLabel = selectedSDRs.size === SDRS.length ? 'Team (all 4 SDRs)' : Array.from(selectedSDRs).map(k => SDR_BY_KEY[k].label).join(' + ');
+  const combined = isCombinedMode(id);
+  const splitNote = (!combined && selectedSDRs.size > 1) ? 'one bar/line per selected SDR' : 'combined into one series';
+  const granularity = chartGranularity(id);
+  const style = isBarMode() ? 'bars' : 'lines';
+  return ` Currently showing: ${filterLabel}, ${sdrLabel} (${splitNote}), ${granularity} buckets, as ${style}.`;
+}
+function updateChartInfoTooltip(id, simpleMode) {
+  const el = document.getElementById('info-' + id);
+  if (!el) return;
+  // Capture the calculation-logic text authored in the HTML exactly once,
+  // so repeated renders append fresh context instead of stacking duplicates.
+  if (el.dataset.base === undefined) el.dataset.base = el.title;
+  el.title = el.dataset.base + chartViewContext(id, simpleMode);
 }
 
 // Speed-to-Lead gets its own chart (not the generic makeChart machinery)
