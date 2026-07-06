@@ -744,7 +744,7 @@
       </div>
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">Meeting Attendance by SDR <span class="goal-info" title="Bar height = total meetings booked (Meeting Scheduled + Meeting Done + Meeting Not Atended + Meeting Rejected) for that SDR, over the selected date range. The dark bottom segment is the portion that was Meeting Not Atended or Meeting Rejected — the % shown is that segment's share of the SDR's total booked meetings. Always shows all 4 SDRs side by side regardless of the view-tab selection above.">ⓘ</span></span>
+          <span class="chart-title">Meeting Attendance by SDR <span class="goal-info" title="Bar height = resolved meetings (Meeting Done + Meeting Not Atended + Meeting Rejected) for that SDR, over the selected date range — Meeting Scheduled is excluded since it hasn't happened yet. The dark bottom segment is the portion that was Meeting Not Atended or Meeting Rejected — the % shown is that segment's share of the SDR's resolved meetings. Always shows all 4 SDRs side by side regardless of the view-tab selection above.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetingAttendance"></div>
           </div>
@@ -1165,6 +1165,14 @@ const MEETING_NOT_ATTENDED_STATUSES = ['Meeting Not Atended', 'Meeting Rejected'
 function isMeetingNotAttended(r) {
   return MEETING_NOT_ATTENDED_STATUSES.includes(r['Meeting Status']);
 }
+// Meetings that have actually resolved one way or another (Done, Not Atended,
+// or Rejected) — excludes Meeting Scheduled, since a still-upcoming meeting
+// hasn't happened yet and shouldn't count toward an attendance rate. Used by
+// the Meeting Attendance chart as the bar total.
+const MEETING_RESOLVED_STATUSES = ['Meeting Done', 'Meeting Not Atended', 'Meeting Rejected'];
+function isMeetingResolved(r) {
+  return MEETING_RESOLVED_STATUSES.includes(r['Meeting Status']);
+}
 // A lead counts as qualified if its Sales status qualifies on its own, OR it
 // already has a meeting booked (a booked meeting always implies the lead was
 // qualified, even if Sales status hasn't caught up — though not every
@@ -1177,9 +1185,10 @@ function isQualifiedLead(r) {
   return false;
 }
 function computeMetrics(leads) {
-  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0 };
+  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0 };
   const meetings = leads.filter(isMeetingBooked).length;
   const meetings_not_attended = leads.filter(isMeetingNotAttended).length;
+  const meetings_resolved = leads.filter(isMeetingResolved).length;
   const qualified = leads.filter(isQualifiedLead).length;
   const non_responsive = leads.filter(r => r['Disqualified reason'] === 'Not responsive' || r['Sales status'] === 'Non respondant').length;
   const ae_dq = leads.filter(r => (r['Sales status'] || '').includes('Disqualified AE')).length;
@@ -1197,7 +1206,8 @@ function computeMetrics(leads) {
     ae_dq,
     sdr_dq,
     active_pipeline,
-    meetings_not_attended
+    meetings_not_attended,
+    meetings_resolved
   };
 }
 
@@ -1789,7 +1799,7 @@ const meetingAttendancePctPlugin = {
 // over whatever date range is currently filtered.
 function renderMeetingAttendanceChart(days) {
   const rows = SDRS.map(s => {
-    const total = sumMetric(days, s.key, 'meetings');
+    const total = sumMetric(days, s.key, 'meetings_resolved');
     const notAttended = sumMetric(days, s.key, 'meetings_not_attended');
     return { ...s, total, notAttended, completed: total - notAttended };
   });
@@ -1801,7 +1811,7 @@ function renderMeetingAttendanceChart(days) {
       labels: rows.map(r => r.label),
       datasets: [
         { label: 'Not Attended / Rejected', data: rows.map(r => r.notAttended), backgroundColor: '#8a1f1f', stack: 's' },
-        { label: 'Scheduled / Done', data: rows.map(r => r.completed), backgroundColor: rows.map(r => r.color), stack: 's' }
+        { label: 'Meeting Done', data: rows.map(r => r.completed), backgroundColor: rows.map(r => r.color), stack: 's' }
       ]
     },
     options: {
@@ -1820,9 +1830,9 @@ function renderMeetingAttendanceChart(days) {
                 const pct = total ? (rows[i].notAttended / total * 100).toFixed(1) : '0.0';
                 return ` Not Attended/Rejected: ${rows[i].notAttended} (${pct}%)`;
               }
-              return ` Scheduled/Done: ${ctx.parsed.y}`;
+              return ` Meeting Done: ${ctx.parsed.y}`;
             },
-            footer: items => ` Total booked: ${rows[items[0].dataIndex].total}`
+            footer: items => ` Total resolved: ${rows[items[0].dataIndex].total}`
           }
         }
       },
@@ -1837,7 +1847,7 @@ function renderMeetingAttendanceChart(days) {
   if (legendEl) {
     legendEl.innerHTML = `
       <span class="legend-item"><span class="legend-dot" style="background:#8a1f1f"></span>Not Attended / Rejected (%)</span>
-      <span class="legend-item"><span class="legend-dot" style="background:#4285f4"></span>Scheduled / Done</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#4285f4"></span>Meeting Done</span>
     `;
   }
 }
