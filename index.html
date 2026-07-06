@@ -78,6 +78,18 @@
     transition: opacity 0.15s;
   }
   #refreshBtn:hover { opacity: 0.85; }
+  #clearDataBtn {
+    background: var(--surface2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  #clearDataBtn:hover { color: var(--red); border-color: var(--red); }
   #fileInput { display: none; }
 
   /* VIEW TOGGLE */
@@ -538,6 +550,7 @@
     <button id="refreshBtn" onclick="document.getElementById('fileInput').click()">
       &#x27F3; Load CSV
     </button>
+    <button id="clearDataBtn" title="Clear loaded data" onclick="clearLoadedData()">&#128465;</button>
     <input type="file" id="fileInput" accept=".csv" onchange="handleFile(event)">
   </div>
 </header>
@@ -1082,6 +1095,23 @@ function saveLoadedData(filename) {
   try {
     localStorage.setItem('sdr_data', JSON.stringify({ rawByDay, filename }));
   } catch (e) {}
+}
+// Wipes the loaded CSV (in-memory and persisted) and drops back to the
+// upload screen, so a fresh file can be loaded without stale data lingering.
+function clearLoadedData() {
+  if (!rawByDay && !localStorage.getItem('sdr_data')) return;
+  if (!confirm('Clear the currently loaded CSV data? This cannot be undone.')) return;
+  try { localStorage.removeItem('sdr_data'); } catch (e) {}
+  rawByDay = null;
+  allData = null;
+  allDataB2B = null;
+  Object.values(charts).forEach(c => c.destroy());
+  charts = {};
+  document.getElementById('fileInput').value = '';
+  document.getElementById('lastUpdated').textContent = 'No data loaded';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('noData').style.display = 'block';
+  closeReportPreview();
 }
 function restoreLoadedData() {
   try {
