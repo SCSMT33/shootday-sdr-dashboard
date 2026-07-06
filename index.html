@@ -716,7 +716,7 @@
       </div>
       <div class="chart-card full" id="chartCardSpeedToLead">
         <div class="chart-header">
-          <span class="chart-title">Speed-to-Lead (avg minutes) <span class="goal-info" title="Average minutes from lead creation to first outbound call, matched by phone number from the Aircall call-history export. Requires a Call History CSV to be loaded; leads with no matching call yet are excluded from the average.">ⓘ</span></span>
+          <span class="chart-title">Speed-to-Lead (median minutes) <span class="goal-info" title="Median minutes from lead creation to first outbound call, matched by phone number from the Aircall call-history export. Median (not mean) so a few stale/unreliable matches can't skew it. Leads created before the Call History export's own earliest call — or matched to a call over 48h later — are excluded entirely. Requires a Call History CSV to be loaded.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartSpeedToLead"></div>
             <select class="chart-granularity" id="granularity-chartSpeedToLead" onchange="renderCharts(getFilteredDays())">
@@ -1160,6 +1160,11 @@ function parseCallCSV(text, filename) {
 // placed to its phone number, at/after the lead's creation instant. Attaches
 // the result directly onto each row object so the normal per-day/per-SDR
 // aggregation in computeMetrics() picks it up with no restructuring.
+// A match found further out than this is treated as unreliable (almost
+// certainly the true first call fell outside the Call History export and
+// this is some later follow-up call instead) — discarded rather than counted,
+// so a handful of stale matches can't blow up the numbers.
+const SPEED_TO_LEAD_MAX_RELIABLE_MINUTES = 48 * 60;
 function matchSpeedToLead() {
   if (!rawByDay) return;
   // Clear any previous match (e.g. calls CSV was reloaded), and (re)tag every
@@ -1169,12 +1174,19 @@ function matchSpeedToLead() {
   Object.keys(rawByDay).forEach(day => {
     SDRS.forEach(s => {
       (rawByDay[day][s.key] || []).forEach(r => {
-        delete r._speedToLeadMinutes; delete r._speedToLeadMatched; delete r._speedToLeadMismatch;
+        delete r._speedToLeadMinutes; delete r._speedToLeadMatched; delete r._speedToLeadMismatch; delete r._speedToLeadEligible;
         r._onHours = isOnHours(s.key, toUTCMillis(r['Creation Date']));
       });
     });
   });
   if (!rawCalls || !rawCalls.length) return;
+
+  // The call log is a rolling recent export — it can't tell us anything about
+  // leads created before its own earliest call. Those leads get matched to
+  // whatever later call happens to exist for that number, wildly overstating
+  // the gap, so they're marked ineligible and excluded entirely (not counted
+  // as called, not counted as uncalled).
+  const callLogWindowStart = rawCalls.reduce((min, c) => Math.min(min, c.utcMs), rawCalls[0].utcMs);
 
   const callsByPhone = new Map();
   rawCalls.forEach(c => {
@@ -1193,6 +1205,7 @@ function matchSpeedToLead() {
         const phoneDigits = normalizePhoneDigits(row['Phone']);
         const creationUtcMs = toUTCMillis(row['Creation Date']);
         if (!phoneDigits || creationUtcMs == null) return;
+        row._speedToLeadEligible = creationUtcMs >= callLogWindowStart;
         if (!rowsByPhone.has(phoneDigits)) rowsByPhone.set(phoneDigits, []);
         rowsByPhone.get(phoneDigits).push({ row, creationUtcMs, sdrKey: s.key });
       });
@@ -1203,14 +1216,16 @@ function matchSpeedToLead() {
     entries.sort((a, b) => a.creationUtcMs - b.creationUtcMs);
     const calls = callsByPhone.get(phoneDigits);
     entries.forEach((entry, idx) => {
-      const windowEnd = idx + 1 < entries.length ? entries[idx + 1].creationUtcMs : Infinity;
       entry.row._speedToLeadMatched = false;
-      if (!calls) return;
+      if (!entry.row._speedToLeadEligible || !calls) return;
+      const windowEnd = idx + 1 < entries.length ? entries[idx + 1].creationUtcMs : Infinity;
       const candidates = calls.filter(c => c.utcMs >= entry.creationUtcMs && c.utcMs < windowEnd);
       if (!candidates.length) return;
       const sameSDR = candidates.find(c => c.sdrKey === entry.sdrKey);
       const call = sameSDR || candidates[0];
-      entry.row._speedToLeadMinutes = (call.utcMs - entry.creationUtcMs) / 60000;
+      const minutes = (call.utcMs - entry.creationUtcMs) / 60000;
+      if (minutes > SPEED_TO_LEAD_MAX_RELIABLE_MINUTES) return;
+      entry.row._speedToLeadMinutes = minutes;
       entry.row._speedToLeadMatched = true;
       entry.row._speedToLeadMismatch = !sameSDR;
     });
@@ -1394,9 +1409,9 @@ function isQualifiedLead(r) {
   return false;
 }
 function computeMetrics(leads) {
-  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, speed_to_lead_minutes_sum: 0, speed_to_lead_matched: 0, speed_to_lead_mismatch: 0,
-    speed_to_lead_on_minutes_sum: 0, speed_to_lead_on_matched: 0, speed_to_lead_on_total: 0,
-    speed_to_lead_off_minutes_sum: 0, speed_to_lead_off_matched: 0, speed_to_lead_off_total: 0 };
+  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, speed_to_lead_matched: 0, speed_to_lead_eligible: 0, speed_to_lead_mismatch: 0,
+    speed_to_lead_on_matched: 0, speed_to_lead_on_eligible: 0,
+    speed_to_lead_off_matched: 0, speed_to_lead_off_eligible: 0 };
   const meetings = leads.filter(isMeetingBooked).length;
   const meetings_not_attended = leads.filter(isMeetingNotAttended).length;
   const meetings_resolved = leads.filter(isMeetingResolved).length;
@@ -1406,9 +1421,12 @@ function computeMetrics(leads) {
   // Plain "Disqualified" (the SDR's own call) — distinct from the AE-disqualified status above
   const sdr_dq = leads.filter(r => (r['Sales status'] || '').trim().toLowerCase() === 'disqualified').length;
   const active_pipeline = leads.filter(r => !['Closed','Disqualified','Lost','Deposit refund',''].includes(r['Sales status'])).length;
-  // Set by matchSpeedToLead() onto each row before computeMetrics runs.
-  const speedToLeadRows = leads.filter(r => r._speedToLeadMatched);
-  const speed_to_lead_minutes_sum = speedToLeadRows.reduce((acc, r) => acc + r._speedToLeadMinutes, 0);
+  // Set by matchSpeedToLead() onto each row before computeMetrics runs. Counts
+  // are summable across days/SDRs; the actual minute values (for a median)
+  // are read directly from rawByDay by speedToLeadMinutesValues() instead —
+  // a median can't be built up from per-bucket sums the way these counts can.
+  const speed_to_lead_matched = leads.filter(r => r._speedToLeadMatched).length;
+  const speed_to_lead_eligible = leads.filter(r => r._speedToLeadEligible).length;
   const speed_to_lead_mismatch = leads.filter(r => r._speedToLeadMismatch).length;
   // On-hours/off-hours split, per the SDR Lead Routing Logic shift windows —
   // lets Speed-to-Lead be viewed separately for leads that landed during an
@@ -1416,9 +1434,8 @@ function computeMetrics(leads) {
   const onLeads = leads.filter(r => r._onHours);
   const offLeads = leads.filter(r => !r._onHours);
   const stlSplit = rows => ({
-    speed_to_lead_minutes_sum: rows.filter(r => r._speedToLeadMatched).reduce((acc, r) => acc + r._speedToLeadMinutes, 0),
-    speed_to_lead_matched: rows.filter(r => r._speedToLeadMatched).length,
-    speed_to_lead_total: rows.length
+    matched: rows.filter(r => r._speedToLeadMatched).length,
+    eligible: rows.filter(r => r._speedToLeadEligible).length
   });
   const onSplit = stlSplit(onLeads), offSplit = stlSplit(offLeads);
   return {
@@ -1434,16 +1451,41 @@ function computeMetrics(leads) {
     active_pipeline,
     meetings_not_attended,
     meetings_resolved,
-    speed_to_lead_minutes_sum,
-    speed_to_lead_matched: speedToLeadRows.length,
+    speed_to_lead_matched,
+    speed_to_lead_eligible,
     speed_to_lead_mismatch,
-    speed_to_lead_on_minutes_sum: onSplit.speed_to_lead_minutes_sum,
-    speed_to_lead_on_matched: onSplit.speed_to_lead_matched,
-    speed_to_lead_on_total: onSplit.speed_to_lead_total,
-    speed_to_lead_off_minutes_sum: offSplit.speed_to_lead_minutes_sum,
-    speed_to_lead_off_matched: offSplit.speed_to_lead_matched,
-    speed_to_lead_off_total: offSplit.speed_to_lead_total
+    speed_to_lead_on_matched: onSplit.matched,
+    speed_to_lead_on_eligible: onSplit.eligible,
+    speed_to_lead_off_matched: offSplit.matched,
+    speed_to_lead_off_eligible: offSplit.eligible
   };
+}
+
+function median(nums) {
+  if (!nums.length) return null;
+  const s = nums.slice().sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+// Raw Speed-to-Lead minute values for the given days + SDR keys, read
+// directly from rawByDay (respecting the current B2B/B2C/All lead-type
+// filter) — a median can't be built up from per-day/per-SDR sums the way the
+// other metrics are, so this bypasses the allData rollup on purpose.
+// onHoursFilter: omit for both, true for on-hours only, false for off-hours only.
+function speedToLeadMinutesValues(days, sdrKeys, onHoursFilter) {
+  if (!rawByDay) return [];
+  const keys = sdrKeys.length === SDRS.length ? SDRS.map(s => s.key) : sdrKeys;
+  const vals = [];
+  days.forEach(d => {
+    keys.forEach(k => {
+      applyLeadTypeFilter(rawByDay[d] && rawByDay[d][k] || []).forEach(r => {
+        if (!r._speedToLeadMatched) return;
+        if (onHoursFilter !== undefined && !!r._onHours !== onHoursFilter) return;
+        vals.push(r._speedToLeadMinutes);
+      });
+    });
+  });
+  return vals;
 }
 
 // ─── VIEW TOGGLE (multi-select SDRs) ──────────────────────────────────────────
@@ -1585,14 +1627,14 @@ function metricsForSelection(dataset, day, view) {
   const sum = f => parts.reduce((a, p) => a + (p[f] || 0), 0);
   const leads = sum('leads'), meetings = sum('meetings'), qualified = sum('qualified'),
         non_responsive = sum('non_responsive'), ae_dq = sum('ae_dq'), sdr_dq = sum('sdr_dq'), active_pipeline = sum('active_pipeline'),
-        speed_to_lead_minutes_sum = sum('speed_to_lead_minutes_sum'), speed_to_lead_matched = sum('speed_to_lead_matched'), speed_to_lead_mismatch = sum('speed_to_lead_mismatch'),
-        speed_to_lead_on_minutes_sum = sum('speed_to_lead_on_minutes_sum'), speed_to_lead_on_matched = sum('speed_to_lead_on_matched'), speed_to_lead_on_total = sum('speed_to_lead_on_total'),
-        speed_to_lead_off_minutes_sum = sum('speed_to_lead_off_minutes_sum'), speed_to_lead_off_matched = sum('speed_to_lead_off_matched'), speed_to_lead_off_total = sum('speed_to_lead_off_total');
+        speed_to_lead_matched = sum('speed_to_lead_matched'), speed_to_lead_eligible = sum('speed_to_lead_eligible'), speed_to_lead_mismatch = sum('speed_to_lead_mismatch'),
+        speed_to_lead_on_matched = sum('speed_to_lead_on_matched'), speed_to_lead_on_eligible = sum('speed_to_lead_on_eligible'),
+        speed_to_lead_off_matched = sum('speed_to_lead_off_matched'), speed_to_lead_off_eligible = sum('speed_to_lead_off_eligible');
   return {
     leads, meetings, qualified, non_responsive, ae_dq, sdr_dq, active_pipeline,
-    speed_to_lead_minutes_sum, speed_to_lead_matched, speed_to_lead_mismatch,
-    speed_to_lead_on_minutes_sum, speed_to_lead_on_matched, speed_to_lead_on_total,
-    speed_to_lead_off_minutes_sum, speed_to_lead_off_matched, speed_to_lead_off_total,
+    speed_to_lead_matched, speed_to_lead_eligible, speed_to_lead_mismatch,
+    speed_to_lead_on_matched, speed_to_lead_on_eligible,
+    speed_to_lead_off_matched, speed_to_lead_off_eligible,
     meeting_rate: leads ? meetings / leads * 100 : 0,
     pct_qualified: leads ? qualified / leads * 100 : 0,
     nr_rate: leads ? non_responsive / leads * 100 : 0
@@ -1669,15 +1711,16 @@ function renderSummaryCards(days) {
   const totalQualified = sumMetric(days, v, 'qualified');
   const totalNR = sumMetric(days, v, 'non_responsive');
   const totalAEDQ = sumMetric(days, v, 'ae_dq');
-  const totalSTLMinutes = sumMetric(days, v, 'speed_to_lead_minutes_sum');
   const totalSTLMatched = sumMetric(days, v, 'speed_to_lead_matched');
+  const totalSTLEligible = sumMetric(days, v, 'speed_to_lead_eligible');
   const totalSTLMismatch = sumMetric(days, v, 'speed_to_lead_mismatch');
-  const totalSTLOnMinutes = sumMetric(days, v, 'speed_to_lead_on_minutes_sum');
   const totalSTLOnMatched = sumMetric(days, v, 'speed_to_lead_on_matched');
-  const totalSTLOnTotal = sumMetric(days, v, 'speed_to_lead_on_total');
-  const totalSTLOffMinutes = sumMetric(days, v, 'speed_to_lead_off_minutes_sum');
+  const totalSTLOnEligible = sumMetric(days, v, 'speed_to_lead_on_eligible');
   const totalSTLOffMatched = sumMetric(days, v, 'speed_to_lead_off_matched');
-  const totalSTLOffTotal = sumMetric(days, v, 'speed_to_lead_off_total');
+  const totalSTLOffEligible = sumMetric(days, v, 'speed_to_lead_off_eligible');
+  const stlMedian = median(speedToLeadMinutesValues(days, v));
+  const stlOnMedian = median(speedToLeadMinutesValues(days, v, true));
+  const stlOffMedian = median(speedToLeadMinutesValues(days, v, false));
   const lastDayBucket = lastDay ? metricsForSelection(allData, lastDay, v) : null;
   const activePipeline = lastDayBucket ? lastDayBucket.active_pipeline : 0;
 
@@ -1709,14 +1752,14 @@ function renderSummaryCards(days) {
     const qualified = sumMetric(days, s.key, 'qualified');
     const nr = sumMetric(days, s.key, 'non_responsive');
     const aedq = sumMetric(days, s.key, 'ae_dq');
-    const minutesSum = sumMetric(days, s.key, 'speed_to_lead_minutes_sum');
+    const medianMinutes = median(speedToLeadMinutesValues(days, [s.key]));
     const matched = sumMetric(days, s.key, 'speed_to_lead_matched');
     const sPipelineBucket = lastDay ? metricsForSelection(allData, lastDay, s.key) : null;
     const pipeline = sPipelineBucket ? sPipelineBucket.active_pipeline : 0;
     const leadVol = isCommission ? sumMetricFrom(allDataB2B, days, s.key, 'leads') : leads;
     const leadsProjected = elapsed ? (leadVol / elapsed * daysInMo) : 0;
     return {
-      ...s, leads, meetings, qualified, nr, aedq, pipeline, leadVol, leadsProjected, minutesSum, matched,
+      ...s, leads, meetings, qualified, nr, aedq, pipeline, leadVol, leadsProjected, medianMinutes, matched,
       pctQual: leadVol ? (qualified / leadVol * 100) : 0,
       nrRate: leadVol ? (nr / leadVol * 100) : 0,
       meetingRate: leadVol ? (meetings / leadVol * 100) : 0,
@@ -1735,9 +1778,9 @@ function renderSummaryCards(days) {
     ${rateCard('Non-Responsive Rate', nrRate, perSDR.map(s => ({ ...s, value: s.nrRate })), isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true)}
     ${countCard('Disqualified by AE', totalAEDQ, perSDR.map(s => ({ ...s, value: s.aedq })), elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual')}
     ${pipelineCard('Active Pipeline', activePipeline, perSDR.map(s => ({ ...s, value: s.pipeline })), meanMetric(days, v, 'active_pipeline'), lastDay)}
-    ${rawCalls ? speedToLeadCard('Speed-to-Lead', totalSTLMinutes, totalSTLMatched, totalLeads, totalSTLMismatch, perSDR, d.goalSpeedToLead,
-        { minutes: totalSTLOnMinutes, matched: totalSTLOnMatched, total: totalSTLOnTotal },
-        { minutes: totalSTLOffMinutes, matched: totalSTLOffMatched, total: totalSTLOffTotal }) : pendingCard('Speed-to-Lead', 'Load a Call History CSV to enable')}
+    ${rawCalls ? speedToLeadCard('Speed-to-Lead', stlMedian, totalSTLMatched, totalSTLEligible, totalSTLMismatch, perSDR, d.goalSpeedToLead,
+        { median: stlOnMedian, matched: totalSTLOnMatched, eligible: totalSTLOnEligible },
+        { median: stlOffMedian, matched: totalSTLOffMatched, eligible: totalSTLOffEligible }) : pendingCard('Speed-to-Lead', 'Load a Call History CSV to enable')}
     ${pendingCard('Cadence Adherence', 'Pending (manual score)')}
   `;
   applyExpandedState();
@@ -1847,28 +1890,26 @@ function fmtMinutes(mins) {
   if (rounded < 60) return `${rounded}m`;
   return `${Math.floor(rounded / 60)}h ${rounded % 60}m`;
 }
-// Renders one "On-hours"/"Off-hours" line: avg + match count, for whichever
-// SDR(s) are currently selected (Team, a single SDR, or an arbitrary combo
-// like Mark+Levi) — split is { minutes, matched, total }.
+// Renders one "On-hours"/"Off-hours" line: median + match count, for
+// whichever SDR(s) are currently selected (Team, a single SDR, or an
+// arbitrary combo like Mark+Levi) — split is { median, matched, eligible }.
 function speedToLeadHoursRow(rowLabel, split) {
-  const avg = split.matched ? split.minutes / split.matched : null;
-  return `<div class="card-avg-row"><span>${rowLabel}</span><span>${avg != null ? fmtMinutes(avg) : '—'} <span style="color:var(--muted);font-weight:400">(${split.matched}/${split.total})</span></span></div>`;
+  return `<div class="card-avg-row"><span>${rowLabel}</span><span>${split.median != null ? fmtMinutes(split.median) : '—'} <span style="color:var(--muted);font-weight:400">(${split.matched}/${split.eligible})</span></span></div>`;
 }
-// sdrList: array of { key, label, color, minutesSum, matched }
-// onSplit/offSplit: { minutes, matched, total } for the current SDR selection
-function speedToLeadCard(label, minutesSum, matched, totalLeads, mismatch, sdrList, goalVal, onSplit, offSplit) {
-  const avg = matched ? minutesSum / matched : null;
-  const matchedPct = totalLeads ? (matched / totalLeads * 100).toFixed(0) : '0';
-  const goalRow = (avg != null) ? goalStatusRow(avg, goalVal, false, true, 'Target (team)') : '';
-  const enriched = sdrList.map(s => ({ ...s, value: s.matched ? s.minutesSum / s.matched : 0, goalVal }));
+// sdrList: array of { key, label, color, medianMinutes, matched }
+// onSplit/offSplit: { median, matched, eligible } for the current SDR selection
+function speedToLeadCard(label, medianMinutes, matched, eligible, mismatch, sdrList, goalVal, onSplit, offSplit) {
+  const matchedPct = eligible ? (matched / eligible * 100).toFixed(0) : '0';
+  const goalRow = (medianMinutes != null) ? goalStatusRow(medianMinutes, goalVal, false, true, 'Target (team)') : '';
+  const enriched = sdrList.map(s => ({ ...s, value: s.medianMinutes != null ? s.medianMinutes : 0, goalVal }));
   return `<div class="card" data-label="${label}">
     ${expandBtn(label)}
-    <div class="card-label">${label} <span class="goal-info" title="Time from a lead's creation to that SDR's first outbound call to it, matched by phone number from the Aircall call-history export. Leads with no matching call yet are excluded from the average (see match rate below), not penalized. On-hours/Off-hours split per the SDR Lead Routing Logic doc — on-hours is that SDR's solo shift plus their overlap window; off-hours is everything else, including the overnight round-robin.">ⓘ</span></div>
-    <div class="card-value">${avg != null ? fmtMinutes(avg) : '—'}</div>
-    <div class="card-sub">${matched}/${totalLeads} leads called (${matchedPct}%)${mismatch ? ` · ${mismatch} flagged: different SDR than lead owner` : ''}</div>
+    <div class="card-label">${label} <span class="goal-info" title="Median minutes from a lead's creation to that SDR's first outbound call to it, matched by phone number from the Aircall call-history export (median, not mean, so a few stale/unreliable matches can't skew the number). Leads created before your Call History export's own earliest call are excluded entirely — there's no reliable way to know when those were first called — as are matches over 48h (almost certainly a missed early call, not a real gap). On-hours/Off-hours split per the SDR Lead Routing Logic doc — on-hours is that SDR's solo shift plus their overlap window; off-hours is everything else, including the overnight round-robin.">ⓘ</span></div>
+    <div class="card-value">${medianMinutes != null ? fmtMinutes(medianMinutes) : '—'}</div>
+    <div class="card-sub">${matched}/${eligible} eligible leads called (${matchedPct}%)${mismatch ? ` · ${mismatch} flagged: different SDR than lead owner` : ''}</div>
     ${splitRow(enriched, false, true)}
-    ${speedToLeadHoursRow('On-hours avg', onSplit)}
-    ${speedToLeadHoursRow('Off-hours avg', offSplit)}
+    ${speedToLeadHoursRow('On-hours median', onSplit)}
+    ${speedToLeadHoursRow('Off-hours median', offSplit)}
     ${goalRow}
   </div>`;
 }
@@ -1924,12 +1965,6 @@ function makeChart(id, days, spec) {
   const combined = isCombinedMode(id);
   const cumulative = !!spec.cumulativeAllowed && isCumulative(id);
   const isRate = spec.type === 'rate';
-  // 'avg' is like 'rate' (numerator/denominator, summed then divided, never
-  // averaged per-bucket) but without the *100 — e.g. Speed-to-Lead minutes.
-  const isAvg = spec.type === 'avg';
-  const isRatio = isRate || isAvg;
-  const ratioScale = isRate ? 100 : 1;
-  const unitSuffix = isRate ? '%' : (isAvg ? ' min' : '');
   const buckets = bucketize(days, granularity);
   const labels = buckets.map(b => b.label);
 
@@ -1943,17 +1978,15 @@ function makeChart(id, days, spec) {
       // A bucket with no loaded data (future days) renders as a gap, not a zero.
       const present = b.days.filter(d => allData[d]);
       if (!present.length) return null;
-      if (isRatio) {
+      if (isRate) {
         // Sum numerator and denominator across the bucket, THEN divide —
         // never average per-day rates (that would weight thin days equally).
         const den = chartSum(present, v.key, spec.denom);
-        // For 'avg' (Speed-to-Lead), a bucket with zero matched calls is a gap,
-        // not a 0 — 0 minutes would misleadingly read as an instant callback.
-        return den ? parseFloat((chartSum(present, v.key, spec.num) / den * ratioScale).toFixed(1)) : (isAvg ? null : 0);
+        return den ? parseFloat((chartSum(present, v.key, spec.num) / den * 100).toFixed(1)) : 0;
       }
       return chartSum(present, v.key, spec.field);
     });
-    if (cumulative && !isRatio) {
+    if (cumulative && !isRate) {
       let sum = 0;
       data = data.map(val => (val == null ? null : (sum += val)));
     }
@@ -1969,9 +2002,9 @@ function makeChart(id, days, spec) {
   let paceDrawn = false;
   if (spec.pace && elapsed.length) {
     let paceData = null;
-    if (isRatio) {
+    if (isRate) {
       const den = chartSum(elapsed, keys, spec.denom);
-      const rate = den ? parseFloat((chartSum(elapsed, keys, spec.num) / den * ratioScale).toFixed(1)) : 0;
+      const rate = den ? parseFloat((chartSum(elapsed, keys, spec.num) / den * 100).toFixed(1)) : 0;
       if (rate) paceData = buckets.map(() => rate);
     } else {
       const perDay = chartSum(elapsed, keys, spec.field) / elapsed.length;
@@ -1989,7 +2022,7 @@ function makeChart(id, days, spec) {
   let goalDrawn = false;
   if (spec.goal) {
     let data;
-    if (isRatio) {
+    if (isRate) {
       data = buckets.map(() => spec.goal);
     } else if (cumulative) {
       let acc = 0;
@@ -2019,7 +2052,7 @@ function makeChart(id, days, spec) {
           titleColor: '#ffffff',
           bodyColor: '#cfd2e3',
           callbacks: {
-            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}${unitSuffix}`
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}${isRate ? '%' : ''}`
           }
         }
       },
@@ -2062,14 +2095,95 @@ function renderCharts(days) {
   makeChart('chartSDRDQ', chartDays, { type: 'rate', num: 'sdr_dq', denom: 'leadVol', pace: true });
   makeChart('chartMeetings', chartDays, { type: 'count', field: 'meetings', goal: d.goalMeetings, pace: true });
   makeChart('chartLeads', chartDays, { type: 'count', field: 'leadVol', goal: d.goalLeads, cumulativeAllowed: true });
-  const stlCard = document.getElementById('chartCardSpeedToLead');
-  if (rawCalls) {
-    if (stlCard) stlCard.style.display = '';
-    makeChart('chartSpeedToLead', chartDays, { type: 'avg', num: 'speed_to_lead_minutes_sum', denom: 'speed_to_lead_matched', goal: d.goalSpeedToLead, pace: true });
-  } else if (stlCard) {
-    stlCard.style.display = 'none';
-  }
+  renderSpeedToLeadChart(chartDays);
   renderMeetingAttendanceChart(days);
+}
+
+// Speed-to-Lead gets its own chart (not the generic makeChart machinery)
+// because it plots a median, not a sum-then-divide rate/count — a median
+// can't be built up from per-bucket sums, so each bucket's value is computed
+// straight from the matched minute values via speedToLeadMinutesValues().
+function renderSpeedToLeadChart(days) {
+  const id = 'chartSpeedToLead';
+  const cardEl = document.getElementById('chartCardSpeedToLead');
+  if (!rawCalls) {
+    if (cardEl) cardEl.style.display = 'none';
+    if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+    return;
+  }
+  if (cardEl) cardEl.style.display = '';
+
+  const granularity = chartGranularity(id);
+  const combined = isCombinedMode(id);
+  const buckets = bucketize(days, granularity);
+  const labels = buckets.map(b => b.label);
+
+  const keys = Array.from(selectedSDRs);
+  const views = (!combined && keys.length > 1)
+    ? SDRS.filter(s => selectedSDRs.has(s.key)).map(s => ({ key: [s.key], label: s.label, color: s.color }))
+    : [{ key: keys, label: keys.length === SDRS.length ? 'Team' : keys.map(k => SDR_BY_KEY[k].label).join('+'), color: COLORS.Team }];
+
+  const datasets = views.map(v => {
+    const data = buckets.map(b => {
+      const present = b.days.filter(d => allData[d]);
+      if (!present.length) return null;
+      return median(speedToLeadMinutesValues(present, v.key));
+    });
+    return { label: v.label, data, borderColor: v.color, backgroundColor: v.color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false };
+  });
+
+  // Pace: median over elapsed (<= today) days for the whole current selection.
+  const elapsed = days.filter(d => d <= dubaiTodayKey() && allData[d]);
+  const paceMedian = median(speedToLeadMinutesValues(elapsed, keys));
+  let paceDrawn = false;
+  if (paceMedian != null) {
+    datasets.push({ label: 'Pace', data: buckets.map(() => parseFloat(paceMedian.toFixed(1))), borderColor: COLORS.Pace, borderDash: [2, 4], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
+    paceDrawn = true;
+  }
+
+  const d = derivedGoals();
+  let goalDrawn = false;
+  if (d.goalSpeedToLead) {
+    datasets.push({ label: 'Target', data: buckets.map(() => d.goalSpeedToLead), borderColor: COLORS.Goal, borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
+    goalDrawn = true;
+  }
+
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id).getContext('2d');
+  charts[id] = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1d27',
+          borderColor: '#2e3248',
+          borderWidth: 1,
+          titleColor: '#ffffff',
+          bodyColor: '#cfd2e3',
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y} min` }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' } },
+        y: { ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' }, beginAtZero: true }
+      }
+    }
+  });
+
+  const legendEl = document.getElementById('legend-' + id);
+  if (legendEl) {
+    const items = views.map(v => ({ label: v.label, color: v.color }));
+    if (goalDrawn) items.push({ label: 'Target', color: COLORS.Goal });
+    if (paceDrawn) items.push({ label: 'Pace', color: COLORS.Pace });
+    legendEl.innerHTML = items.map(it =>
+      `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
+    ).join('');
+  }
 }
 
 // Draws the % (not-attended/rejected ÷ total booked meetings) inside the dark
