@@ -742,6 +742,15 @@
         </div>
         <canvas id="chartLeads"></canvas>
       </div>
+      <div class="chart-card full">
+        <div class="chart-header">
+          <span class="chart-title">Meeting Attendance by SDR <span class="goal-info" title="Bar height = total meetings booked (Meeting Scheduled + Meeting Done + Meeting Not Atended + Meeting Rejected) for that SDR, over the selected date range. The dark bottom segment is the portion that was Meeting Not Atended or Meeting Rejected — the % shown is that segment's share of the SDR's total booked meetings. Always shows all 4 SDRs side by side regardless of the view-tab selection above.">ⓘ</span></span>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartMeetingAttendance"></div>
+          </div>
+        </div>
+        <canvas id="chartMeetingAttendance"></canvas>
+      </div>
     </div>
 
     <!-- GOALS -->
@@ -1149,6 +1158,13 @@ const MEETING_BOOKED_STATUSES = ['Meeting Scheduled', 'Meeting Done', 'Meeting R
 function isMeetingBooked(r) {
   return MEETING_BOOKED_STATUSES.includes(r['Meeting Status']);
 }
+// Of all booked meetings, the subset that didn't actually happen — used by the
+// Meeting Attendance chart to show what fraction of each SDR's booked meetings
+// were a no-show or rejected rather than completed/still scheduled.
+const MEETING_NOT_ATTENDED_STATUSES = ['Meeting Not Atended', 'Meeting Rejected'];
+function isMeetingNotAttended(r) {
+  return MEETING_NOT_ATTENDED_STATUSES.includes(r['Meeting Status']);
+}
 // A lead counts as qualified if its Sales status qualifies on its own, OR it
 // already has a meeting booked (a booked meeting always implies the lead was
 // qualified, even if Sales status hasn't caught up — though not every
@@ -1161,8 +1177,9 @@ function isQualifiedLead(r) {
   return false;
 }
 function computeMetrics(leads) {
-  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0 };
+  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0 };
   const meetings = leads.filter(isMeetingBooked).length;
+  const meetings_not_attended = leads.filter(isMeetingNotAttended).length;
   const qualified = leads.filter(isQualifiedLead).length;
   const non_responsive = leads.filter(r => r['Disqualified reason'] === 'Not responsive' || r['Sales status'] === 'Non respondant').length;
   const ae_dq = leads.filter(r => (r['Sales status'] || '').includes('Disqualified AE')).length;
@@ -1179,7 +1196,8 @@ function computeMetrics(leads) {
     nr_rate: leads.length ? parseFloat((non_responsive / leads.length * 100).toFixed(1)) : 0,
     ae_dq,
     sdr_dq,
-    active_pipeline
+    active_pipeline,
+    meetings_not_attended
   };
 }
 
@@ -1740,6 +1758,88 @@ function renderCharts(days) {
   makeChart('chartSDRDQ', chartDays, { type: 'rate', num: 'sdr_dq', denom: 'leadVol', pace: true });
   makeChart('chartMeetings', chartDays, { type: 'count', field: 'meetings', goal: d.goalMeetings, pace: true });
   makeChart('chartLeads', chartDays, { type: 'count', field: 'leadVol', goal: d.goalLeads, cumulativeAllowed: true });
+  renderMeetingAttendanceChart(days);
+}
+
+// Draws the % (not-attended/rejected ÷ total booked meetings) inside the dark
+// bottom segment of each SDR's bar.
+const meetingAttendancePctPlugin = {
+  id: 'meetingAttendancePct',
+  afterDatasetsDraw(chart) {
+    const notAttended = chart.data.datasets[0].data;
+    const completed = chart.data.datasets[1].data;
+    const meta = chart.getDatasetMeta(0);
+    const { ctx } = chart;
+    ctx.save();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    meta.data.forEach((bar, i) => {
+      const total = (notAttended[i] || 0) + (completed[i] || 0);
+      if (!total || !notAttended[i]) return;
+      const pct = (notAttended[i] / total * 100).toFixed(1) + '%';
+      const yMid = (bar.y + bar.base) / 2;
+      ctx.fillText(pct, bar.x, yMid);
+    });
+    ctx.restore();
+  }
+};
+// Always compares all 4 SDRs side by side (ignores the view-tab SDR selection),
+// over whatever date range is currently filtered.
+function renderMeetingAttendanceChart(days) {
+  const rows = SDRS.map(s => {
+    const total = sumMetric(days, s.key, 'meetings');
+    const notAttended = sumMetric(days, s.key, 'meetings_not_attended');
+    return { ...s, total, notAttended, completed: total - notAttended };
+  });
+  if (charts.chartMeetingAttendance) charts.chartMeetingAttendance.destroy();
+  const ctx = document.getElementById('chartMeetingAttendance').getContext('2d');
+  charts.chartMeetingAttendance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: rows.map(r => r.label),
+      datasets: [
+        { label: 'Not Attended / Rejected', data: rows.map(r => r.notAttended), backgroundColor: '#8a1f1f', stack: 's' },
+        { label: 'Scheduled / Done', data: rows.map(r => r.completed), backgroundColor: rows.map(r => r.color), stack: 's' }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
+          titleColor: '#ffffff', bodyColor: '#cfd2e3',
+          callbacks: {
+            label: ctx => {
+              const i = ctx.dataIndex;
+              if (ctx.datasetIndex === 0) {
+                const total = rows[i].total;
+                const pct = total ? (rows[i].notAttended / total * 100).toFixed(1) : '0.0';
+                return ` Not Attended/Rejected: ${rows[i].notAttended} (${pct}%)`;
+              }
+              return ` Scheduled/Done: ${ctx.parsed.y}`;
+            },
+            footer: items => ` Total booked: ${rows[items[0].dataIndex].total}`
+          }
+        }
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { display: false } },
+        y: { stacked: true, beginAtZero: true, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' } }
+      }
+    },
+    plugins: [meetingAttendancePctPlugin]
+  });
+  const legendEl = document.getElementById('legend-chartMeetingAttendance');
+  if (legendEl) {
+    legendEl.innerHTML = `
+      <span class="legend-item"><span class="legend-dot" style="background:#8a1f1f"></span>Not Attended / Rejected (%)</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#4285f4"></span>Scheduled / Done</span>
+    `;
+  }
 }
 
 // ─── GOALS ────────────────────────────────────────────────────────────────────
