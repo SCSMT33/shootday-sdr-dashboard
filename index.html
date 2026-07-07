@@ -845,9 +845,13 @@
       </div>
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">Meeting Attendance by SDR <span class="goal-info" id="info-chartMeetingAttendance" title="Bar height = resolved meetings (Meeting Done + Meeting Not Atended + Meeting Rejected) for that SDR, over the selected date range — Meeting Scheduled is excluded since it hasn't happened yet. The dark bottom segment is the portion that was Meeting Not Atended or Meeting Rejected — the % shown is that segment's share of the SDR's resolved meetings. Always shows all 4 SDRs side by side regardless of the view-tab selection above.">ⓘ</span></span>
+          <span class="chart-title">Meeting Attendance by SDR <span class="goal-info" id="info-chartMeetingAttendance" title="Bar height = resolved meetings (Meeting Done + Meeting Not Atended + Meeting Rejected) for that SDR, bucketed by when the LEAD was created (not when the meeting was booked/held — that date isn't available in the export), over the selected date range — Meeting Scheduled is excluded since it hasn't happened yet. The dark segment is the portion that was Meeting Not Atended or Meeting Rejected — the % shown is that segment's share of the SDR's resolved meetings. Always shows all 4 SDRs regardless of the view-tab selection above. Average = one bar per SDR totaling the whole selected range; Week over week = one grouped bar per SDR per week, so you can see the trend instead of just the period total.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetingAttendance"></div>
+            <select class="chart-granularity" id="viewMode-chartMeetingAttendance" onchange="renderCharts(getFilteredDays())">
+              <option value="average">Average</option>
+              <option value="weekly">Week over week</option>
+            </select>
           </div>
         </div>
         <canvas id="chartMeetingAttendance"></canvas>
@@ -2623,49 +2627,75 @@ function closeSpeedToLeadDrilldown() {
   if (el) { el.style.display = 'none'; el.innerHTML = ''; }
 }
 
-// Draws the % (not-attended/rejected ÷ total booked meetings) inside the dark
-// bottom segment of each SDR's bar.
+// Draws the % (not-attended/rejected ÷ total resolved meetings) inside the
+// dark segment of every SDR's bar. Generalized over dataset pairs (matched by
+// _pairId) rather than assuming exactly 2 datasets, so it works for both the
+// single-bar-per-SDR "Average" mode and the grouped-per-week "Week over week"
+// mode (4 SDRs × 2 segments each = 8 datasets, one pair per SDR).
 const meetingAttendancePctPlugin = {
   id: 'meetingAttendancePct',
   afterDatasetsDraw(chart) {
-    const notAttended = chart.data.datasets[0].data;
-    const completed = chart.data.datasets[1].data;
-    const meta = chart.getDatasetMeta(0);
     const { ctx } = chart;
     ctx.save();
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    meta.data.forEach((bar, i) => {
-      const total = (notAttended[i] || 0) + (completed[i] || 0);
-      if (!total || !notAttended[i]) return;
-      const pct = (notAttended[i] / total * 100).toFixed(1) + '%';
-      const yMid = (bar.y + bar.base) / 2;
-      ctx.fillText(pct, bar.x, yMid);
+    const datasets = chart.data.datasets;
+    datasets.forEach((ds, dsIndex) => {
+      if (!ds._isNA) return;
+      const doneDs = datasets.find(d => d._pairId === ds._pairId && !d._isNA);
+      if (!doneDs) return;
+      const meta = chart.getDatasetMeta(dsIndex);
+      meta.data.forEach((bar, i) => {
+        const na = ds.data[i] || 0;
+        const done = doneDs.data[i] || 0;
+        const total = na + done;
+        if (!total || !na) return;
+        const pct = (na / total * 100).toFixed(1) + '%';
+        const yMid = (bar.y + bar.base) / 2;
+        ctx.fillText(pct, bar.x, yMid);
+      });
     });
     ctx.restore();
   }
 };
-// Always compares all 4 SDRs side by side (ignores the view-tab SDR selection),
-// over whatever date range is currently filtered.
+// Always compares all 4 SDRs (ignores the view-tab SDR selection), over
+// whatever date range is currently filtered. "Average" is one bar per SDR
+// totaling the whole range; "Week over week" buckets by week (by Creation
+// Date, same as every other chart — meeting-booked date isn't in the export)
+// and draws one grouped stacked bar per SDR per week.
 function renderMeetingAttendanceChart(days) {
-  const rows = SDRS.map(s => {
-    const total = sumMetric(days, s.key, 'meetings_resolved');
-    const notAttended = sumMetric(days, s.key, 'meetings_not_attended');
-    return { ...s, total, notAttended, completed: total - notAttended };
-  });
+  const weekly = document.getElementById('viewMode-chartMeetingAttendance').value === 'weekly';
+  const buckets = weekly ? bucketize(days, 'weekly') : [{ label: null, days }];
+  const labels = weekly ? buckets.map(b => b.label) : SDRS.map(s => s.label);
+
+  const datasets = weekly
+    ? SDRS.flatMap(s => {
+        const naData = buckets.map(b => sumMetric(b.days, s.key, 'meetings_not_attended'));
+        const doneData = buckets.map((b, i) => sumMetric(b.days, s.key, 'meetings_resolved') - naData[i]);
+        return [
+          { label: `${s.label} — Not Attended/Rejected`, data: naData, backgroundColor: '#8a1f1f', stack: s.key, _pairId: s.key, _isNA: true },
+          { label: `${s.label} — Meeting Done`, data: doneData, backgroundColor: s.color, stack: s.key, _pairId: s.key, _isNA: false }
+        ];
+      })
+    : (() => {
+        const rows = SDRS.map(s => {
+          const total = sumMetric(days, s.key, 'meetings_resolved');
+          const notAttended = sumMetric(days, s.key, 'meetings_not_attended');
+          return { ...s, total, notAttended, completed: total - notAttended };
+        });
+        return [
+          { label: 'Not Attended / Rejected', data: rows.map(r => r.notAttended), backgroundColor: '#8a1f1f', stack: 's', _pairId: 'all', _isNA: true },
+          { label: 'Meeting Done', data: rows.map(r => r.completed), backgroundColor: rows.map(r => r.color), stack: 's', _pairId: 'all', _isNA: false }
+        ];
+      })();
+
   if (charts.chartMeetingAttendance) charts.chartMeetingAttendance.destroy();
   const ctx = document.getElementById('chartMeetingAttendance').getContext('2d');
   charts.chartMeetingAttendance = new Chart(ctx, {
     type: 'bar',
-    data: {
-      labels: rows.map(r => r.label),
-      datasets: [
-        { label: 'Not Attended / Rejected', data: rows.map(r => r.notAttended), backgroundColor: '#8a1f1f', stack: 's' },
-        { label: 'Meeting Done', data: rows.map(r => r.completed), backgroundColor: rows.map(r => r.color), stack: 's' }
-      ]
-    },
+    data: { labels, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: true,
@@ -2676,15 +2706,25 @@ function renderMeetingAttendanceChart(days) {
           titleColor: '#ffffff', bodyColor: '#cfd2e3',
           callbacks: {
             label: ctx => {
+              const ds = ctx.dataset;
+              const pairDs = ctx.chart.data.datasets.find(d => d._pairId === ds._pairId && d._isNA !== ds._isNA);
               const i = ctx.dataIndex;
-              if (ctx.datasetIndex === 0) {
-                const total = rows[i].total;
-                const pct = total ? (rows[i].notAttended / total * 100).toFixed(1) : '0.0';
-                return ` Not Attended/Rejected: ${rows[i].notAttended} (${pct}%)`;
+              const na = (ds._isNA ? ds : pairDs).data[i] || 0;
+              const done = (ds._isNA ? pairDs : ds).data[i] || 0;
+              if (ds._isNA) {
+                const total = na + done;
+                const pct = total ? (na / total * 100).toFixed(1) : '0.0';
+                return ` ${weekly ? 'Not Attended/Rejected' : ds.label}: ${na} (${pct}%)`;
               }
-              return ` Meeting Done: ${ctx.parsed.y}`;
+              return ` ${weekly ? 'Meeting Done' : ds.label}: ${done}`;
             },
-            footer: items => ` Total resolved: ${rows[items[0].dataIndex].total}`
+            footer: items => {
+              const ds = items[0].dataset;
+              const pairDs = items[0].chart.data.datasets.find(d => d._pairId === ds._pairId && d._isNA !== ds._isNA);
+              const i = items[0].dataIndex;
+              const total = (ds.data[i] || 0) + (pairDs.data[i] || 0);
+              return weekly ? ` ${ds._pairId} total resolved: ${total}` : ` Total resolved: ${total}`;
+            }
           }
         }
       },
@@ -2697,10 +2737,12 @@ function renderMeetingAttendanceChart(days) {
   });
   const legendEl = document.getElementById('legend-chartMeetingAttendance');
   if (legendEl) {
-    legendEl.innerHTML = `
-      <span class="legend-item"><span class="legend-dot" style="background:#8a1f1f"></span>Not Attended / Rejected (%)</span>
-      <span class="legend-item"><span class="legend-dot" style="background:#4285f4"></span>Meeting Done</span>
-    `;
+    const items = weekly
+      ? [{ label: 'Not Attended / Rejected', color: '#8a1f1f' }, ...SDRS.map(s => ({ label: s.label, color: s.color }))]
+      : [{ label: 'Not Attended / Rejected (%)', color: '#8a1f1f' }, { label: 'Meeting Done', color: '#4285f4' }];
+    legendEl.innerHTML = items.map(it =>
+      `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
+    ).join('');
   }
 }
 
