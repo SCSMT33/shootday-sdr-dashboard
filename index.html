@@ -433,10 +433,14 @@
     padding: 20px;
     margin-top: 16px;
   }
-  .commission-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .commission-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; cursor: pointer; }
   .commission-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
   .commission-sub { font-size: 11px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; max-width: 640px; }
   .commission-period { font-size: 12px; color: var(--accent); font-weight: 600; margin-bottom: 16px; }
+  .commission-chevron { color: var(--muted); font-size: 12px; transition: transform 0.15s; align-self: center; }
+  .commission-section.expanded .commission-chevron { transform: rotate(90deg); }
+  .commission-body { display: none; }
+  .commission-section.expanded .commission-body { display: block; }
   .commission-report-btn {
     background: var(--surface2);
     color: var(--text);
@@ -1022,19 +1026,22 @@
     </div>
 
     <!-- COMMISSION CALCULATOR -->
-    <div class="commission-section">
-      <div class="commission-title-row">
+    <div class="commission-section expanded" id="commissionSection">
+      <div class="commission-title-row" onclick="toggleCommissionSection()">
         <div>
           <div class="commission-title">Commission Calculator</div>
           <div class="commission-sub">Recalculates for whichever SDR(s) and date range you've selected above (e.g. pick "Last month" and select just one person). Qualified Leads and Meetings are counted from all leads (B2B + B2C); both are always judged as a percentage of that person's B2B leads only, matching Commission View. New Sales Incentive and Lead Factor are not included here.</div>
         </div>
         <div class="commission-report-btn-group">
-          <button class="commission-report-btn" onclick="previewQualifiedReport()">Preview Report</button>
-          <button class="commission-report-btn" onclick="exportQualifiedReport()">Export Report (PDF)</button>
+          <button class="commission-report-btn" onclick="event.stopPropagation(); previewQualifiedReport()">Preview Report</button>
+          <button class="commission-report-btn" onclick="event.stopPropagation(); exportQualifiedReport()">Export Report (PDF)</button>
         </div>
+        <span class="commission-chevron">&#9654;</span>
       </div>
-      <div class="commission-period" id="commissionPeriod"></div>
-      <div class="commission-grid" id="commissionCards"></div>
+      <div class="commission-body">
+        <div class="commission-period" id="commissionPeriod"></div>
+        <div class="commission-grid" id="commissionCards"></div>
+      </div>
     </div>
 
     <!-- REPORT PREVIEW: shown on-screen only after clicking "Preview Report", at the very bottom of the page -->
@@ -1530,6 +1537,9 @@ function restoreAEBaselineData() {
 }
 function toggleAEBaselineSection() {
   document.getElementById('aeBaselineSection').classList.toggle('expanded');
+}
+function toggleCommissionSection() {
+  document.getElementById('commissionSection').classList.toggle('expanded');
 }
 function isAEBaselineOn() {
   const el = document.getElementById('aeBaselineToggle');
@@ -2404,8 +2414,11 @@ function makeChart(id, days, spec) {
   // whichever granularity is selected), recomputed at every bucket instead of
   // one flat number for the whole range — so a single thin/volatile recent
   // bucket can't make the Pace line misrepresent the broader trend. Built from
-  // the same commission-aware sums as the plotted lines.
-  let paceDrawn = false;
+  // the same commission-aware sums as the plotted lines. Pushed onto datasets
+  // LAST (after Target/AE Baseline below) so it draws in front of everything
+  // else — Chart.js draws datasets in array order, later = on top — since
+  // Pace is the trend line you actually want to stand out.
+  let paceDataset = null;
   if (spec.pace) {
     const paceData = buckets.map((b, i) => {
       const windowBuckets = buckets.slice(Math.max(0, i - 2), i + 1);
@@ -2420,12 +2433,12 @@ function makeChart(id, days, spec) {
       return parseFloat((perDay * b.days.length).toFixed(1));
     });
     if (paceData.some(v => v != null)) {
-      // Explicit type:'line' so Pace still overlays as a dashed line even
-      // when the chart's overall type is 'bar' (Chart.js mixed-type support).
-      datasets.push({ label: 'Pace', data: paceData, type: 'line', borderColor: COLORS.Pace, borderDash: [2, 4], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0, spanGaps: true });
-      paceDrawn = true;
+      // Explicit type:'line' so Pace still overlays even when the chart's
+      // overall type is 'bar' (Chart.js mixed-type support).
+      paceDataset = { label: 'Pace', data: paceData, type: 'line', borderColor: COLORS.Pace, borderWidth: 2.5, pointRadius: 0, fill: false, tension: 0, spanGaps: true };
     }
   }
+  let paceDrawn = !!paceDataset;
 
   // Target: the goal % as-is for rate charts (drawn against rates computed with
   // the same denominator, so the comparison is apples-to-apples in every lead
@@ -2441,7 +2454,7 @@ function makeChart(id, days, spec) {
     } else {
       data = buckets.map(b => parseFloat((spec.goal / daysInCurrentMonth() * b.days.length).toFixed(1)));
     }
-    datasets.push({ label: 'Target', data, type: 'line', borderColor: COLORS.Goal, borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
+    datasets.push({ label: 'Target', data, type: 'line', borderColor: COLORS.Goal, borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
     goalDrawn = true;
   }
 
@@ -2455,9 +2468,10 @@ function makeChart(id, days, spec) {
     const data = isRate
       ? buckets.map(() => spec.aeBaseline)
       : buckets.map(b => parseFloat((spec.aeBaseline * b.days.length).toFixed(1)));
-    datasets.push({ label: 'AE Baseline', data, type: 'line', borderColor: COLORS.AEBaseline, borderDash: [3, 3], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
+    datasets.push({ label: 'AE Baseline', data, type: 'line', borderColor: COLORS.AEBaseline, borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
     aeBaselineDrawn = true;
   }
+  if (paceDataset) datasets.push(paceDataset);
 
   if (charts[id]) { charts[id].destroy(); }
   const ctx = document.getElementById(id).getContext('2d');
@@ -2622,8 +2636,9 @@ function renderSpeedToLeadChart(days) {
   // Pace: a trailing 3-bucket rolling median (3 weeks/days/months, whichever
   // granularity is selected) recomputed at every bucket, instead of one flat
   // number for the whole range — so a single thin/volatile recent bucket
-  // can't make the Pace line misrepresent the broader trend.
-  let paceDrawn = false;
+  // can't make the Pace line misrepresent the broader trend. Pushed onto
+  // datasets LAST (after Target below) so it draws in front of everything.
+  let paceDataset = null;
   const paceData = buckets.map((b, i) => {
     const windowBuckets = buckets.slice(Math.max(0, i - 2), i + 1);
     const windowDays = windowBuckets.reduce((acc, wb) => acc.concat(wb.days), []).filter(d => d <= dubaiTodayKey() && allData[d]);
@@ -2632,16 +2647,17 @@ function renderSpeedToLeadChart(days) {
     return m != null ? parseFloat(m.toFixed(1)) : null;
   });
   if (paceData.some(v => v != null)) {
-    datasets.push({ label: 'Pace', data: paceData, type: 'line', borderColor: COLORS.Pace, borderDash: [2, 4], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0, spanGaps: true });
-    paceDrawn = true;
+    paceDataset = { label: 'Pace', data: paceData, type: 'line', borderColor: COLORS.Pace, borderWidth: 2.5, pointRadius: 0, fill: false, tension: 0, spanGaps: true };
   }
+  let paceDrawn = !!paceDataset;
 
   const d = derivedGoals();
   let goalDrawn = false;
   if (d.goalSpeedToLead) {
-    datasets.push({ label: 'Target', data: buckets.map(() => d.goalSpeedToLead), type: 'line', borderColor: COLORS.Goal, borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
+    datasets.push({ label: 'Target', data: buckets.map(() => d.goalSpeedToLead), type: 'line', borderColor: COLORS.Goal, borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
     goalDrawn = true;
   }
+  if (paceDataset) datasets.push(paceDataset);
 
   if (charts[id]) charts[id].destroy();
   const ctx = document.getElementById(id).getContext('2d');
