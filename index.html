@@ -945,6 +945,11 @@
               <option value="average">Average</option>
               <option value="weekly">Week over week</option>
             </select>
+            <select class="chart-granularity" id="leadType-chartMeetingAttendance" onchange="renderCharts(getFilteredDays())">
+              <option value="all">All leads</option>
+              <option value="business">B2B only</option>
+              <option value="b2c">B2C only</option>
+            </select>
           </div>
         </div>
         <canvas id="chartMeetingAttendance"></canvas>
@@ -1185,6 +1190,8 @@ function nowInDubai() {
 // ─── STATE ───────────────────────────────────────────────────────────────────
 let allData = null;   // { date: { <sdrKey>: metrics, Team: metrics } } — derived from rawByDay via current lead-type filter
 let allDataB2B = null;   // same shape, always business-leads-only — used by Commission View's Lead Volume card
+let allDataB2C = null;   // same shape, always b2c-leads-only — used by chart-local B2B/B2C/All toggles
+let allDataAll = null;   // same shape, always combined B2B+B2C regardless of the global lead-type filter — used by chart-local B2B/B2C/All toggles
 let rawByDay = null;   // { date: { <sdrKey>: [rows] } } — unfiltered raw rows, persisted
 let rawCalls = null;   // [{ phoneDigits, utcMs, sdrKey }] from the Aircall call-history CSV, persisted
 let callsFilename = null;
@@ -1607,21 +1614,31 @@ function recomputeAllData() {
   if (!rawByDay) return;
   allData = {};
   allDataB2B = {};
+  allDataB2C = {};
+  allDataAll = {};
   Object.keys(rawByDay).sort().forEach(day => {
-    const filtered = {}, b2b = {};
-    const allFiltered = [], allB2B = [];
+    const filtered = {}, b2b = {}, b2c = {}, all = {};
+    const allFiltered = [], allB2B = [], allB2C = [], allAll = [];
     SDRS.forEach(s => {
       const raw = rawByDay[day][s.key] || [];
       filtered[s.key] = applyLeadTypeFilter(raw);
       b2b[s.key] = raw.filter(isBusinessLead);
+      b2c[s.key] = raw.filter(isB2CLead);
+      all[s.key] = raw;
       allFiltered.push(...filtered[s.key]);
       allB2B.push(...b2b[s.key]);
+      allB2C.push(...b2c[s.key]);
+      allAll.push(...all[s.key]);
     });
     allData[day] = { Team: computeMetrics(allFiltered) };
     allDataB2B[day] = { Team: computeMetrics(allB2B) };
+    allDataB2C[day] = { Team: computeMetrics(allB2C) };
+    allDataAll[day] = { Team: computeMetrics(allAll) };
     SDRS.forEach(s => {
       allData[day][s.key] = computeMetrics(filtered[s.key]);
       allDataB2B[day][s.key] = computeMetrics(b2b[s.key]);
+      allDataB2C[day][s.key] = computeMetrics(b2c[s.key]);
+      allDataAll[day][s.key] = computeMetrics(all[s.key]);
     });
   });
 }
@@ -2812,6 +2829,10 @@ const meetingAttendancePctPlugin = {
 // and draws one grouped stacked bar per SDR per week.
 function renderMeetingAttendanceChart(days) {
   const weekly = document.getElementById('viewMode-chartMeetingAttendance').value === 'weekly';
+  // Chart-local B2B/B2C/All toggle — independent of the global "Leads:" filter above.
+  const leadTypeEl = document.getElementById('leadType-chartMeetingAttendance');
+  const leadType = leadTypeEl ? leadTypeEl.value : 'all';
+  const dataSource = leadType === 'business' ? allDataB2B : leadType === 'b2c' ? allDataB2C : allDataAll;
   // Teams comparison collapses the normal 4-SDR breakdown into US Team/OUS
   // Team groups instead — each "group" below is either a single SDR (key: a
   // string) or a team (key: an array of member keys); sumMetric() already
@@ -2822,8 +2843,8 @@ function renderMeetingAttendanceChart(days) {
 
   const datasets = weekly
     ? groups.flatMap(g => {
-        const naData = buckets.map(b => sumMetric(b.days, g.key, 'meetings_not_attended'));
-        const doneData = buckets.map((b, i) => sumMetric(b.days, g.key, 'meetings_resolved') - naData[i]);
+        const naData = buckets.map(b => sumMetricFrom(dataSource, b.days, g.key, 'meetings_not_attended'));
+        const doneData = buckets.map((b, i) => sumMetricFrom(dataSource, b.days, g.key, 'meetings_resolved') - naData[i]);
         return [
           { label: `${g.label} — Not Attended/Rejected`, data: naData, backgroundColor: '#8a1f1f', stack: g.label, _pairId: g.label, _isNA: true },
           { label: `${g.label} — Meeting Done`, data: doneData, backgroundColor: g.color, stack: g.label, _pairId: g.label, _isNA: false }
@@ -2831,8 +2852,8 @@ function renderMeetingAttendanceChart(days) {
       })
     : (() => {
         const rows = groups.map(g => {
-          const total = sumMetric(days, g.key, 'meetings_resolved');
-          const notAttended = sumMetric(days, g.key, 'meetings_not_attended');
+          const total = sumMetricFrom(dataSource, days, g.key, 'meetings_resolved');
+          const notAttended = sumMetricFrom(dataSource, days, g.key, 'meetings_not_attended');
           return { ...g, total, notAttended, completed: total - notAttended };
         });
         return [
