@@ -685,6 +685,10 @@
           <span class="chart-title">Meeting Booked Rate % <span class="goal-info" id="info-chartMeetingRate" title="Meetings Booked ÷ Lead Volume for each bucket — numerator and denominator are summed across the whole bucket first, then divided (never an average of daily rates, which would over-weight thin days). Dashed Target line = your Meeting Booked Rate target goal; dashed Pace line = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetingRate"></div>
+            <select class="chart-granularity" id="teamsComparison-chartMeetingRate" onchange="renderCharts(getFilteredDays())">
+              <option value="off">Teams comparison: Off</option>
+              <option value="on">Teams comparison: On</option>
+            </select>
             <select class="chart-granularity" id="granularity-chartMeetingRate" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
               <option value="weekly" selected>Weekly</option>
@@ -709,6 +713,10 @@
           <span class="chart-title">% Leads Qualified <span class="goal-info" id="info-chartQualPct" title="Qualified leads ÷ Lead Volume per bucket, summed then divided (not an average of daily rates). Qualified = any Sales status except Non respondant/Cold/Pending/Disqualified(-variant), OR a booked meeting, OR legacy SQL status = Qualified. Dashed Target = your % Qualified target goal; dashed Pace = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartQualPct"></div>
+            <select class="chart-granularity" id="teamsComparison-chartQualPct" onchange="renderCharts(getFilteredDays())">
+              <option value="off">Teams comparison: Off</option>
+              <option value="on">Teams comparison: On</option>
+            </select>
             <select class="chart-granularity" id="granularity-chartQualPct" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
               <option value="weekly" selected>Weekly</option>
@@ -733,6 +741,10 @@
           <span class="chart-title">Non-Responsive Rate % <span class="goal-info" id="info-chartNR" title="Leads marked Sales status = Non respondant or Disqualified reason = Not responsive, ÷ Lead Volume per bucket, summed then divided. Lower is better. Dashed Target only appears if you've set a Non-Responsive Rate max goal; dashed Pace = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartNR"></div>
+            <select class="chart-granularity" id="teamsComparison-chartNR" onchange="renderCharts(getFilteredDays())">
+              <option value="off">Teams comparison: Off</option>
+              <option value="on">Teams comparison: On</option>
+            </select>
             <select class="chart-granularity" id="granularity-chartNR" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
               <option value="weekly" selected>Weekly</option>
@@ -757,6 +769,10 @@
           <span class="chart-title">AE Disqualified Rate % <span class="goal-info" id="info-chartAEDQ" title="Leads the AE bounced back as wrongly qualified (Disqualified AE status) ÷ that SDR's qualified leads — measures hand-off quality. Summed then divided per bucket, not averaged day to day. No monthly goal for this one, so no Target line, but Pace shows a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartAEDQ"></div>
+            <select class="chart-granularity" id="teamsComparison-chartAEDQ" onchange="renderCharts(getFilteredDays())">
+              <option value="off">Teams comparison: Off</option>
+              <option value="on">Teams comparison: On</option>
+            </select>
             <select class="chart-granularity" id="granularity-chartAEDQ" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
               <option value="weekly" selected>Weekly</option>
@@ -781,6 +797,10 @@
           <span class="chart-title">SDR Disqualified Rate % <span class="goal-info" id="info-chartSDRDQ" title="Leads the SDR themselves disqualified (plain Disqualified status) ÷ lead volume — the SDR's own screening-out rate. Summed then divided per bucket, not averaged day to day. No monthly goal for this one, so no Target line, but Pace shows a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartSDRDQ"></div>
+            <select class="chart-granularity" id="teamsComparison-chartSDRDQ" onchange="renderCharts(getFilteredDays())">
+              <option value="off">Teams comparison: Off</option>
+              <option value="on">Teams comparison: On</option>
+            </select>
             <select class="chart-granularity" id="granularity-chartSDRDQ" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
               <option value="weekly" selected>Weekly</option>
@@ -805,6 +825,10 @@
           <span class="chart-title">Speed-to-Lead (median minutes) <span class="goal-info" id="info-chartSpeedToLead" title="Median minutes from lead creation to first outbound call, matched by phone number from the Aircall call-history export. Median (not mean) so a few stale/unreliable matches can't skew it. Leads created before the Call History export's own earliest call — or matched to a call over 48h later — are excluded entirely. Requires a Call History CSV to be loaded. Dashed Target = your Speed-to-Lead goal; dashed Pace = a trailing 3-bucket rolling median (3 weeks/days/months, matching whatever granularity is selected), and can be limited to On-hours-only or Off-hours-only leads with the dropdown next to the legend. On-hours uses each SDR's own local time (EST for MJ/Gospel, CET for Mark/Levi) and only counts Monday–Friday during their shift — a lead created on a Saturday or Sunday is always off-hours, even if the clock time would otherwise fall inside that SDR's weekday shift, since nobody works weekends. Click any bar/point to drill down into every lead over 20 minutes in that period — Name, created time, called time (shown in that SDR's own local time: EST for MJ, PST for Gospel, CET for Mark/Levi), and total wait. "Exclude current week" drops the still-in-progress trailing week (and its Pace contribution) — that bucket usually has very few matched leads so far, so one slow or fast one can look like a defining trend before the week is even over.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartSpeedToLead"></div>
+            <select class="chart-granularity" id="teamsComparison-chartSpeedToLead" onchange="renderCharts(getFilteredDays())">
+              <option value="off">Teams comparison: Off</option>
+              <option value="on">Teams comparison: On</option>
+            </select>
             <select class="chart-granularity" id="hoursFilter-chartSpeedToLead" onchange="renderCharts(getFilteredDays())">
               <option value="both">On + Off hours</option>
               <option value="on">On-hours only</option>
@@ -835,6 +859,10 @@
           <span class="chart-title">Meetings Booked <span class="goal-info" id="info-chartMeetings" title="Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetings"></div>
+            <select class="chart-granularity" id="teamsComparison-chartMeetings" onchange="renderCharts(getFilteredDays())">
+              <option value="off">Teams comparison: Off</option>
+              <option value="on">Teams comparison: On</option>
+            </select>
             <select class="chart-granularity" id="granularity-chartMeetings" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
               <option value="weekly" selected>Weekly</option>
@@ -854,6 +882,10 @@
           <span class="chart-title">Lead Volume <span class="goal-info" id="info-chartLeads" title="Count of leads created per bucket, after your Leads: filter (B2B/B2C/All/Commission) is applied. Cumulative toggle switches from per-bucket counts to a running total across the range. Dashed Target = your Lead Volume goal, prorated to each bucket's size; no Pace shown for a straight count chart like this one.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartLeads"></div>
+            <select class="chart-granularity" id="teamsComparison-chartLeads" onchange="renderCharts(getFilteredDays())">
+              <option value="off">Teams comparison: Off</option>
+              <option value="on">Teams comparison: On</option>
+            </select>
             <select class="chart-granularity" id="granularity-chartLeads" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
               <option value="weekly" selected>Weekly</option>
@@ -875,9 +907,36 @@
       </div>
       <div class="chart-card full">
         <div class="chart-header">
+          <span class="chart-title">Meetings Held <span class="goal-info" id="info-chartMeetingsHeld" title="Count of leads whose Meeting Status is exactly Meeting Done, per bucket — distinct from Meetings Booked (which also counts still-upcoming Scheduled meetings and includes Closed deals as an implied meeting). Dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected). No goal/Target line for this one.">ⓘ</span></span>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartMeetingsHeld"></div>
+            <select class="chart-granularity" id="teamsComparison-chartMeetingsHeld" onchange="renderCharts(getFilteredDays())">
+              <option value="off">Teams comparison: Off</option>
+              <option value="on">Teams comparison: On</option>
+            </select>
+            <select class="chart-granularity" id="granularity-chartMeetingsHeld" onchange="renderCharts(getFilteredDays())">
+              <option value="daily">Daily</option>
+              <option value="weekly" selected>Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="modeToggle-chartMeetingsHeld" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Combined</span>
+            </label>
+          </div>
+        </div>
+        <canvas id="chartMeetingsHeld"></canvas>
+      </div>
+      <div class="chart-card full">
+        <div class="chart-header">
           <span class="chart-title">Meeting Attendance by SDR <span class="goal-info" id="info-chartMeetingAttendance" title="Bar height = resolved meetings (Meeting Done + Meeting Not Atended + Meeting Rejected) for that SDR, bucketed by when the LEAD was created (not when the meeting was booked/held — that date isn't available in the export), over the selected date range — Meeting Scheduled is excluded since it hasn't happened yet. The dark segment is the portion that was Meeting Not Atended or Meeting Rejected — the % shown is that segment's share of the SDR's resolved meetings. Always shows all 4 SDRs regardless of the view-tab selection above. Average = one bar per SDR totaling the whole selected range; Week over week = one grouped bar per SDR per week, so you can see the trend instead of just the period total.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetingAttendance"></div>
+            <select class="chart-granularity" id="teamsComparison-chartMeetingAttendance" onchange="renderCharts(getFilteredDays())">
+              <option value="off">Teams comparison: Off</option>
+              <option value="on">Teams comparison: On</option>
+            </select>
             <select class="chart-granularity" id="viewMode-chartMeetingAttendance" onchange="renderCharts(getFilteredDays())">
               <option value="average">Average</option>
               <option value="weekly">Week over week</option>
@@ -999,9 +1058,19 @@ const SDRS = [
 const SDR_BY_KEY = Object.fromEntries(SDRS.map(s => [s.key, s]));
 // Quick-select team groups: US (MJ/Gospel) vs OUS = "outside US" (Mark/Levi).
 const TEAM_GROUPS = [
-  { key: 'US', label: 'US Team', members: ['MJ', 'Gospel'] },
-  { key: 'OUS', label: 'OUS Team', members: ['Mark', 'Levi'] }
+  { key: 'US', label: 'US Team', members: ['MJ', 'Gospel'], color: '#2f6fed' },
+  { key: 'OUS', label: 'OUS Team', members: ['Mark', 'Levi'], color: '#e0871a' }
 ];
+// Charts with a "Teams comparison" dropdown in their header can call this —
+// when it's set to "on", it returns a fixed [US Team, OUS Team] views array
+// (ignoring the view-tab SDR selection and any per-chart Combined toggle,
+// since a team-vs-team comparison is a different axis than per-SDR/combined)
+// for the chart to plot instead of its normal SDR-selection-driven views.
+function teamsComparisonViews(id) {
+  const el = document.getElementById('teamsComparison-' + id);
+  if (!el || el.value !== 'on') return null;
+  return TEAM_GROUPS.map(g => ({ key: g.members, label: g.label, color: g.color }));
+}
 function normalizeSDRName(name) {
   return (name || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
@@ -1706,12 +1775,16 @@ function isQualifiedLead(r) {
   return false;
 }
 function computeMetrics(leads) {
-  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, speed_to_lead_matched: 0, speed_to_lead_eligible: 0, speed_to_lead_mismatch: 0,
+  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, meetings_held: 0, speed_to_lead_matched: 0, speed_to_lead_eligible: 0, speed_to_lead_mismatch: 0,
     speed_to_lead_on_matched: 0, speed_to_lead_on_eligible: 0,
     speed_to_lead_off_matched: 0, speed_to_lead_off_eligible: 0 };
   const meetings = leads.filter(isMeetingBooked).length;
   const meetings_not_attended = leads.filter(isMeetingNotAttended).length;
   const meetings_resolved = leads.filter(isMeetingResolved).length;
+  // Meetings that actually took place — Meeting Status = Meeting Done exactly
+  // (distinct from "Booked", which also counts still-upcoming Scheduled
+  // meetings and the Closed-implies-a-meeting-happened inference).
+  const meetings_held = leads.filter(r => r['Meeting Status'] === 'Meeting Done').length;
   const qualified = leads.filter(isQualifiedLead).length;
   const non_responsive = leads.filter(r => r['Disqualified reason'] === 'Not responsive' || r['Sales status'] === 'Non respondant').length;
   const ae_dq = leads.filter(r => (r['Sales status'] || '').includes('Disqualified AE')).length;
@@ -1748,6 +1821,7 @@ function computeMetrics(leads) {
     active_pipeline,
     meetings_not_attended,
     meetings_resolved,
+    meetings_held,
     speed_to_lead_matched,
     speed_to_lead_eligible,
     speed_to_lead_mismatch,
@@ -1938,11 +2012,13 @@ function metricsForSelection(dataset, day, view) {
   const sum = f => parts.reduce((a, p) => a + (p[f] || 0), 0);
   const leads = sum('leads'), meetings = sum('meetings'), qualified = sum('qualified'),
         non_responsive = sum('non_responsive'), ae_dq = sum('ae_dq'), sdr_dq = sum('sdr_dq'), active_pipeline = sum('active_pipeline'),
+        meetings_not_attended = sum('meetings_not_attended'), meetings_resolved = sum('meetings_resolved'), meetings_held = sum('meetings_held'),
         speed_to_lead_matched = sum('speed_to_lead_matched'), speed_to_lead_eligible = sum('speed_to_lead_eligible'), speed_to_lead_mismatch = sum('speed_to_lead_mismatch'),
         speed_to_lead_on_matched = sum('speed_to_lead_on_matched'), speed_to_lead_on_eligible = sum('speed_to_lead_on_eligible'),
         speed_to_lead_off_matched = sum('speed_to_lead_off_matched'), speed_to_lead_off_eligible = sum('speed_to_lead_off_eligible');
   return {
     leads, meetings, qualified, non_responsive, ae_dq, sdr_dq, active_pipeline,
+    meetings_not_attended, meetings_resolved, meetings_held,
     speed_to_lead_matched, speed_to_lead_eligible, speed_to_lead_mismatch,
     speed_to_lead_on_matched, speed_to_lead_on_eligible,
     speed_to_lead_off_matched, speed_to_lead_off_eligible,
@@ -2298,9 +2374,9 @@ function makeChart(id, days, spec) {
   const labels = buckets.map(b => b.label);
 
   const keys = Array.from(selectedSDRs);
-  const views = (!combined && keys.length > 1)
+  const views = teamsComparisonViews(id) || ((!combined && keys.length > 1)
     ? SDRS.filter(s => selectedSDRs.has(s.key)).map(s => ({ key: s.key, label: s.label, color: s.color }))
-    : [{ key: keys, label: keys.length === SDRS.length ? 'Team' : keys.map(k => SDR_BY_KEY[k].label).join('+'), color: COLORS.Team }];
+    : [{ key: keys, label: keys.length === SDRS.length ? 'Team' : keys.map(k => SDR_BY_KEY[k].label).join('+'), color: COLORS.Team }]);
 
   const datasets = views.map(v => {
     let data = buckets.map(b => {
@@ -2451,9 +2527,10 @@ function renderCharts(days) {
   makeChart('chartSDRDQ', chartDays, { type: 'rate', num: 'sdr_dq', denom: 'leadVol', pace: true, aeBaseline: ae ? ae.sdrDqRate : null });
   makeChart('chartMeetings', chartDays, { type: 'count', field: 'meetings', goal: d.goalMeetings, pace: true, aeBaseline: ae ? ae.meetingsPerDay : null });
   makeChart('chartLeads', chartDays, { type: 'count', field: 'leadVol', goal: d.goalLeads, cumulativeAllowed: true, aeBaseline: ae ? ae.leadsPerDay : null });
+  makeChart('chartMeetingsHeld', chartDays, { type: 'count', field: 'meetings_held', pace: true });
   renderSpeedToLeadChart(chartDays);
   renderMeetingAttendanceChart(days);
-  ['chartMeetingRate', 'chartQualPct', 'chartNR', 'chartAEDQ', 'chartSDRDQ', 'chartSpeedToLead', 'chartMeetings', 'chartLeads']
+  ['chartMeetingRate', 'chartQualPct', 'chartNR', 'chartAEDQ', 'chartSDRDQ', 'chartSpeedToLead', 'chartMeetings', 'chartLeads', 'chartMeetingsHeld']
     .forEach(id => updateChartInfoTooltip(id));
   updateChartInfoTooltip('chartMeetingAttendance', true);
 }
@@ -2467,7 +2544,9 @@ function renderCharts(days) {
 function chartViewContext(id, simpleMode) {
   const filter = leadTypeFilter();
   const filterLabel = { business: 'B2B leads only', b2c: 'B2C leads only', all: 'All leads', commission: 'Commission View' }[filter] || filter;
-  if (simpleMode) return ` Currently showing: ${filterLabel}.`;
+  const teamsEl = document.getElementById('teamsComparison-' + id);
+  const teamsNote = (teamsEl && teamsEl.value === 'on') ? ', US Team vs OUS Team comparison on' : '';
+  if (simpleMode) return ` Currently showing: ${filterLabel}${teamsNote}.`;
   const sdrLabel = selectedSDRs.size === SDRS.length ? 'Team (all 4 SDRs)' : Array.from(selectedSDRs).map(k => SDR_BY_KEY[k].label).join(' + ');
   const combined = isCombinedMode(id);
   const splitNote = (!combined && selectedSDRs.size > 1) ? 'one bar/line per selected SDR' : 'combined into one series';
@@ -2478,7 +2557,7 @@ function chartViewContext(id, simpleMode) {
   const aeNote = isAEBaselineOn() ? ', AE Baseline overlay on' : (rawAEBaseline ? ', AE Baseline overlay off' : '');
   const excludeCurrentWeekEl = document.getElementById('excludeCurrentWeek-' + id);
   const excludeNote = (excludeCurrentWeekEl && excludeCurrentWeekEl.checked) ? ', current week excluded' : '';
-  return ` Currently showing: ${filterLabel}, ${sdrLabel} (${splitNote}), ${granularity} buckets, as ${style}${hoursNote}${aeNote}${excludeNote}.`;
+  return ` Currently showing: ${filterLabel}, ${sdrLabel} (${splitNote}), ${granularity} buckets, as ${style}${hoursNote}${aeNote}${excludeNote}${teamsNote}.`;
 }
 function updateChartInfoTooltip(id, simpleMode) {
   const el = document.getElementById('info-' + id);
@@ -2524,9 +2603,9 @@ function renderSpeedToLeadChart(days) {
   const labels = buckets.map(b => b.label);
 
   const keys = Array.from(selectedSDRs);
-  const views = (!combined && keys.length > 1)
+  const views = teamsComparisonViews(id) || ((!combined && keys.length > 1)
     ? SDRS.filter(s => selectedSDRs.has(s.key)).map(s => ({ key: [s.key], label: s.label, color: s.color }))
-    : [{ key: keys, label: keys.length === SDRS.length ? 'Team' : keys.map(k => SDR_BY_KEY[k].label).join('+'), color: COLORS.Team }];
+    : [{ key: keys, label: keys.length === SDRS.length ? 'Team' : keys.map(k => SDR_BY_KEY[k].label).join('+'), color: COLORS.Team }]);
 
   const datasets = views.map(v => {
     const data = buckets.map(b => {
@@ -2717,23 +2796,28 @@ const meetingAttendancePctPlugin = {
 // and draws one grouped stacked bar per SDR per week.
 function renderMeetingAttendanceChart(days) {
   const weekly = document.getElementById('viewMode-chartMeetingAttendance').value === 'weekly';
+  // Teams comparison collapses the normal 4-SDR breakdown into US Team/OUS
+  // Team groups instead — each "group" below is either a single SDR (key: a
+  // string) or a team (key: an array of member keys); sumMetric() already
+  // handles both transparently.
+  const groups = teamsComparisonViews('chartMeetingAttendance') || SDRS.map(s => ({ key: s.key, label: s.label, color: s.color }));
   const buckets = weekly ? bucketize(days, 'weekly') : [{ label: null, days }];
-  const labels = weekly ? buckets.map(b => b.label) : SDRS.map(s => s.label);
+  const labels = weekly ? buckets.map(b => b.label) : groups.map(g => g.label);
 
   const datasets = weekly
-    ? SDRS.flatMap(s => {
-        const naData = buckets.map(b => sumMetric(b.days, s.key, 'meetings_not_attended'));
-        const doneData = buckets.map((b, i) => sumMetric(b.days, s.key, 'meetings_resolved') - naData[i]);
+    ? groups.flatMap(g => {
+        const naData = buckets.map(b => sumMetric(b.days, g.key, 'meetings_not_attended'));
+        const doneData = buckets.map((b, i) => sumMetric(b.days, g.key, 'meetings_resolved') - naData[i]);
         return [
-          { label: `${s.label} — Not Attended/Rejected`, data: naData, backgroundColor: '#8a1f1f', stack: s.key, _pairId: s.key, _isNA: true },
-          { label: `${s.label} — Meeting Done`, data: doneData, backgroundColor: s.color, stack: s.key, _pairId: s.key, _isNA: false }
+          { label: `${g.label} — Not Attended/Rejected`, data: naData, backgroundColor: '#8a1f1f', stack: g.label, _pairId: g.label, _isNA: true },
+          { label: `${g.label} — Meeting Done`, data: doneData, backgroundColor: g.color, stack: g.label, _pairId: g.label, _isNA: false }
         ];
       })
     : (() => {
-        const rows = SDRS.map(s => {
-          const total = sumMetric(days, s.key, 'meetings_resolved');
-          const notAttended = sumMetric(days, s.key, 'meetings_not_attended');
-          return { ...s, total, notAttended, completed: total - notAttended };
+        const rows = groups.map(g => {
+          const total = sumMetric(days, g.key, 'meetings_resolved');
+          const notAttended = sumMetric(days, g.key, 'meetings_not_attended');
+          return { ...g, total, notAttended, completed: total - notAttended };
         });
         return [
           { label: 'Not Attended / Rejected', data: rows.map(r => r.notAttended), backgroundColor: '#8a1f1f', stack: 's', _pairId: 'all', _isNA: true },
@@ -2788,7 +2872,7 @@ function renderMeetingAttendanceChart(days) {
   const legendEl = document.getElementById('legend-chartMeetingAttendance');
   if (legendEl) {
     const items = weekly
-      ? [{ label: 'Not Attended / Rejected', color: '#8a1f1f' }, ...SDRS.map(s => ({ label: s.label, color: s.color }))]
+      ? [{ label: 'Not Attended / Rejected', color: '#8a1f1f' }, ...groups.map(g => ({ label: g.label, color: g.color }))]
       : [{ label: 'Not Attended / Rejected (%)', color: '#8a1f1f' }, { label: 'Meeting Done', color: '#4285f4' }];
     legendEl.innerHTML = items.map(it =>
       `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
