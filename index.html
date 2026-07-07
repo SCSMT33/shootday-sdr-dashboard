@@ -277,6 +277,26 @@
   .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
   canvas { max-height: 220px; }
 
+  .speed-to-lead-drilldown {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .speed-to-lead-drilldown-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 12px; flex-wrap: wrap; }
+  .speed-to-lead-drilldown-title { font-size: 12px; font-weight: 600; }
+  .speed-to-lead-drilldown-sub { font-size: 11px; color: var(--muted); }
+  .speed-to-lead-drilldown-close {
+    background: var(--surface2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .speed-to-lead-drilldown-close:hover { color: var(--red); border-color: var(--red); }
+  .speed-to-lead-drilldown-empty { color: var(--muted); font-size: 12px; padding: 6px 0; }
+
   .chart-granularity {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -756,7 +776,7 @@
       </div>
       <div class="chart-card full" id="chartCardSpeedToLead">
         <div class="chart-header">
-          <span class="chart-title">Speed-to-Lead (median minutes) <span class="goal-info" id="info-chartSpeedToLead" title="Median minutes from lead creation to first outbound call, matched by phone number from the Aircall call-history export. Median (not mean) so a few stale/unreliable matches can't skew it. Leads created before the Call History export's own earliest call — or matched to a call over 48h later — are excluded entirely. Requires a Call History CSV to be loaded. Dashed Target = your Speed-to-Lead goal; dashed Pace = a trailing 3-bucket rolling median (3 weeks/days/months, matching whatever granularity is selected), and can be limited to On-hours-only or Off-hours-only leads with the dropdown next to the legend. On-hours uses each SDR's own local time (EST for MJ/Gospel, CET for Mark/Levi) and only counts Monday–Friday during their shift — a lead created on a Saturday or Sunday is always off-hours, even if the clock time would otherwise fall inside that SDR's weekday shift, since nobody works weekends.">ⓘ</span></span>
+          <span class="chart-title">Speed-to-Lead (median minutes) <span class="goal-info" id="info-chartSpeedToLead" title="Median minutes from lead creation to first outbound call, matched by phone number from the Aircall call-history export. Median (not mean) so a few stale/unreliable matches can't skew it. Leads created before the Call History export's own earliest call — or matched to a call over 48h later — are excluded entirely. Requires a Call History CSV to be loaded. Dashed Target = your Speed-to-Lead goal; dashed Pace = a trailing 3-bucket rolling median (3 weeks/days/months, matching whatever granularity is selected), and can be limited to On-hours-only or Off-hours-only leads with the dropdown next to the legend. On-hours uses each SDR's own local time (EST for MJ/Gospel, CET for Mark/Levi) and only counts Monday–Friday during their shift — a lead created on a Saturday or Sunday is always off-hours, even if the clock time would otherwise fall inside that SDR's weekday shift, since nobody works weekends. Click any bar/point to drill down into every lead over 20 minutes in that period — Name, created time, called time (shown in that SDR's own local time: EST for MJ, PST for Gospel, CET for Mark/Levi), and total wait.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartSpeedToLead"></div>
             <select class="chart-granularity" id="hoursFilter-chartSpeedToLead" onchange="renderCharts(getFilteredDays())">
@@ -777,6 +797,7 @@
           </div>
         </div>
         <canvas id="chartSpeedToLead"></canvas>
+        <div id="speedToLeadDrilldown" class="speed-to-lead-drilldown" style="display:none"></div>
       </div>
       <div class="chart-card">
         <div class="chart-header">
@@ -1014,6 +1035,17 @@ const SDR_SHIFT_UTC = {
 // SDR's on-hours window sits entirely within one local day (none cross local
 // midnight), so this is safe to use independently of the minute-of-day check.
 const SDR_LOCAL_OFFSET_HOURS = { MJ: -5, Gospel: -5, Mark: 1, Levi: 1 };
+// Where to DISPLAY times for the Speed-to-Lead drill-down (below) — each SDR's
+// own personal time zone, which isn't necessarily the same zone the routing
+// schedule above is anchored to (Gospel's shift is scheduled against the same
+// EST columns as MJ's, but she's personally based in Pacific). Fixed
+// (non-DST) offsets, consistent with the rest of the app's timezone handling.
+const SDR_DISPLAY_OFFSET_HOURS = { MJ: -5, Gospel: -8, Mark: 1, Levi: 1 };
+const SDR_DISPLAY_TZ_LABEL = { MJ: 'EST', Gospel: 'PST', Mark: 'CET', Levi: 'CET' };
+// Leads slower than this, within the Speed-to-Lead chart's current bucket/SDR/
+// on-off-hours selection, are what the click-to-drill-down list below the
+// chart surfaces.
+const SPEED_TO_LEAD_DRILLDOWN_MINUTES = 20;
 // Nobody works weekends — a lead created Sat/Sun still gets auto-assigned by
 // the routing schedule (which has no weekend concept), but no SDR is actually
 // on shift, so it must never count as "on-hours" regardless of what time of
@@ -1264,6 +1296,7 @@ function matchSpeedToLead() {
     SDRS.forEach(s => {
       (rawByDay[day][s.key] || []).forEach(r => {
         delete r._speedToLeadMinutes; delete r._speedToLeadMatched; delete r._speedToLeadMismatch; delete r._speedToLeadEligible;
+        delete r._speedToLeadCallUtcMs; delete r._speedToLeadCreatedUtcMs;
         r._onHours = isOnHours(s.key, toUTCMillis(r['Creation Date']));
       });
     });
@@ -1317,6 +1350,8 @@ function matchSpeedToLead() {
       entry.row._speedToLeadMinutes = minutes;
       entry.row._speedToLeadMatched = true;
       entry.row._speedToLeadMismatch = !sameSDR;
+      entry.row._speedToLeadCallUtcMs = call.utcMs;
+      entry.row._speedToLeadCreatedUtcMs = entry.creationUtcMs;
     });
   });
 }
@@ -2418,9 +2453,11 @@ function renderSpeedToLeadChart(days) {
   if (!rawCalls) {
     if (cardEl) cardEl.style.display = 'none';
     if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+    closeSpeedToLeadDrilldown();
     return;
   }
   if (cardEl) cardEl.style.display = '';
+  closeSpeedToLeadDrilldown();
 
   const granularity = chartGranularity(id);
   const combined = isCombinedMode(id);
@@ -2481,6 +2518,15 @@ function renderSpeedToLeadChart(days) {
       responsive: true,
       maintainAspectRatio: true,
       interaction: { mode: 'index', intersect: false },
+      // Click a bar/point to drill into every lead over the threshold for
+      // that bucket + SDR series (skips the Pace/Target reference lines).
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        const { datasetIndex, index } = elements[0];
+        const view = views[datasetIndex];
+        if (!view) return;
+        renderSpeedToLeadDrilldown(buckets[index], view.key, onHoursFilter, view.label);
+      },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -2508,6 +2554,72 @@ function renderSpeedToLeadChart(days) {
       `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
     ).join('');
   }
+}
+
+// Formats a UTC instant in a specific SDR's own personal local time (not
+// necessarily the same zone their shift schedule is anchored to — e.g.
+// Gospel's routing is scheduled against EST, but she's personally in
+// Pacific). Fixed (non-DST) offsets, consistent with the rest of the app.
+function formatSdrLocalTime(sdrKey, utcMs) {
+  if (utcMs == null) return '—';
+  const offset = SDR_DISPLAY_OFFSET_HOURS[sdrKey] || 0;
+  const tzLabel = SDR_DISPLAY_TZ_LABEL[sdrKey] || 'UTC';
+  const d = new Date(utcMs + offset * 3600000);
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const hh = d.getUTCHours(), mm = d.getUTCMinutes();
+  const ampm = hh >= 12 ? 'PM' : 'AM';
+  const hh12 = ((hh + 11) % 12) + 1;
+  return `${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${hh12}:${String(mm).padStart(2, '0')} ${ampm} ${tzLabel}`;
+}
+// Every matched lead over SPEED_TO_LEAD_DRILLDOWN_MINUTES within the clicked
+// bucket's days, for the clicked series' SDR(s) — respects the current
+// Leads: filter and the chart's On/Off-hours dropdown, same as the bars.
+function speedToLeadDrilldownRows(bucket, sdrKeys, onHoursFilter) {
+  const keys = sdrKeys.length === SDRS.length ? SDRS.map(s => s.key) : sdrKeys;
+  const rows = [];
+  bucket.days.forEach(d => {
+    keys.forEach(k => {
+      applyLeadTypeFilter((rawByDay[d] && rawByDay[d][k]) || []).forEach(r => {
+        if (!r._speedToLeadMatched) return;
+        if (onHoursFilter !== undefined && !!r._onHours !== onHoursFilter) return;
+        if (r._speedToLeadMinutes <= SPEED_TO_LEAD_DRILLDOWN_MINUTES) return;
+        rows.push({ sdrKey: k, name: r['Name'], createdUtc: r._speedToLeadCreatedUtcMs, calledUtc: r._speedToLeadCallUtcMs, mins: r._speedToLeadMinutes });
+      });
+    });
+  });
+  rows.sort((a, b) => b.mins - a.mins);
+  return rows;
+}
+function renderSpeedToLeadDrilldown(bucket, sdrKeys, onHoursFilter, viewLabel) {
+  const el = document.getElementById('speedToLeadDrilldown');
+  if (!el) return;
+  const rows = speedToLeadDrilldownRows(bucket, sdrKeys, onHoursFilter);
+  const hoursLabel = onHoursFilter === true ? 'on-hours' : onHoursFilter === false ? 'off-hours' : 'on + off hours';
+  const bodyHtml = rows.length ? `<table class="report-table">
+      <thead><tr><th>SDR</th><th>Name</th><th>Created</th><th>Called</th><th>Wait</th></tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td>${escapeHtml(SDR_BY_KEY[r.sdrKey].label)}</td>
+        <td>${escapeHtml(r.name)}</td>
+        <td>${formatSdrLocalTime(r.sdrKey, r.createdUtc)}</td>
+        <td>${formatSdrLocalTime(r.sdrKey, r.calledUtc)}</td>
+        <td>${fmtMinutes(r.mins)}</td>
+      </tr>`).join('')}</tbody>
+    </table>` : `<div class="speed-to-lead-drilldown-empty">No leads over ${SPEED_TO_LEAD_DRILLDOWN_MINUTES} min in this period (${hoursLabel}).</div>`;
+  el.innerHTML = `
+    <div class="speed-to-lead-drilldown-header">
+      <div>
+        <div class="speed-to-lead-drilldown-title">${escapeHtml(bucket.label)} · ${escapeHtml(viewLabel)} · leads over ${SPEED_TO_LEAD_DRILLDOWN_MINUTES} min (${hoursLabel})</div>
+        <div class="speed-to-lead-drilldown-sub">Times shown in each SDR's own local time — EST for MJ, PST for Gospel, CET for Mark/Levi.</div>
+      </div>
+      <button class="speed-to-lead-drilldown-close" onclick="closeSpeedToLeadDrilldown()">Close</button>
+    </div>
+    ${bodyHtml}
+  `;
+  el.style.display = 'block';
+}
+function closeSpeedToLeadDrilldown() {
+  const el = document.getElementById('speedToLeadDrilldown');
+  if (el) { el.style.display = 'none'; el.innerHTML = ''; }
 }
 
 // Draws the % (not-attended/rejected ÷ total booked meetings) inside the dark
