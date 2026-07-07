@@ -777,7 +777,7 @@
       </div>
       <div class="chart-card full" id="chartCardSpeedToLead">
         <div class="chart-header">
-          <span class="chart-title">Speed-to-Lead (median minutes) <span class="goal-info" id="info-chartSpeedToLead" title="Median minutes from lead creation to first outbound call, matched by phone number from the Aircall call-history export. Median (not mean) so a few stale/unreliable matches can't skew it. Leads created before the Call History export's own earliest call — or matched to a call over 48h later — are excluded entirely. Requires a Call History CSV to be loaded. Dashed Target = your Speed-to-Lead goal; dashed Pace = a trailing 3-bucket rolling median (3 weeks/days/months, matching whatever granularity is selected), and can be limited to On-hours-only or Off-hours-only leads with the dropdown next to the legend. On-hours uses each SDR's own local time (EST for MJ/Gospel, CET for Mark/Levi) and only counts Monday–Friday during their shift — a lead created on a Saturday or Sunday is always off-hours, even if the clock time would otherwise fall inside that SDR's weekday shift, since nobody works weekends. Click any bar/point to drill down into every lead over 20 minutes in that period — Name, created time, called time (shown in that SDR's own local time: EST for MJ, PST for Gospel, CET for Mark/Levi), and total wait.">ⓘ</span></span>
+          <span class="chart-title">Speed-to-Lead (median minutes) <span class="goal-info" id="info-chartSpeedToLead" title="Median minutes from lead creation to first outbound call, matched by phone number from the Aircall call-history export. Median (not mean) so a few stale/unreliable matches can't skew it. Leads created before the Call History export's own earliest call — or matched to a call over 48h later — are excluded entirely. Requires a Call History CSV to be loaded. Dashed Target = your Speed-to-Lead goal; dashed Pace = a trailing 3-bucket rolling median (3 weeks/days/months, matching whatever granularity is selected), and can be limited to On-hours-only or Off-hours-only leads with the dropdown next to the legend. On-hours uses each SDR's own local time (EST for MJ/Gospel, CET for Mark/Levi) and only counts Monday–Friday during their shift — a lead created on a Saturday or Sunday is always off-hours, even if the clock time would otherwise fall inside that SDR's weekday shift, since nobody works weekends. Click any bar/point to drill down into every lead over 20 minutes in that period — Name, created time, called time (shown in that SDR's own local time: EST for MJ, PST for Gospel, CET for Mark/Levi), and total wait. "Exclude current week" drops the still-in-progress trailing week (and its Pace contribution) — that bucket usually has very few matched leads so far, so one slow or fast one can look like a defining trend before the week is even over.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartSpeedToLead"></div>
             <select class="chart-granularity" id="hoursFilter-chartSpeedToLead" onchange="renderCharts(getFilteredDays())">
@@ -794,6 +794,11 @@
               <input type="checkbox" id="modeToggle-chartSpeedToLead" onchange="renderCharts(getFilteredDays())">
               <span class="toggle-track"></span>
               <span class="toggle-text">Combined</span>
+            </label>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="excludeCurrentWeek-chartSpeedToLead" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Exclude current week</span>
             </label>
           </div>
         </div>
@@ -2437,7 +2442,9 @@ function chartViewContext(id, simpleMode) {
   const hoursFilterEl = document.getElementById('hoursFilter-' + id);
   const hoursNote = hoursFilterEl ? ({ on: ', on-hours only', off: ', off-hours only' }[hoursFilterEl.value] || '') : '';
   const aeNote = isAEBaselineOn() ? ', AE Baseline overlay on' : (rawAEBaseline ? ', AE Baseline overlay off' : '');
-  return ` Currently showing: ${filterLabel}, ${sdrLabel} (${splitNote}), ${granularity} buckets, as ${style}${hoursNote}${aeNote}.`;
+  const excludeCurrentWeekEl = document.getElementById('excludeCurrentWeek-' + id);
+  const excludeNote = (excludeCurrentWeekEl && excludeCurrentWeekEl.checked) ? ', current week excluded' : '';
+  return ` Currently showing: ${filterLabel}, ${sdrLabel} (${splitNote}), ${granularity} buckets, as ${style}${hoursNote}${aeNote}${excludeNote}.`;
 }
 function updateChartInfoTooltip(id, simpleMode) {
   const el = document.getElementById('info-' + id);
@@ -2471,6 +2478,14 @@ function renderSpeedToLeadChart(days) {
   // means both, matching speedToLeadMinutesValues()'s onHoursFilter param.
   const hoursFilterVal = document.getElementById('hoursFilter-' + id).value;
   const onHoursFilter = hoursFilterVal === 'on' ? true : hoursFilterVal === 'off' ? false : undefined;
+  // Exclude current week: drops the still-in-progress trailing week, which
+  // tends to have very few matched leads so far and can make one slow/fast
+  // lead look like a defining trend for that bucket. Applied before
+  // bucketizing so it also keeps that noisy week out of the Pace line.
+  if (document.getElementById('excludeCurrentWeek-' + id).checked) {
+    const weekStart = dubaiWeekStart(dubaiTodayKey());
+    days = days.filter(d => d < weekStart);
+  }
   const buckets = bucketize(days, granularity);
   const labels = buckets.map(b => b.label);
 
