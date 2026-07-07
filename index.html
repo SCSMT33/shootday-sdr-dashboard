@@ -695,6 +695,11 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">Combined</span>
             </label>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="excludeCurrentWeek-chartMeetingRate" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Exclude current week</span>
+            </label>
           </div>
         </div>
         <canvas id="chartMeetingRate"></canvas>
@@ -713,6 +718,11 @@
               <input type="checkbox" id="modeToggle-chartQualPct" onchange="renderCharts(getFilteredDays())">
               <span class="toggle-track"></span>
               <span class="toggle-text">Combined</span>
+            </label>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="excludeCurrentWeek-chartQualPct" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Exclude current week</span>
             </label>
           </div>
         </div>
@@ -733,6 +743,11 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">Combined</span>
             </label>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="excludeCurrentWeek-chartNR" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Exclude current week</span>
+            </label>
           </div>
         </div>
         <canvas id="chartNR"></canvas>
@@ -752,6 +767,11 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">Combined</span>
             </label>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="excludeCurrentWeek-chartAEDQ" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Exclude current week</span>
+            </label>
           </div>
         </div>
         <canvas id="chartAEDQ"></canvas>
@@ -770,6 +790,11 @@
               <input type="checkbox" id="modeToggle-chartSDRDQ" onchange="renderCharts(getFilteredDays())">
               <span class="toggle-track"></span>
               <span class="toggle-text">Combined</span>
+            </label>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="excludeCurrentWeek-chartSDRDQ" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Exclude current week</span>
             </label>
           </div>
         </div>
@@ -2260,6 +2285,15 @@ function makeChart(id, days, spec) {
   const cumulative = !!spec.cumulativeAllowed && isCumulative(id);
   const isRate = spec.type === 'rate';
   const barMode = isBarMode();
+  // Exclude current week: drops the still-in-progress trailing week (and its
+  // Pace contribution) — only present on charts with the checkbox in their
+  // header, so this is a no-op for charts that don't have one (e.g. count
+  // charts like Meetings Booked/Lead Volume weren't asked for this).
+  const excludeCurrentWeekEl = document.getElementById('excludeCurrentWeek-' + id);
+  if (excludeCurrentWeekEl && excludeCurrentWeekEl.checked) {
+    const weekStart = dubaiWeekStart(dubaiTodayKey());
+    days = days.filter(d => d < weekStart);
+  }
   const buckets = bucketize(days, granularity);
   const labels = buckets.map(b => b.label);
 
@@ -2498,7 +2532,8 @@ function renderSpeedToLeadChart(days) {
     const data = buckets.map(b => {
       const present = b.days.filter(d => allData[d]);
       if (!present.length) return null;
-      return median(speedToLeadMinutesValues(present, v.key, onHoursFilter));
+      const m = median(speedToLeadMinutesValues(present, v.key, onHoursFilter));
+      return m != null ? parseFloat(m.toFixed(1)) : null;
     });
     return barMode
       ? { label: v.label, data, backgroundColor: v.color, borderRadius: 3, borderWidth: 0 }
