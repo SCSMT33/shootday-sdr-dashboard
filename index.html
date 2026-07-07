@@ -1008,9 +1008,26 @@ const SDR_SHIFT_UTC = {
   Mark:   [[420, 900]],            // 07:00–15:00 UTC (8am-4pm CET solo+overlap)
   Levi:   [[600, 1080]]            // 10:00–18:00 UTC
 };
+// Fixed (non-DST) local offsets matching the EST/CET columns the routing doc's
+// UTC ranges above were already derived from — used only to figure out which
+// local calendar day (and therefore weekday) a UTC instant falls on. Every
+// SDR's on-hours window sits entirely within one local day (none cross local
+// midnight), so this is safe to use independently of the minute-of-day check.
+const SDR_LOCAL_OFFSET_HOURS = { MJ: -5, Gospel: -5, Mark: 1, Levi: 1 };
+// Nobody works weekends — a lead created Sat/Sun still gets auto-assigned by
+// the routing schedule (which has no weekend concept), but no SDR is actually
+// on shift, so it must never count as "on-hours" regardless of what time of
+// day it landed at, or a single weekend lead that waits until Monday morning
+// can single-handedly wreck a thin bucket's on-hours median.
+function isSdrWeekend(sdrKey, utcMs) {
+  const offsetHours = SDR_LOCAL_OFFSET_HOURS[sdrKey] || 0;
+  const localDow = new Date(utcMs + offsetHours * 3600000).getUTCDay(); // 0=Sun, 6=Sat
+  return localDow === 0 || localDow === 6;
+}
 function isOnHours(sdrKey, utcMs) {
   const ranges = SDR_SHIFT_UTC[sdrKey];
   if (!ranges || utcMs == null) return false;
+  if (isSdrWeekend(sdrKey, utcMs)) return false;
   const minuteOfDay = Math.floor(utcMs / 60000) % 1440;
   return ranges.some(([start, end]) => minuteOfDay >= start && minuteOfDay < end);
 }
