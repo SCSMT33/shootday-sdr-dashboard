@@ -2190,15 +2190,36 @@ function renderSummaryCards(days) {
     };
   });
 
+  // Info-icon text for each card — built fresh on every render so it always
+  // describes the math for whatever Leads:/AE Baseline filters are active
+  // right now, not a static description that could drift from reality.
+  const leadTypeLabel = { business: 'B2B leads only', b2c: 'B2C leads only', all: 'All leads (B2B+B2C)', commission: 'Commission View' }[leadTypeFilter()] || 'B2B leads only';
+  const aeNote = isAEBaselineOn() ? ' AE Baseline row shown = the same calculation run on the frozen pre-SDR AE export.' : '';
+  const infoLeadVolume = isCommission
+    ? `Count of leads created in the selected range, currently filtered to B2B leads only (Commission View always uses B2B as the denominator regardless of the Leads: dropdown).${aeNote}`
+    : `Count of leads created in the selected range, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
+  const infoMeetingsBooked = `Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended — filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
+  const infoMeetingRate = isCommission
+    ? `Meetings Booked (B2B+B2C combined) ÷ B2B-only Lead Volume — Commission View judges the combined meeting count against the B2B lead denominator.${aeNote}`
+    : `Meetings Booked ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
+  const infoQualified = `Count of leads that are qualified — Sales status qualifies on its own, OR the lead has a booked meeting, OR (legacy rows) SQL status = Qualified. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
+  const infoPctQualified = isCommission
+    ? `Leads Qualified (B2B+B2C combined) ÷ B2B-only Lead Volume.${aeNote}`
+    : `Leads Qualified ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Excludes Non-responsive/Cold/Pending/Disqualified leads unless they already have a qualifying signal (booked meeting or legacy Qualified SQL status).${aeNote}`;
+  const infoNR = isCommission
+    ? `Non-Responsive leads (B2B+B2C combined) ÷ B2B-only Lead Volume. Non-responsive = Disqualified reason "Not responsive" or Sales status "Non respondant". Lower is better.${aeNote}`
+    : `Leads marked Sales status = Non respondant or Disqualified reason = Not responsive, ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Lower is better.${aeNote}`;
+  const infoAEDQ = `Count of leads the AE bounced back as wrongly qualified (Sales status contains "Disqualified AE") — measures SDR hand-off quality, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
+  const infoPipeline = `Snapshot as of the last day in range: leads whose Sales status is NOT Closed, Disqualified, Lost, Deposit refund, or blank — i.e. still open/in-progress, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
   document.getElementById('summaryCards').innerHTML = `
-    ${countCard('Lead Volume', leadVolTotal, perSDR.map(s => ({ ...s, value: s.leadVol, goal: s.leadsGoal })), elapsed, daysInMo, showProjection, isCommission ? 'B2B leads only' : undefined, d.goalLeads, ae ? ae.leadsPerDay : null)}
-    ${countCard('Meetings Booked', totalMeetings, perSDR.map(s => ({ ...s, value: s.meetings, goal: s.meetingsGoal })), elapsed, daysInMo, showProjection, undefined, d.goalMeetings, ae ? ae.meetingsPerDay : null)}
-    ${rateCard('Meeting Booked Rate', meetingRate, perSDR.map(s => ({ ...s, value: s.meetingRate })), isCommission ? meanRateCommission(days, v, 'meetings') : meanMetric(days, v, 'meeting_rate'), isCommission ? 'meetings (B2B+B2C) ÷ B2B leads' : 'meetings ÷ total leads', d.goalMeetingRate, false, ae ? ae.overall.meeting_rate : null)}
-    ${countCard('Leads Qualified', totalQualified, perSDR.map(s => ({ ...s, value: s.qualified, goal: s.qualifiedGoal })), elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified, ae ? ae.qualifiedPerDay : null)}
-    ${rateCard('% Leads Qualified', pctQual, perSDR.map(s => ({ ...s, value: s.pctQual })), isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'excludes non-responsive/cold/pending/disqualified', d.goalPctQual, false, ae ? ae.overall.pct_qualified : null)}
-    ${rateCard('Non-Responsive Rate', nrRate, perSDR.map(s => ({ ...s, value: s.nrRate })), isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true, ae ? ae.overall.nr_rate : null)}
-    ${countCard('Disqualified by AE', totalAEDQ, perSDR.map(s => ({ ...s, value: s.aedq })), elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual')}
-    ${pipelineCard('Active Pipeline', activePipeline, perSDR.map(s => ({ ...s, value: s.pipeline })), meanMetric(days, v, 'active_pipeline'), lastDay)}
+    ${countCard('Lead Volume', leadVolTotal, perSDR.map(s => ({ ...s, value: s.leadVol, goal: s.leadsGoal })), elapsed, daysInMo, showProjection, isCommission ? 'B2B leads only' : undefined, d.goalLeads, ae ? ae.leadsPerDay : null, infoLeadVolume)}
+    ${countCard('Meetings Booked', totalMeetings, perSDR.map(s => ({ ...s, value: s.meetings, goal: s.meetingsGoal })), elapsed, daysInMo, showProjection, undefined, d.goalMeetings, ae ? ae.meetingsPerDay : null, infoMeetingsBooked)}
+    ${rateCard('Meeting Booked Rate', meetingRate, perSDR.map(s => ({ ...s, value: s.meetingRate })), isCommission ? meanRateCommission(days, v, 'meetings') : meanMetric(days, v, 'meeting_rate'), isCommission ? 'meetings (B2B+B2C) ÷ B2B leads' : 'meetings ÷ total leads', d.goalMeetingRate, false, ae ? ae.overall.meeting_rate : null, infoMeetingRate)}
+    ${countCard('Leads Qualified', totalQualified, perSDR.map(s => ({ ...s, value: s.qualified, goal: s.qualifiedGoal })), elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified, ae ? ae.qualifiedPerDay : null, infoQualified)}
+    ${rateCard('% Leads Qualified', pctQual, perSDR.map(s => ({ ...s, value: s.pctQual })), isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'excludes non-responsive/cold/pending/disqualified', d.goalPctQual, false, ae ? ae.overall.pct_qualified : null, infoPctQualified)}
+    ${rateCard('Non-Responsive Rate', nrRate, perSDR.map(s => ({ ...s, value: s.nrRate })), isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true, ae ? ae.overall.nr_rate : null, infoNR)}
+    ${countCard('Disqualified by AE', totalAEDQ, perSDR.map(s => ({ ...s, value: s.aedq })), elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual', undefined, undefined, infoAEDQ)}
+    ${pipelineCard('Active Pipeline', activePipeline, perSDR.map(s => ({ ...s, value: s.pipeline })), meanMetric(days, v, 'active_pipeline'), lastDay, infoPipeline)}
     ${rawCalls ? speedToLeadCard('Speed-to-Lead', stlMedian, totalSTLMatched, totalSTLEligible, totalSTLMismatch, perSDR, d.goalSpeedToLead,
         { median: stlOnMedian, matched: totalSTLOnMatched, eligible: totalSTLOnEligible },
         { median: stlOffMedian, matched: totalSTLOffMatched, eligible: totalSTLOffEligible }) : pendingCard('Speed-to-Lead', 'Load a Call History CSV to enable')}
@@ -2207,6 +2228,10 @@ function renderSummaryCards(days) {
   applyExpandedState();
 }
 
+function cardInfo(text) {
+  if (!text) return '';
+  return `<span class="goal-info" title="${escapeHtml(text)}">ⓘ</span>`;
+}
 function expandBtn(label) {
   return `<button class="card-expand-btn" onclick="event.stopPropagation(); toggleExpand('${label}')" title="Expand">&#10530;</button>`;
 }
@@ -2253,7 +2278,7 @@ function splitRow(sdrList, isPct, lowerIsBetter) {
 
 // aeBaselinePerDay: pre-SDR AE-era avg/day for this metric, shown only when
 // the AE Baseline toggle is on and the data is loaded.
-function countCard(label, total, sdrList, elapsed, daysInMo, showProjection, extraSub, goalMonthly, aeBaselinePerDay) {
+function countCard(label, total, sdrList, elapsed, daysInMo, showProjection, extraSub, goalMonthly, aeBaselinePerDay, infoText) {
   const avg = elapsed ? (total / elapsed) : 0;
   const enriched = sdrList.map(s => {
     const sAvg = elapsed ? (s.value / elapsed) : 0;
@@ -2265,7 +2290,7 @@ function countCard(label, total, sdrList, elapsed, daysInMo, showProjection, ext
   const aeRow = (isAEBaselineOn() && aeBaselinePerDay != null) ? `<div class="card-avg-row"><span>AE Baseline (avg/day)</span><span style="color:${COLORS.AEBaseline}">${aeBaselinePerDay.toFixed(1)}</span></div>` : '';
   return `<div class="card" data-label="${label}">
     ${expandBtn(label)}
-    <div class="card-label">${label}</div>
+    <div class="card-label">${label} ${cardInfo(infoText)}</div>
     <div class="card-value">${total}</div>
     <div class="card-sub">${extraSub || ''}</div>
     ${splitRow(enriched, false, false)}
@@ -2276,13 +2301,13 @@ function countCard(label, total, sdrList, elapsed, daysInMo, showProjection, ext
   </div>`;
 }
 
-function rateCard(label, pct, sdrList, avgDaily, extraSub, goalVal, lowerIsBetter, aeBaselinePct) {
+function rateCard(label, pct, sdrList, avgDaily, extraSub, goalVal, lowerIsBetter, aeBaselinePct, infoText) {
   const goalRow = goalStatusRow(pct, goalVal, true, lowerIsBetter, 'Target (team)');
   const enriched = sdrList.map(s => ({ ...s, goalVal }));
   const aeRow = (isAEBaselineOn() && aeBaselinePct != null) ? `<div class="card-avg-row"><span>AE Baseline</span><span style="color:${COLORS.AEBaseline}">${aeBaselinePct.toFixed(1)}%</span></div>` : '';
   return `<div class="card" data-label="${label}">
     ${expandBtn(label)}
-    <div class="card-label">${label}</div>
+    <div class="card-label">${label} ${cardInfo(infoText)}</div>
     <div class="card-value">${pct.toFixed(1)}%</div>
     <div class="card-sub">${extraSub || ''}</div>
     ${splitRow(enriched, true, lowerIsBetter)}
@@ -2292,10 +2317,10 @@ function rateCard(label, pct, sdrList, avgDaily, extraSub, goalVal, lowerIsBette
   </div>`;
 }
 
-function pipelineCard(label, current, sdrList, avgDaily, lastDay) {
+function pipelineCard(label, current, sdrList, avgDaily, lastDay, infoText) {
   return `<div class="card" data-label="${label}">
     ${expandBtn(label)}
-    <div class="card-label">${label}</div>
+    <div class="card-label">${label} ${cardInfo(infoText)}</div>
     <div class="card-value">${current}</div>
     <div class="card-sub">${lastDay ? `as of ${lastDay}` : 'needs follow-up'}</div>
     ${splitRow(sdrList, false, false)}
