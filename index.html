@@ -604,14 +604,14 @@
   .mandate-status.on { color: var(--green); }
   .mandate-status.off { color: var(--red); }
   .mandate-status.na { color: var(--muted); font-weight: 500; }
-  .mandate-gates-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
-  .mandate-gate { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--surface2); min-width: 0; }
-  .mandate-gate.current { border-color: var(--accent); }
-  .mandate-gate.missed { border-color: var(--red); }
-  .mandate-gate-title { font-size: 12px; font-weight: 700; margin-bottom: 2px; display: flex; justify-content: space-between; gap: 8px; }
-  .mandate-gate-deadline { font-size: 11px; color: var(--muted); font-weight: 500; }
-  .mandate-gate-desc { font-size: 11px; color: var(--muted); line-height: 1.5; margin: 6px 0 8px; }
-  .mandate-gate label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .mandate-status.pending { color: var(--muted); font-weight: 500; }
+  .mandate-intro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+  @media (max-width: 768px) { .mandate-intro-grid { grid-template-columns: 1fr; } }
+  .mandate-intro-col { min-width: 0; }
+  .mandate-goal-item, .mandate-gatetext-item { font-size: 12px; line-height: 1.5; margin-bottom: 8px; display: flex; gap: 6px; }
+  .mandate-goal-item b, .mandate-gatetext-item b { white-space: nowrap; }
+  .mandate-gatetext-item.current { color: var(--text); }
+  .mandate-gatetext-deadline { color: var(--muted); font-weight: 500; font-size: 11px; }
   .mandate-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
   .mandate-tile { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--surface2); min-width: 0; }
   .mandate-tile-label { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
@@ -1143,8 +1143,18 @@
         <span class="mandate-chevron">&#9654;</span>
       </div>
       <div class="mandate-body">
+        <div class="mandate-intro-grid">
+          <div class="mandate-intro-col">
+            <div class="mandate-subheading">Your Goals</div>
+            <div id="mandateGoalsList"></div>
+          </div>
+          <div class="mandate-intro-col">
+            <div class="mandate-subheading">Your Gates</div>
+            <div id="mandateGatesList"></div>
+          </div>
+        </div>
         <div class="mandate-subheading-row">
-          <div class="mandate-subheading" id="mandateKpiHeading">Team Lead KPIs</div>
+          <div class="mandate-subheading" id="mandateKpiHeading">Month over Month</div>
           <select class="chart-granularity" id="mandateHoursFilter" onchange="renderMandateSection()">
             <option value="all">Speed-to-Lead: On + Off hours</option>
             <option value="on">Speed-to-Lead: On-hours only</option>
@@ -1152,10 +1162,6 @@
           </select>
         </div>
         <div style="overflow-x:auto"><table class="mandate-kpi-table" id="mandateKpiTable"></table></div>
-        <div class="mandate-subheading">90-Day Gates</div>
-        <div class="mandate-gates-grid" id="mandateGates"></div>
-        <div class="mandate-subheading">Month over Month <span class="goal-info" title="The same B2B, team-total metrics as the KPI table above, laid out one column per mandate month (June/July/August 2026) so you can see the progression instead of just the current snapshot. The current month's column is partial (month to date) — compare it to the same-day point in a prior month with care.">ⓘ</span></div>
-        <div style="overflow-x:auto"><table class="mandate-kpi-table" id="mandateMonthlyTable"></table></div>
         <div class="mandate-subheading">Move the Needle <span class="goal-info" title="The four numbers from the strategic briefing that the founders actually watch. Not-responsive is the single largest leak in the company funnel ('move this number and you move the whole business'). All four count B2B leads only, team-wide.">ⓘ</span></div>
         <div class="mandate-tiles" id="mandateTiles"></div>
         <div class="mandate-inputs" id="mandateInputs"></div>
@@ -3245,10 +3251,6 @@ function saveMandateNum(key, val) {
   const n = parseFloat(val);
   saveMandateState({ [key]: isNaN(n) ? MANDATE_DEFAULTS[key] : n });
 }
-function toggleMandateGate(id, checked) {
-  const s = mandateState();
-  saveMandateState({ gates: { ...(s.gates || {}), [id]: checked } });
-}
 function toggleMandateSection() {
   document.getElementById('mandateSection').classList.toggle('expanded');
 }
@@ -3328,9 +3330,13 @@ function mandateClosedCount(days) {
   return count;
 }
 
-function mandateStatusCell(ok) {
-  if (ok == null) return '<span class="mandate-status na">—</span>';
-  return ok ? '<span class="mandate-status on">✓ on track</span>' : '<span class="mandate-status off">✗ behind</span>';
+// One cell in the merged Month-over-Month table: a value plus a compact
+// ✓/✗ icon. pending=true means "not due/measured yet" (grey, not red) —
+// used for the Hiring row on a gate whose deadline hasn't arrived.
+function mandateMonthCell(valueText, ok, pending) {
+  if (valueText == null) return '<span class="mandate-status na">no data</span>';
+  if (ok == null || pending) return `${escapeHtml(valueText)} <span class="mandate-status pending">${pending ? '…' : '—'}</span>`;
+  return `${escapeHtml(valueText)} <span class="mandate-status ${ok ? 'on' : 'off'}">${ok ? '✓' : '✗'}</span>`;
 }
 
 // Writes the mandate's Speed-to-Lead goal into the same Monthly Targets field
@@ -3373,119 +3379,101 @@ function renderMandateSection() {
   const prevMeetings = mandateSum(prevDays, 'meetings');
   const prevNrPct = prevLeads ? mandateSum(prevDays, 'non_responsive') / prevLeads * 100 : null;
 
-  // ── Band 1: the six Team Lead KPIs ──
-  const meetingsTarget = d.goalMeetingRate ? d.goalMeetingRate / 100 * leads : null;
-  const capacity = s.activeCoordinators * MANDATE_REF.leadsPerCoordinator;
-  const kpis = [
-    {
-      name: 'Hiring milestones', info: 'Coordinators hired and onboarded against the monthly gates (2 → 4 → 6; final team 4 US + 2 rest-of-world). Set your current active count in the inputs below — there is no data source for hiring, it is your call.',
-      value: `${s.activeCoordinators} of ${MANDATE_REF.targetTeam}`,
-      target: `${MANDATE_REF.targetTeam} by Aug 31`,
-      ref: 'gates: 4 by Jun, 5–6 by Jul, 6 by Aug',
-      ok: (() => { const g = MANDATE_GATES.filter(x => x.deadline <= today).pop(); return g ? s.activeCoordinators >= g.expectTeam : (s.activeCoordinators >= 4 || null); })()
-    },
-    {
-      name: 'Team meetings booked', info: 'The whole team added together (all four SDRs), B2B leads only, this calendar month so far — the counter resets on the 1st. The onboarding doc measures you on the team roll-up, not per SDR; per-SDR detail is in the Meetings Booked chart above. Target = your Meeting Booked Rate target × this month\'s B2B lead volume.',
-      value: `${meetings}`,
-      target: meetingsTarget ? `${Math.round(meetingsTarget)} (rate ${d.goalMeetingRate}%)` : 'set Meeting Booked Rate target',
-      ref: 'May baseline: 0 meetings · team total, not per SDR',
-      ok: meetingsTarget ? meetings >= meetingsTarget : null
-    },
-    {
-      name: '% of leads qualified', info: 'Of the B2B leads that came in this month, the share the team qualified (explicit status allowlist). Company-wide, 41% of all business leads qualify — but your team works the sub-$1k/incomplete tier, so set your own target in Monthly Targets.',
-      value: qualPct != null ? qualPct.toFixed(1) + '%' : '—',
-      target: d.goalPctQual ? d.goalPctQual + '%' : 'set % Qualified target',
-      ref: `company: ${MANDATE_REF.qualifyRate}%`,
-      ok: (qualPct != null && d.goalPctQual) ? qualPct >= d.goalPctQual : null
-    },
-    {
-      name: `Speed-to-lead (${hoursLabel})`, info: 'Median minutes from a B2B lead arriving to the first call, this month — filtered by the On-hours/Off-hours dropdown above the table (currently: ' + hoursLabel + '). Industry research (MIT/InsideSales, Chili Piper): calling within 5 minutes makes you ~21× more likely to qualify the lead vs waiting 30 — under 5 minutes is the standard target, and only ~7% of B2B teams hit it. Set your goal in the input below (suggested: 5).',
-      value: stl != null ? fmtMinutes(stl) : (rawCalls ? '—' : 'load Aircall CSV'),
-      target: d.goalSpeedToLead ? `≤ ${d.goalSpeedToLead}m` : 'set goal below (suggested: 5m)',
-      ref: 'research: <5 min = ~21× more likely to qualify',
-      ok: (stl != null && d.goalSpeedToLead) ? stl <= d.goalSpeedToLead : null
-    },
-    {
-      name: 'Lead coverage', info: 'Plain version: of the B2B leads that landed on the team\'s desk this month, how many did anyone actually DO anything with — set a status, book a meeting, or call them? 100% means nothing slipped through the cracks. Every "untouched" lead is paid-for demand nobody has worked yet. (Leads under 4 days old don\'t count either way — they\'re still being worked.)',
-      value: cov.pct != null ? cov.pct.toFixed(1) + '%' : '—',
-      target: `≥ ${s.coverageTarget}%`,
-      ref: `${cov.total - cov.worked} untouched · ${leads} leads in vs capacity ${capacity} (${s.activeCoordinators} × ${MANDATE_REF.leadsPerCoordinator})`,
-      ok: cov.pct != null ? cov.pct >= s.coverageTarget : null
-    },
-    {
-      name: 'Handoff quality (proxy)', info: 'No AE rating data exists yet, so this uses the two signals already in the data: the share of the team\'s resolved meetings that the prospect or AE rejected / didn\'t attend, and how many of the team\'s qualified leads the AEs bounced back (Disqualified AE). Lower is better on both.',
-      value: naPct != null ? naPct.toFixed(1) + '% no-show/rejected' : '—',
-      target: `≤ ${s.handoffMax}%`,
-      ref: `${aeDq} AE-disqualified this month`,
-      ok: naPct != null ? naPct <= s.handoffMax : null
-    }
+  // ── Your Goals (left) / Your Gates (right): static reference text, sourced
+  // straight from the onboarding doc's "Your KPIs as Team Lead" table and its
+  // Month 1/2/3 gate descriptions. No live numbers here on purpose — the
+  // Month over Month table below is where the numbers live.
+  const MANDATE_GOAL_TEXT = [
+    ['Hiring milestones', 'Coordinators hired and onboarded against the monthly gates (2 → 4 → 6 total; final mix 4 US + 2 rest-of-world).'],
+    ['Team meetings booked', 'Total qualified meetings your team books for the AEs.'],
+    ['% of leads qualified', 'Quality of the team\'s qualification, not just volume.'],
+    ['Speed-to-lead', 'How fast the team makes first contact — the biggest driver of conversion.'],
+    ['Lead coverage', 'Share of the monthly lead flow actively worked, no leakage.'],
+    ['Handoff quality', 'How well the AE team rates the meetings and context you pass (tracked here via a data proxy — no direct AE rating exists yet).']
   ];
-  document.getElementById('mandateKpiHeading').textContent = `Team Lead KPIs — ${monthLabel} month to date · B2B leads only · team totals`;
-  document.getElementById('mandateKpiTable').innerHTML = `
-    <thead><tr><th>KPI</th><th>Now</th><th>Target</th><th>Status</th><th>Reference</th></tr></thead>
-    <tbody>${kpis.map(k => `<tr>
-      <td class="mandate-kpi-name">${k.name} <span class="goal-info" title="${escapeHtml(k.info)}">ⓘ</span></td>
-      <td class="mandate-kpi-value">${k.value}</td>
-      <td>${escapeHtml(k.target)}</td>
-      <td>${mandateStatusCell(k.ok)}</td>
-      <td class="mandate-kpi-note">${escapeHtml(k.ref)}</td>
-    </tr>`).join('')}</tbody>`;
+  document.getElementById('mandateGoalsList').innerHTML = MANDATE_GOAL_TEXT.map(([name, desc]) =>
+    `<div class="mandate-goal-item"><b>${escapeHtml(name)}:</b><span>${escapeHtml(desc)}</span></div>`).join('');
+  document.getElementById('mandateGatesList').innerHTML = MANDATE_GATES.map(g => {
+    const current = today >= g.deadline.slice(0, 8) + '01' && today <= g.deadline;
+    return `<div class="mandate-gatetext-item${current ? ' current' : ''}"><b>${escapeHtml(g.title)}</b><span>${escapeHtml(g.desc)} <span class="mandate-gatetext-deadline">(due ${g.deadline})</span></span></div>`;
+  }).join('');
 
-  // ── Month-over-month: the same B2B/team-total metrics, one column per
-  // mandate month, so the progression is visible instead of just the
-  // current snapshot. Each month is clipped to loaded data and to "today"
-  // for the current month (a partial month, labeled as such).
-  const monthCols = MANDATE_GATES.map(g => g.deadline.slice(0, 7)).filter((v, i, a) => a.indexOf(v) === i);
+  // ── Month over Month: one merged table, one column per mandate month
+  // (June/July/August 2026), covering the six Team Lead KPIs from the
+  // onboarding doc. Each month is clipped to loaded data and to "today" for
+  // the current month (a partial month, labeled MTD). Hiring milestones is
+  // the one row with no historical data source — it compares the single
+  // live "Active Coordinators" count against each gate's cumulative target,
+  // showing a pending "…" instead of red on a gate that isn't due yet.
+  const monthCols = MANDATE_GATES.map(g => g.deadline.slice(0, 7));
   const monthlyRows = monthCols.map(prefix => {
     const days = mandateDayKeys(null, prefix).filter(dk => dk <= today);
     const isPartial = prefix === monthPrefix;
+    const hasData = days.length > 0;
     const mLeads = mandateSum(days, 'leads');
     const mMeetings = mandateSum(days, 'meetings');
     const mQualified = mandateSum(days, 'qualified');
-    const mNr = mandateSum(days, 'non_responsive');
     const mResolved = mandateSum(days, 'meetings_resolved');
     const mNotAttended = mandateSum(days, 'meetings_not_attended');
     const mStl = rawCalls ? mandateStlMedian(days, hoursFilter) : null;
     const mCov = mandateCoverage(days);
+    const mQualPct = mLeads ? mQualified / mLeads * 100 : null;
+    const mNaPct = mResolved ? mNotAttended / mResolved * 100 : null;
+    const mMeetingsTarget = d.goalMeetingRate ? d.goalMeetingRate / 100 * mLeads : null;
     return {
-      prefix, isPartial, hasData: days.length > 0,
+      prefix, isPartial, hasData,
       label: new Date(prefix + '-01').toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }) + (isPartial ? ' (MTD)' : ''),
-      leads: mLeads, meetings: mMeetings,
-      qualPct: mLeads ? mQualified / mLeads * 100 : null,
-      nrPct: mLeads ? mNr / mLeads * 100 : null,
-      naPct: mResolved ? mNotAttended / mResolved * 100 : null,
-      stl: mStl,
-      covPct: mCov.pct
+      meetings: mMeetings, meetingsOk: hasData && mMeetingsTarget != null ? mMeetings >= mMeetingsTarget : null,
+      qualPct: mQualPct, qualOk: hasData && mQualPct != null && d.goalPctQual ? mQualPct >= d.goalPctQual : null,
+      stl: mStl, stlOk: hasData && mStl != null && d.goalSpeedToLead ? mStl <= d.goalSpeedToLead : null,
+      covPct: mCov.pct, covOk: hasData && mCov.pct != null ? mCov.pct >= s.coverageTarget : null,
+      naPct: mNaPct, naOk: hasData && mNaPct != null ? mNaPct <= s.handoffMax : null
     };
   });
-  const monthlyMetricRows = [
-    { label: 'B2B leads in', fmt: r => r.leads },
-    { label: 'Meetings booked', fmt: r => r.meetings },
-    { label: '% qualified', fmt: r => r.qualPct != null ? r.qualPct.toFixed(1) + '%' : '—' },
-    { label: 'Not responsive %', fmt: r => r.nrPct != null ? r.nrPct.toFixed(1) + '%' : '—' },
-    { label: `Speed-to-lead (${hoursLabel})`, fmt: r => r.stl != null ? fmtMinutes(r.stl) : (rawCalls ? '—' : 'n/a') },
-    { label: 'Lead coverage %', fmt: r => r.covPct != null ? r.covPct.toFixed(1) + '%' : '—' },
-    { label: 'No-show/rejected %', fmt: r => r.naPct != null ? r.naPct.toFixed(1) + '%' : '—' }
+  const rows = [
+    {
+      label: 'Hiring milestones', info: 'Current active Coordinator count (set below) vs. each month\'s cumulative team-size gate from the onboarding doc — 4 by June, 5–6 by July, 6 by August. There\'s no historical headcount data, so every month compares against the SAME live count; "…" means that gate isn\'t due yet, so it\'s not scored as behind.',
+      target: '4 by Jun · 5–6 by Jul · 6 by Aug',
+      cells: MANDATE_GATES.map(g => {
+        const due = g.deadline <= today;
+        const ok = due ? s.activeCoordinators >= g.expectTeam : null;
+        return mandateMonthCell(`${s.activeCoordinators} of ${g.expectTeam}`, ok, !due);
+      })
+    },
+    {
+      label: 'Team meetings booked', info: 'Whole team (all 4 SDRs), B2B leads only, per calendar month — the onboarding doc measures the roll-up, not per SDR. Target = your Meeting Booked Rate target × that month\'s B2B lead volume.',
+      target: d.goalMeetingRate ? `rate ${d.goalMeetingRate}% × that month's leads` : 'set Meeting Booked Rate target',
+      cells: monthlyRows.map(r => mandateMonthCell(r.hasData ? String(r.meetings) : null, r.meetingsOk))
+    },
+    {
+      label: '% of leads qualified', info: 'Qualified ÷ B2B leads for that month, explicit status allowlist. Company-wide 41% of all business leads qualify; your team works the sub-$1k/incomplete tier.',
+      target: d.goalPctQual ? d.goalPctQual + '% (company: ' + MANDATE_REF.qualifyRate + '%)' : 'set % Qualified target',
+      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.qualPct != null ? r.qualPct.toFixed(1) + '%' : null, r.qualOk))
+    },
+    {
+      label: `Speed-to-lead (${hoursLabel})`, info: 'Median minutes from a B2B lead arriving to the first call, per month — filtered by the dropdown above (currently: ' + hoursLabel + '). Research: calling within 5 minutes makes you ~21× more likely to qualify the lead vs waiting 30.',
+      target: d.goalSpeedToLead ? `≤ ${d.goalSpeedToLead}m` : 'set goal below (suggested: 5m)',
+      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.stl != null ? fmtMinutes(r.stl) : (r.hasData && rawCalls ? '—' : null), r.stlOk))
+    },
+    {
+      label: 'Lead coverage', info: 'Of the B2B leads that landed on the desk that month, the share anyone actually did something with (status set, meeting booked, or call made). 100% = nothing slipped through.',
+      target: `≥ ${s.coverageTarget}%`,
+      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.covPct != null ? r.covPct.toFixed(1) + '%' : null, r.covOk))
+    },
+    {
+      label: 'Handoff quality (proxy)', info: 'No AE rating data exists, so this uses the share of the team\'s resolved meetings that were rejected or not attended. Lower is better.',
+      target: `≤ ${s.handoffMax}% no-show/rejected`,
+      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.naPct != null ? r.naPct.toFixed(1) + '%' : null, r.naOk))
+    }
   ];
-  document.getElementById('mandateMonthlyTable').innerHTML = `
-    <thead><tr><th>Metric</th>${monthlyRows.map(r => `<th class="mandate-month-cell${r.isPartial ? ' current' : ''}">${r.label}</th>`).join('')}</tr></thead>
-    <tbody>${monthlyMetricRows.map(mr => `<tr>
-      <td class="mandate-kpi-name">${mr.label}</td>
-      ${monthlyRows.map(r => `<td>${r.hasData ? mr.fmt(r) : '<span class="mandate-status na">no data</span>'}</td>`).join('')}
+  document.getElementById('mandateKpiHeading').textContent = 'Month over Month';
+  document.getElementById('mandateKpiTable').innerHTML = `
+    <thead><tr><th>Metric</th>${monthlyRows.map(r => `<th class="mandate-month-cell${r.isPartial ? ' current' : ''}">${r.label}</th>`).join('')}<th>Target</th></tr></thead>
+    <tbody>${rows.map(row => `<tr>
+      <td class="mandate-kpi-name">${row.label} <span class="goal-info" title="${escapeHtml(row.info)}">ⓘ</span></td>
+      ${row.cells.map(c => `<td>${c}</td>`).join('')}
+      <td class="mandate-kpi-note">${escapeHtml(row.target)}</td>
     </tr>`).join('')}</tbody>`;
-
-  // ── Band 2: the 90-day gates ──
-  const gates = s.gates || {};
-  document.getElementById('mandateGates').innerHTML = MANDATE_GATES.map(g => {
-    const met = !!gates[g.id];
-    const missed = !met && g.deadline < today;
-    const current = !met && !missed && today.slice(0, 7) === g.deadline.slice(0, 7);
-    return `<div class="mandate-gate${current ? ' current' : ''}${missed ? ' missed' : ''}">
-      <div class="mandate-gate-title"><span>${g.title}</span><span class="mandate-gate-deadline">${met ? 'met ✓' : missed ? 'missed' : 'due ' + g.deadline}</span></div>
-      <div class="mandate-gate-desc">${escapeHtml(g.desc)}</div>
-      <label><input type="checkbox" ${met ? 'checked' : ''} onchange="toggleMandateGate('${g.id}', this.checked)"> Gate met</label>
-    </div>`;
-  }).join('');
 
   // ── Band 3: the briefing's "move the needle" numbers ──
   const closedSinceStart = mandateClosedCount(mandateAll);
@@ -3535,8 +3523,18 @@ function renderMandateSection() {
     <span>Handoff max no-show/rejected %: <input type="number" min="0" max="100" value="${s.handoffMax}" onchange="saveMandateNum('handoffMax', this.value)"></span>
     <span style="opacity:0.8">Meetings & % Qualified targets come from Monthly Targets below.</span>`;
 
-  const overallOk = kpis.filter(k => k.ok === true).length;
-  const overallScored = kpis.filter(k => k.ok !== null).length;
+  const currentMonthRow = monthlyRows[monthCols.indexOf(monthPrefix)];
+  const currentHiringGate = MANDATE_GATES[monthCols.indexOf(monthPrefix)];
+  const currentOks = [
+    currentMonthRow ? currentMonthRow.meetingsOk : null,
+    currentMonthRow ? currentMonthRow.qualOk : null,
+    currentMonthRow ? currentMonthRow.stlOk : null,
+    currentMonthRow ? currentMonthRow.covOk : null,
+    currentMonthRow ? currentMonthRow.naOk : null,
+    currentHiringGate && currentHiringGate.deadline <= today ? (s.activeCoordinators >= currentHiringGate.expectTeam) : null
+  ];
+  const overallOk = currentOks.filter(v => v === true).length;
+  const overallScored = currentOks.filter(v => v !== null).length;
   document.getElementById('mandateHeaderNote').textContent =
     `${monthLabel}: ${overallOk}/${overallScored} scored KPIs on track — 90 days counted from June 1, 2026 (re-benchmark: August)`;
 }
