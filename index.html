@@ -589,6 +589,11 @@
   .mandate-section.expanded .mandate-body { display: block; }
   .mandate-subheading { font-size: 12px; font-weight: 600; margin: 18px 0 8px; }
   .mandate-subheading:first-child { margin-top: 0; }
+  .mandate-subheading-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 18px 0 8px; }
+  .mandate-subheading-row .mandate-subheading { margin: 0; }
+  .mandate-subheading-row:first-child { margin-top: 0; }
+  .mandate-month-cell { font-weight: 600; }
+  .mandate-month-cell.current { color: var(--accent); }
   .mandate-kpi-table { width: 100%; border-collapse: collapse; font-size: 12px; }
   .mandate-kpi-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
   .mandate-kpi-table td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
@@ -1138,10 +1143,19 @@
         <span class="mandate-chevron">&#9654;</span>
       </div>
       <div class="mandate-body">
-        <div class="mandate-subheading" id="mandateKpiHeading">Team Lead KPIs</div>
+        <div class="mandate-subheading-row">
+          <div class="mandate-subheading" id="mandateKpiHeading">Team Lead KPIs</div>
+          <select class="chart-granularity" id="mandateHoursFilter" onchange="renderMandateSection()">
+            <option value="all">Speed-to-Lead: On + Off hours</option>
+            <option value="on">Speed-to-Lead: On-hours only</option>
+            <option value="off">Speed-to-Lead: Off-hours only</option>
+          </select>
+        </div>
         <div style="overflow-x:auto"><table class="mandate-kpi-table" id="mandateKpiTable"></table></div>
         <div class="mandate-subheading">90-Day Gates</div>
         <div class="mandate-gates-grid" id="mandateGates"></div>
+        <div class="mandate-subheading">Month over Month <span class="goal-info" title="The same B2B, team-total metrics as the KPI table above, laid out one column per mandate month (June/July/August 2026) so you can see the progression instead of just the current snapshot. The current month's column is partial (month to date) — compare it to the same-day point in a prior month with care.">ⓘ</span></div>
+        <div style="overflow-x:auto"><table class="mandate-kpi-table" id="mandateMonthlyTable"></table></div>
         <div class="mandate-subheading">Move the Needle <span class="goal-info" title="The four numbers from the strategic briefing that the founders actually watch. Not-responsive is the single largest leak in the company funnel ('move this number and you move the whole business'). All four count B2B leads only, team-wide.">ⓘ</span></div>
         <div class="mandate-tiles" id="mandateTiles"></div>
         <div class="mandate-inputs" id="mandateInputs"></div>
@@ -3252,12 +3266,21 @@ function mandateSum(days, field) { return sumMetricFrom(allDataB2B, days, MANDAT
 
 // Median speed-to-lead over B2B leads, all SDRs (unlike
 // speedToLeadMinutesValues, which respects the global lead-type filter).
-function mandateStlMedian(days) {
+// onHoursFilter: omit/undefined for both, true for on-hours only, false for
+// off-hours only — same convention as the Speed-to-Lead chart's dropdown.
+function mandateStlMedian(days, onHoursFilter) {
   const vals = [];
   days.forEach(d => SDRS.forEach(s => (((rawByDay[d] || {})[s.key]) || []).forEach(r => {
-    if (isBusinessLead(r) && r._speedToLeadMatched) vals.push(r._speedToLeadMinutes);
+    if (!isBusinessLead(r) || !r._speedToLeadMatched) return;
+    if (onHoursFilter !== undefined && !!r._onHours !== onHoursFilter) return;
+    vals.push(r._speedToLeadMinutes);
   })));
   return median(vals);
+}
+function mandateHoursFilterValue() {
+  const el = document.getElementById('mandateHoursFilter');
+  const v = el ? el.value : 'all';
+  return v === 'on' ? true : v === 'off' ? false : undefined;
 }
 // Coverage: share of the team's B2B leads actually worked — any Sales status
 // set, any Meeting Status set, or a matched first call. Leads under 4 days
@@ -3339,7 +3362,9 @@ function renderMandateSection() {
   const aeDq = mandateSum(monthDays, 'ae_dq');
   const resolved = mandateSum(monthDays, 'meetings_resolved');
   const notAttended = mandateSum(monthDays, 'meetings_not_attended');
-  const stl = rawCalls ? mandateStlMedian(monthDays) : null;
+  const hoursFilter = mandateHoursFilterValue();
+  const hoursLabel = hoursFilter === true ? 'on-hours' : hoursFilter === false ? 'off-hours' : 'on+off hours';
+  const stl = rawCalls ? mandateStlMedian(monthDays, hoursFilter) : null;
   const cov = mandateCoverage(monthDays);
   const qualPct = leads ? qualified / leads * 100 : null;
   const nrPct = leads ? nr / leads * 100 : null;
@@ -3374,7 +3399,7 @@ function renderMandateSection() {
       ok: (qualPct != null && d.goalPctQual) ? qualPct >= d.goalPctQual : null
     },
     {
-      name: 'Speed-to-lead', info: 'Median minutes from a B2B lead arriving to the first call, this month. Industry research (MIT/InsideSales, Chili Piper): calling within 5 minutes makes you ~21× more likely to qualify the lead vs waiting 30 — under 5 minutes is the standard target, and only ~7% of B2B teams hit it. Set your goal in the input below (suggested: 5).',
+      name: `Speed-to-lead (${hoursLabel})`, info: 'Median minutes from a B2B lead arriving to the first call, this month — filtered by the On-hours/Off-hours dropdown above the table (currently: ' + hoursLabel + '). Industry research (MIT/InsideSales, Chili Piper): calling within 5 minutes makes you ~21× more likely to qualify the lead vs waiting 30 — under 5 minutes is the standard target, and only ~7% of B2B teams hit it. Set your goal in the input below (suggested: 5).',
       value: stl != null ? fmtMinutes(stl) : (rawCalls ? '—' : 'load Aircall CSV'),
       target: d.goalSpeedToLead ? `≤ ${d.goalSpeedToLead}m` : 'set goal below (suggested: 5m)',
       ref: 'research: <5 min = ~21× more likely to qualify',
@@ -3404,6 +3429,49 @@ function renderMandateSection() {
       <td>${escapeHtml(k.target)}</td>
       <td>${mandateStatusCell(k.ok)}</td>
       <td class="mandate-kpi-note">${escapeHtml(k.ref)}</td>
+    </tr>`).join('')}</tbody>`;
+
+  // ── Month-over-month: the same B2B/team-total metrics, one column per
+  // mandate month, so the progression is visible instead of just the
+  // current snapshot. Each month is clipped to loaded data and to "today"
+  // for the current month (a partial month, labeled as such).
+  const monthCols = MANDATE_GATES.map(g => g.deadline.slice(0, 7)).filter((v, i, a) => a.indexOf(v) === i);
+  const monthlyRows = monthCols.map(prefix => {
+    const days = mandateDayKeys(null, prefix).filter(dk => dk <= today);
+    const isPartial = prefix === monthPrefix;
+    const mLeads = mandateSum(days, 'leads');
+    const mMeetings = mandateSum(days, 'meetings');
+    const mQualified = mandateSum(days, 'qualified');
+    const mNr = mandateSum(days, 'non_responsive');
+    const mResolved = mandateSum(days, 'meetings_resolved');
+    const mNotAttended = mandateSum(days, 'meetings_not_attended');
+    const mStl = rawCalls ? mandateStlMedian(days, hoursFilter) : null;
+    const mCov = mandateCoverage(days);
+    return {
+      prefix, isPartial, hasData: days.length > 0,
+      label: new Date(prefix + '-01').toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }) + (isPartial ? ' (MTD)' : ''),
+      leads: mLeads, meetings: mMeetings,
+      qualPct: mLeads ? mQualified / mLeads * 100 : null,
+      nrPct: mLeads ? mNr / mLeads * 100 : null,
+      naPct: mResolved ? mNotAttended / mResolved * 100 : null,
+      stl: mStl,
+      covPct: mCov.pct
+    };
+  });
+  const monthlyMetricRows = [
+    { label: 'B2B leads in', fmt: r => r.leads },
+    { label: 'Meetings booked', fmt: r => r.meetings },
+    { label: '% qualified', fmt: r => r.qualPct != null ? r.qualPct.toFixed(1) + '%' : '—' },
+    { label: 'Not responsive %', fmt: r => r.nrPct != null ? r.nrPct.toFixed(1) + '%' : '—' },
+    { label: `Speed-to-lead (${hoursLabel})`, fmt: r => r.stl != null ? fmtMinutes(r.stl) : (rawCalls ? '—' : 'n/a') },
+    { label: 'Lead coverage %', fmt: r => r.covPct != null ? r.covPct.toFixed(1) + '%' : '—' },
+    { label: 'No-show/rejected %', fmt: r => r.naPct != null ? r.naPct.toFixed(1) + '%' : '—' }
+  ];
+  document.getElementById('mandateMonthlyTable').innerHTML = `
+    <thead><tr><th>Metric</th>${monthlyRows.map(r => `<th class="mandate-month-cell${r.isPartial ? ' current' : ''}">${r.label}</th>`).join('')}</tr></thead>
+    <tbody>${monthlyMetricRows.map(mr => `<tr>
+      <td class="mandate-kpi-name">${mr.label}</td>
+      ${monthlyRows.map(r => `<td>${r.hasData ? mr.fmt(r) : '<span class="mandate-status na">no data</span>'}</td>`).join('')}
     </tr>`).join('')}</tbody>`;
 
   // ── Band 2: the 90-day gates ──
