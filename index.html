@@ -946,7 +946,8 @@
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartActivity"></div>
             <select class="chart-granularity" id="metric-chartActivity" onchange="onActivityMetricChange()">
-              <option value="meetings" selected>Metric: Meetings Booked</option>
+              <option value="funnel" selected>Metric: Volume → Booked → Held (overlay)</option>
+              <option value="meetings">Metric: Meetings Booked</option>
               <option value="leadVol">Metric: Lead Volume</option>
               <option value="meetingsHeld">Metric: Meetings Held</option>
             </select>
@@ -959,7 +960,7 @@
               <option value="weekly" selected>Weekly</option>
               <option value="monthly">Monthly</option>
             </select>
-            <label class="chart-cumulative-toggle">
+            <label class="chart-cumulative-toggle" id="combinedToggleWrap-chartActivity" style="display:none">
               <input type="checkbox" id="modeToggle-chartActivity" onchange="renderCharts(getFilteredDays())">
               <span class="toggle-track"></span>
               <span class="toggle-text">Combined</span>
@@ -2690,6 +2691,10 @@ function makeChart(id, days, spec) {
 // one place without losing any toggle. Only Lead Volume supports Cumulative,
 // so that toggle is hidden for the other two metrics.
 const ACTIVITY_METRICS = {
+  funnel: {
+    title: 'Volume → Booked → Held',
+    info: 'Three metrics overlaid in the same bar, widest-to-narrowest: Lead Volume (back), Meetings Booked (middle), Meetings Held (front) — so you can see at a glance what share of that bucket\'s leads made it to a booked meeting, and how many of those were actually held. Not stacked (they don\'t add up); each bar\'s full height is its own count. Teams comparison splits US Team vs OUS Team side by side; granularity switches week/month buckets.'
+  },
   meetings: {
     title: 'Meetings Booked',
     spec: (d, ae) => ({ type: 'count', field: 'meetings', goal: d.goalMeetings, pace: true, aeBaseline: ae ? ae.meetingsPerDay : null }),
@@ -2716,12 +2721,14 @@ function onActivityMetricChange() {
   if (infoEl) { infoEl.dataset.base = cfg.info; infoEl.title = cfg.info; }
   const cumWrap = document.getElementById('cumulativeToggleWrap-chartActivity');
   if (cumWrap) cumWrap.style.display = metric === 'leadVol' ? '' : 'none';
+  const combinedWrap = document.getElementById('combinedToggleWrap-chartActivity');
+  if (combinedWrap) combinedWrap.style.display = metric === 'funnel' ? 'none' : '';
   renderCharts(getFilteredDays());
 }
 
 function renderActivityChart(chartDays, d, ae) {
   const metricEl = document.getElementById('metric-chartActivity');
-  const metric = metricEl ? metricEl.value : 'meetings';
+  const metric = metricEl ? metricEl.value : 'funnel';
   const cfg = ACTIVITY_METRICS[metric];
   const titleEl = document.getElementById('chartActivityTitle');
   if (titleEl) titleEl.textContent = cfg.title;
@@ -2729,8 +2736,84 @@ function renderActivityChart(chartDays, d, ae) {
   if (infoEl && infoEl.dataset.base === undefined) infoEl.dataset.base = cfg.info;
   const cumWrap = document.getElementById('cumulativeToggleWrap-chartActivity');
   if (cumWrap) cumWrap.style.display = metric === 'leadVol' ? '' : 'none';
-  makeChart('chartActivity', chartDays, cfg.spec(d, ae));
+  const combinedWrap = document.getElementById('combinedToggleWrap-chartActivity');
+  if (combinedWrap) combinedWrap.style.display = metric === 'funnel' ? 'none' : '';
+  if (metric === 'funnel') {
+    renderFunnelChart(chartDays);
+  } else {
+    makeChart('chartActivity', chartDays, cfg.spec(d, ae));
+  }
   updateChartInfoTooltip('chartActivity');
+}
+
+// Funnel overlay: Lead Volume / Meetings Booked / Meetings Held drawn as three
+// bars of decreasing width sharing the same x slot (grouped:false so they sit
+// on top of each other instead of side by side), widest-at-back to
+// narrowest-at-front — a bullet-chart look showing what share of volume made
+// it to booked, then held, without the visual noise of a stacked bar (these
+// numbers don't sum to anything meaningful, so stacking would mislead).
+// Always shows the combined total per bucket (Combined toggle doesn't apply
+// here — three metrics already share one bar); Teams comparison still splits
+// US Team vs OUS Team into side-by-side bucket groups via combo x-labels.
+function renderFunnelChart(chartDays) {
+  const id = 'chartActivity';
+  const granularity = chartGranularity(id);
+  const buckets = bucketize(chartDays, granularity);
+  const groups = teamsComparisonViews(id) || [{ key: Array.from(selectedSDRs), label: 'Team', color: COLORS.Team }];
+  const multiGroup = groups.length > 1;
+  const labels = multiGroup
+    ? buckets.flatMap(b => groups.map(g => `${b.label} · ${g.label}`))
+    : buckets.map(b => b.label);
+
+  function seriesFor(field) {
+    const slots = multiGroup ? buckets.flatMap(b => groups.map(g => ({ b, g }))) : buckets.map(b => ({ b, g: groups[0] }));
+    return slots.map(({ b, g }) => {
+      const present = b.days.filter(d => allData[d]);
+      return present.length ? chartSum(present, g.key, field) : null;
+    });
+  }
+
+  const FUNNEL_COLORS = { leadVol: '#c7cdf0', meetings: '#8b7ff0', meetingsHeld: '#453a99' };
+  const datasets = [
+    { label: 'Lead Volume', data: seriesFor('leadVol'), backgroundColor: FUNNEL_COLORS.leadVol, borderRadius: 3, borderWidth: 0, categoryPercentage: 0.7, barPercentage: 0.95, grouped: false, order: 1 },
+    { label: 'Meetings Booked', data: seriesFor('meetings'), backgroundColor: FUNNEL_COLORS.meetings, borderRadius: 3, borderWidth: 0, categoryPercentage: 0.7, barPercentage: 0.6, grouped: false, order: 2 },
+    { label: 'Meetings Held', data: seriesFor('meetings_held'), backgroundColor: FUNNEL_COLORS.meetingsHeld, borderRadius: 3, borderWidth: 0, categoryPercentage: 0.7, barPercentage: 0.3, grouped: false, order: 3 }
+  ];
+
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id).getContext('2d');
+  charts[id] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
+          titleColor: '#ffffff', bodyColor: '#cfd2e3',
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y ?? '—'}` }
+        }
+      },
+      scales: {
+        x: { stacked: false, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { display: false } },
+        y: { stacked: false, beginAtZero: true, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' } }
+      }
+    }
+  });
+
+  const legendEl = document.getElementById('legend-chartActivity');
+  if (legendEl) {
+    const items = [
+      { label: 'Lead Volume', color: FUNNEL_COLORS.leadVol },
+      { label: 'Meetings Booked', color: FUNNEL_COLORS.meetings },
+      { label: 'Meetings Held', color: FUNNEL_COLORS.meetingsHeld }
+    ];
+    legendEl.innerHTML = items.map(it =>
+      `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
+    ).join('');
+  }
 }
 
 // All days of the current calendar month (including days not yet reached), so the
