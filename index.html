@@ -733,6 +733,11 @@
         <option value="off">Off</option>
         <option value="on">On</option>
       </select>
+      <span>Trend lines:</span>
+      <select id="trendLinesToggle" onchange="saveTrendLinesToggle(); renderDashboard()">
+        <option value="off" selected>Off</option>
+        <option value="on">On</option>
+      </select>
       <span>Leads:</span>
       <select id="leadTypeSelect" onchange="saveLeadTypeFilter(); renderDashboard()">
         <option value="business">B2B leads only</option>
@@ -963,12 +968,13 @@
                 <span class="toggle-text">Meetings Held</span>
               </label>
             </span>
-            <select class="chart-granularity" id="teamsComparison-chartActivity" onchange="renderCharts(getFilteredDays())">
-              <option value="off">Teams comparison: Off</option>
-              <option value="on">Teams comparison: On</option>
+            <select class="chart-granularity" id="teamsComparison-chartActivity" onchange="onActivityGroupChange()">
+              <option value="off" selected>Group: Combined</option>
+              <option value="on">Group: US vs OUS Teams</option>
+              <option value="sdr">Group: Per SDR</option>
             </select>
             <select class="chart-granularity" id="granularity-chartActivity" onchange="renderCharts(getFilteredDays())">
-              <option value="daily">Daily</option>
+              <option value="daily" id="granularityDailyOpt-chartActivity">Daily</option>
               <option value="weekly" selected>Weekly</option>
               <option value="monthly">Monthly</option>
             </select>
@@ -1672,6 +1678,22 @@ function loadAEBaselineToggle() {
   try {
     const saved = localStorage.getItem('sdr_ae_baseline_toggle');
     if (saved) document.getElementById('aeBaselineToggle').value = saved;
+  } catch (e) {}
+}
+// Global Pace/"trend line" visibility — one switch for every chart instead of
+// a per-chart toggle, defaulting to Off since the rolling-trend line is more
+// clutter than signal until you go looking for it.
+function trendLinesOn() {
+  const el = document.getElementById('trendLinesToggle');
+  return !!el && el.value === 'on';
+}
+function saveTrendLinesToggle() {
+  try { localStorage.setItem('sdr_trend_lines_toggle', document.getElementById('trendLinesToggle').value); } catch (e) {}
+}
+function loadTrendLinesToggle() {
+  try {
+    const saved = localStorage.getItem('sdr_trend_lines_toggle');
+    if (saved) document.getElementById('trendLinesToggle').value = saved;
   } catch (e) {}
 }
 // Computes the flat, whole-range AE benchmark: an overall bucket (all 7 AEs
@@ -2602,7 +2624,7 @@ function makeChart(id, days, spec) {
   // else — Chart.js draws datasets in array order, later = on top — since
   // Pace is the trend line you actually want to stand out.
   let paceDataset = null;
-  if (spec.pace) {
+  if (spec.pace && trendLinesOn()) {
     const paceData = buckets.map((b, i) => {
       const windowBuckets = buckets.slice(Math.max(0, i - 2), i + 1);
       const windowDays = windowBuckets.reduce((acc, wb) => acc.concat(wb.days), []).filter(d => d <= dubaiTodayKey() && allData[d]);
@@ -2707,17 +2729,17 @@ function makeChart(id, days, spec) {
 const ACTIVITY_METRIC_ORDER = ['leadVol', 'meetings', 'meetingsHeld'];
 const ACTIVITY_METRICS = {
   leadVol: {
-    label: 'Lead Volume', field: 'leadVol', color: '#c7cdf0', barPercentage: 0.94,
+    label: 'Lead Volume', field: 'leadVol',
     singleSpec: (d, ae) => ({ type: 'count', field: 'leadVol', goal: d.goalLeads, cumulativeAllowed: true, aeBaseline: ae ? ae.leadsPerDay : null }),
     info: 'Count of leads created per bucket, after your Leads: filter (B2B/B2C/All/Commission) is applied. Cumulative toggle switches from per-bucket counts to a running total across the range. Dashed Target = your Lead Volume goal, prorated to each bucket\'s size; no Pace shown for a straight count chart like this one.'
   },
   meetings: {
-    label: 'Meetings Booked', field: 'meetings', color: '#8b7ff0', barPercentage: 0.62,
+    label: 'Meetings Booked', field: 'meetings',
     singleSpec: (d, ae) => ({ type: 'count', field: 'meetings', goal: d.goalMeetings, pace: true, aeBaseline: ae ? ae.meetingsPerDay : null }),
     info: 'Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).'
   },
   meetingsHeld: {
-    label: 'Meetings Held', field: 'meetings_held', color: '#453a99', barPercentage: 0.32,
+    label: 'Meetings Held', field: 'meetings_held',
     singleSpec: () => ({ type: 'count', field: 'meetings_held', pace: true }),
     info: 'Count of leads whose Meeting Status is exactly Meeting Done, per bucket — distinct from Meetings Booked (which also counts still-upcoming Scheduled meetings and includes Closed deals as an implied meeting). Dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected). No goal/Target line for this one.'
   }
@@ -2740,16 +2762,31 @@ function onActivityMetricChange(event) {
     event.target.checked = true;
     return;
   }
+  updateActivityGranularityConstraint();
   renderCharts(getFilteredDays());
 }
 
+// Hides Daily and forces Weekly whenever 2+ layered metrics are shown broken
+// out by group (Per SDR, or US vs OUS Teams) — a 4-SDR x 3-layer breakdown at
+// daily granularity is too cramped to read; weekly/monthly only. A single
+// metric, or the Combined (single-bar) group, isn't restricted.
+function updateActivityGranularityConstraint() {
+  const groupEl = document.getElementById('teamsComparison-chartActivity');
+  const dailyOpt = document.getElementById('granularityDailyOpt-chartActivity');
+  const granEl = document.getElementById('granularity-chartActivity');
+  const restrict = groupEl.value !== 'off' && checkedActivityMetrics().length > 1;
+  if (dailyOpt) dailyOpt.style.display = restrict ? 'none' : '';
+  if (restrict && granEl.value === 'daily') granEl.value = 'weekly';
+}
+
 function renderActivityChart(chartDays, d, ae) {
+  updateActivityGranularityConstraint();
   const metrics = checkedActivityMetrics();
   const titleEl = document.getElementById('chartActivityTitle');
   if (titleEl) titleEl.textContent = metrics.map(k => ACTIVITY_METRICS[k].label).join(' + ');
   const infoEl = document.getElementById('info-chartActivity');
   const infoText = metrics.length > 1
-    ? `Overlaid, not stacked: ${metrics.map(k => ACTIVITY_METRICS[k].label).join(', ')} — each bar's full height is its own count, layered widest-to-narrowest (Lead Volume back, Meetings Booked middle, Meetings Held front) so you can see at a glance what share of that bucket made it from one stage to the next. These numbers don't sum to anything meaningful, so they're deliberately not stacked. Uncheck a metric above to drop it; Teams comparison still splits US Team vs OUS Team side by side.`
+    ? `Overlaid, not stacked: ${metrics.map(k => ACTIVITY_METRICS[k].label).join(', ')} — same-width bars sharing one x slot, layered back-to-front (Lead Volume back/lightest, Meetings Booked middle, Meetings Held front/darkest, all shaded from whichever group's own color is showing) so you can see at a glance what share of that bucket made it from one stage to the next. These numbers don't sum to anything meaningful, so they're deliberately not stacked. Uncheck a metric above to drop it. The Group dropdown splits this into Combined (one bar), US vs OUS Teams, or Per SDR — Per SDR and Teams cap out at Weekly/Monthly (Daily gets too cramped with this many layers).`
     : ACTIVITY_METRICS[metrics[0]].info;
   if (infoEl) infoEl.dataset.base = infoText;
   const cumWrap = document.getElementById('cumulativeToggleWrap-chartActivity');
@@ -2769,28 +2806,72 @@ function renderActivityChart(chartDays, d, ae) {
 // side), widest-at-back to narrowest-at-front — a bullet-chart look. Teams
 // comparison still splits US Team vs OUS Team into side-by-side bucket groups
 // via combo x-labels.
+// Lightens (positive percent) or darkens (negative) a hex color — used to
+// derive the 3 layer shades from whatever color the group already owns
+// (an SDR's color, a team's color, or Team purple for Combined) instead of
+// an unrelated fixed palette, so the layered bars always match the same
+// color language as every other chart.
+function shadeHex(hex, percent) {
+  const clean = hex.replace('#', '');
+  const num = parseInt(clean, 16);
+  let r = (num >> 16) & 0xFF, g = (num >> 8) & 0xFF, b = num & 0xFF;
+  const amt = Math.round(2.55 * percent);
+  r = Math.min(255, Math.max(0, r + amt));
+  g = Math.min(255, Math.max(0, g + amt));
+  b = Math.min(255, Math.max(0, b + amt));
+  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+// Lightest at the back (Lead Volume, the widest pool), true group color in
+// the middle (Meetings Booked), darkest in front (Meetings Held).
+const ACTIVITY_SHADE_PCT = { leadVol: 45, meetings: 0, meetingsHeld: -30 };
+
+function onActivityGroupChange() {
+  updateActivityGranularityConstraint();
+  renderCharts(getFilteredDays());
+}
+
+function activityGroups() {
+  const groupEl = document.getElementById('teamsComparison-chartActivity');
+  const val = groupEl ? groupEl.value : 'off';
+  if (val === 'on') return TEAM_GROUPS.map(g => ({ key: g.members, label: g.label, color: g.color }));
+  if (val === 'sdr') return SDRS.filter(s => selectedSDRs.has(s.key)).map(s => ({ key: s.key, label: s.label, color: s.color }));
+  return [{ key: Array.from(selectedSDRs), label: 'Team', color: COLORS.Team }];
+}
+
 function renderLayeredActivityChart(chartDays, metrics) {
   const id = 'chartActivity';
   const granularity = chartGranularity(id);
   const buckets = bucketize(chartDays, granularity);
-  const groups = teamsComparisonViews(id) || [{ key: Array.from(selectedSDRs), label: 'Team', color: COLORS.Team }];
+  const groups = activityGroups();
   const multiGroup = groups.length > 1;
   const labels = multiGroup
     ? buckets.flatMap(b => groups.map(g => `${b.label} · ${g.label}`))
     : buckets.map(b => b.label);
   const slots = multiGroup ? buckets.flatMap(b => groups.map(g => ({ b, g }))) : buckets.map(b => ({ b, g: groups[0] }));
 
-  function seriesFor(field) {
+  function seriesForGroup(field, group) {
     return slots.map(({ b, g }) => {
+      if (g !== group) return null;
       const present = b.days.filter(d => allData[d]);
       return present.length ? chartSum(present, g.key, field) : null;
     });
   }
 
-  const datasets = metrics.map((key, i) => {
-    const m = ACTIVITY_METRICS[key];
-    return { label: m.label, data: seriesFor(m.field), backgroundColor: m.color, borderRadius: 3, borderWidth: 0, categoryPercentage: 0.7, barPercentage: m.barPercentage, grouped: false, order: metrics.length - i };
-  });
+  // Same width for every layer (equal barPercentage) — only the shade and
+  // the (back-to-front) draw order distinguish Volume/Booked/Held now.
+  const datasets = groups.flatMap(group =>
+    metrics.map((key, i) => {
+      const m = ACTIVITY_METRICS[key];
+      return {
+        label: `${group.label} — ${m.label}`,
+        data: seriesForGroup(m.field, group),
+        backgroundColor: shadeHex(group.color, ACTIVITY_SHADE_PCT[key]),
+        borderRadius: 3, borderWidth: 0,
+        categoryPercentage: 0.72, barPercentage: 0.82,
+        grouped: false, order: metrics.length - i
+      };
+    })
+  );
 
   if (charts[id]) charts[id].destroy();
   const ctx = document.getElementById(id).getContext('2d');
@@ -2817,10 +2898,16 @@ function renderLayeredActivityChart(chartDays, metrics) {
 
   const legendEl = document.getElementById('legend-chartActivity');
   if (legendEl) {
-    legendEl.innerHTML = metrics.map(key => {
-      const m = ACTIVITY_METRICS[key];
-      return `<span class="legend-item"><span class="legend-dot" style="background:${m.color}"></span>${m.label}</span>`;
-    }).join('');
+    // Multiple groups: one dot per SDR/Team in their own (true, unshaded)
+    // color, same convention as every other chart's legend. Single group
+    // (Combined): the 3 metric layers in their own shades instead, since
+    // there's no group identity to show.
+    const items = multiGroup
+      ? groups.map(g => ({ label: g.label, color: g.color }))
+      : metrics.map(key => ({ label: ACTIVITY_METRICS[key].label, color: shadeHex(groups[0].color, ACTIVITY_SHADE_PCT[key]) }));
+    legendEl.innerHTML = items.map(it =>
+      `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
+    ).join('') + (multiGroup ? `<span class="legend-item" style="opacity:.7">(lighter → darker = Volume → Booked → Held)</span>` : '');
   }
 }
 
@@ -2947,15 +3034,17 @@ function renderSpeedToLeadChart(days) {
   // can't make the Pace line misrepresent the broader trend. Pushed onto
   // datasets LAST (after Target below) so it draws in front of everything.
   let paceDataset = null;
-  const paceData = buckets.map((b, i) => {
-    const windowBuckets = buckets.slice(Math.max(0, i - 2), i + 1);
-    const windowDays = windowBuckets.reduce((acc, wb) => acc.concat(wb.days), []).filter(d => d <= dubaiTodayKey() && allData[d]);
-    if (!windowDays.length) return null;
-    const m = median(speedToLeadMinutesValues(windowDays, keys, onHoursFilter));
-    return m != null ? parseFloat(m.toFixed(1)) : null;
-  });
-  if (paceData.some(v => v != null)) {
-    paceDataset = { label: 'Pace', data: paceData, type: 'line', borderColor: COLORS.Pace, borderWidth: 2.5, pointRadius: 0, fill: false, tension: 0, spanGaps: true };
+  if (trendLinesOn()) {
+    const paceData = buckets.map((b, i) => {
+      const windowBuckets = buckets.slice(Math.max(0, i - 2), i + 1);
+      const windowDays = windowBuckets.reduce((acc, wb) => acc.concat(wb.days), []).filter(d => d <= dubaiTodayKey() && allData[d]);
+      if (!windowDays.length) return null;
+      const m = median(speedToLeadMinutesValues(windowDays, keys, onHoursFilter));
+      return m != null ? parseFloat(m.toFixed(1)) : null;
+    });
+    if (paceData.some(v => v != null)) {
+      paceDataset = { label: 'Pace', data: paceData, type: 'line', borderColor: COLORS.Pace, borderWidth: 2.5, pointRadius: 0, fill: false, tension: 0, spanGaps: true };
+    }
   }
   let paceDrawn = !!paceDataset;
 
@@ -4197,6 +4286,7 @@ renderViewTabs();
 loadGoals();
 loadChartStyle();
 loadAEBaselineToggle();
+loadTrendLinesToggle();
 restoreAEBaselineData();
 renderAEBaselineSection();
 if (restoreLoadedData()) {
