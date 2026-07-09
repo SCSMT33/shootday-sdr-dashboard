@@ -759,26 +759,6 @@
     <!-- SUMMARY CARDS -->
     <div class="summary-grid" id="summaryCards"></div>
 
-    <!-- MANDATE SCOREBOARD (progress vs. the founders' onboarding + strategic briefing docs) -->
-    <div class="mandate-section expanded" id="mandateSection">
-      <div class="mandate-header" onclick="toggleMandateSection()">
-        <div class="mandate-header-left">
-          <span class="mandate-title">Mandate Scoreboard <span class="goal-info" title="Tracks progress against the SDR Team Lead onboarding doc and strategic briefing (May 2026): the six Team Lead KPIs, the 90-day hiring/performance gates (counted from June 1, 2026), and the funnel numbers the founders watch. All metrics here use ALL of the team's leads (B2B + B2C, every SDR) for the current calendar month regardless of the filters above — this is the whole-team view you'd share in a 1:1. Doc baselines (29% not-responsive, 41% qualify, 14.2% lead→deal, 275 leads/Coordinator, ~1,700 leads/mo) are shown as references; targets are editable below and via Monthly Targets.">ⓘ</span></span>
-          <span class="mandate-sub" id="mandateHeaderNote">Progress vs. the 90-day mandate — counted from June 1, 2026</span>
-        </div>
-        <span class="mandate-chevron">&#9654;</span>
-      </div>
-      <div class="mandate-body">
-        <div class="mandate-subheading" id="mandateKpiHeading">Team Lead KPIs</div>
-        <div style="overflow-x:auto"><table class="mandate-kpi-table" id="mandateKpiTable"></table></div>
-        <div class="mandate-subheading">90-Day Gates</div>
-        <div class="mandate-gates-grid" id="mandateGates"></div>
-        <div class="mandate-subheading">Move the Needle <span class="goal-info" title="The strategic briefing's scoreboard: 'not responsive' is 29% of all company leads — the single largest leak — and the doc's verdict is 'move this number and you move the whole business.' Lead→deal company benchmark is 14.2% (~17% with lag closes); 86% of wins close within 21 days, so qualified leads still open past 21 days with no meeting are statistically dying — that's the re-engagement pool.">ⓘ</span></div>
-        <div class="mandate-tiles" id="mandateTiles"></div>
-        <div class="mandate-inputs" id="mandateInputs"></div>
-      </div>
-    </div>
-
     <!-- CHARTS -->
     <div class="charts-grid">
       <div class="chart-card full">
@@ -1145,6 +1125,26 @@
           <button id="clearAEBaselineBtn" class="ae-baseline-clear-btn" title="Clear AE baseline data" onclick="event.stopPropagation(); clearAEBaselineData()" style="display:none">&#128465;</button>
         </div>
         <div id="aeBaselineContent"><div class="ae-baseline-empty">No AE Baseline CSV loaded yet.</div></div>
+      </div>
+    </div>
+
+    <!-- MANDATE SCOREBOARD (progress vs. the founders' onboarding + strategic briefing docs) -->
+    <div class="mandate-section expanded" id="mandateSection">
+      <div class="mandate-header" onclick="toggleMandateSection()">
+        <div class="mandate-header-left">
+          <span class="mandate-title">Mandate Scoreboard <span class="goal-info" title="Progress against the SDR Team Lead onboarding doc and strategic briefing (May 2026): the six Team Lead KPIs, the 90-day gates (counted from June 1, 2026), and the funnel numbers the founders watch. Everything here counts B2B leads only — the briefing's 1,700/month figure is business leads (BL), which is what the mandate is about — summed across all SDRs (team roll-up, not per SDR) for the current calendar month, regardless of the filters above. Doc baselines are shown as references; targets are editable below and via Monthly Targets.">ⓘ</span></span>
+          <span class="mandate-sub" id="mandateHeaderNote">Progress vs. the 90-day mandate — counted from June 1, 2026</span>
+        </div>
+        <span class="mandate-chevron">&#9654;</span>
+      </div>
+      <div class="mandate-body">
+        <div class="mandate-subheading" id="mandateKpiHeading">Team Lead KPIs</div>
+        <div style="overflow-x:auto"><table class="mandate-kpi-table" id="mandateKpiTable"></table></div>
+        <div class="mandate-subheading">90-Day Gates</div>
+        <div class="mandate-gates-grid" id="mandateGates"></div>
+        <div class="mandate-subheading">Move the Needle <span class="goal-info" title="The four numbers from the strategic briefing that the founders actually watch. Not-responsive is the single largest leak in the company funnel ('move this number and you move the whole business'). All four count B2B leads only, team-wide.">ⓘ</span></div>
+        <div class="mandate-tiles" id="mandateTiles"></div>
+        <div class="mandate-inputs" id="mandateInputs"></div>
       </div>
     </div>
 
@@ -3245,27 +3245,31 @@ function mandateDayKeys(fromKey, toPrefix) {
     .filter(d => (!fromKey || d >= fromKey) && (!toPrefix || d.startsWith(toPrefix)));
 }
 const MANDATE_ALL_SDRS = () => SDRS.map(s => s.key);
-function mandateSum(days, field) { return sumMetricFrom(allDataAll, days, MANDATE_ALL_SDRS(), field); }
+// Everything in the Mandate Scoreboard counts B2B (business) leads only —
+// the briefing's numbers are all about BL (business-lead) flow, and Chase's
+// call was to track his mandate on B2B alone.
+function mandateSum(days, field) { return sumMetricFrom(allDataB2B, days, MANDATE_ALL_SDRS(), field); }
 
-// Median speed-to-lead over ALL leads (unlike speedToLeadMinutesValues, which
-// respects the global B2B/B2C filter — the mandate view never filters).
+// Median speed-to-lead over B2B leads, all SDRs (unlike
+// speedToLeadMinutesValues, which respects the global lead-type filter).
 function mandateStlMedian(days) {
   const vals = [];
   days.forEach(d => SDRS.forEach(s => (((rawByDay[d] || {})[s.key]) || []).forEach(r => {
-    if (r._speedToLeadMatched) vals.push(r._speedToLeadMinutes);
+    if (isBusinessLead(r) && r._speedToLeadMatched) vals.push(r._speedToLeadMinutes);
   })));
   return median(vals);
 }
-// Coverage: share of the team's leads actually worked — any Sales status set,
-// any Meeting Status set, or a matched first call. Leads under 4 days old are
-// left out entirely (both sides of the ratio) so brand-new leads still being
-// worked don't read as leakage.
+// Coverage: share of the team's B2B leads actually worked — any Sales status
+// set, any Meeting Status set, or a matched first call. Leads under 4 days
+// old are left out entirely (both sides of the ratio) so brand-new leads
+// still being worked don't read as leakage.
 function mandateCoverage(days) {
   const today = dubaiTodayKey();
   let total = 0, worked = 0;
   days.forEach(d => {
     if (dayKeyAgeDays(d, today) <= 3) return;
     SDRS.forEach(s => (((rawByDay[d] || {})[s.key]) || []).forEach(r => {
+      if (!isBusinessLead(r)) return;
       total++;
       if ((r['Sales status'] || '').trim() || (r['Meeting Status'] || '').trim() || r._speedToLeadMatched) worked++;
     }));
@@ -3283,6 +3287,7 @@ function mandateReengagementCount(days) {
   days.forEach(d => {
     if (dayKeyAgeDays(d, today) <= 21) return;
     SDRS.forEach(s => (((rawByDay[d] || {})[s.key]) || []).forEach(r => {
+      if (!isBusinessLead(r)) return;
       if (!isQualifiedStatus(r['Sales status'])) return;
       const n = normalizeSalesStatus(r['Sales status']);
       if (MANDATE_TERMINAL_STATUSES.has(n) || n.startsWith('disqualified ae')) return;
@@ -3295,7 +3300,7 @@ function mandateReengagementCount(days) {
 function mandateClosedCount(days) {
   let count = 0;
   days.forEach(d => SDRS.forEach(s => (((rawByDay[d] || {})[s.key]) || []).forEach(r => {
-    if (normalizeSalesStatus(r['Sales status']) === 'closed') count++;
+    if (isBusinessLead(r) && normalizeSalesStatus(r['Sales status']) === 'closed') count++;
   })));
   return count;
 }
@@ -3305,8 +3310,16 @@ function mandateStatusCell(ok) {
   return ok ? '<span class="mandate-status on">✓ on track</span>' : '<span class="mandate-status off">✗ behind</span>';
 }
 
+// Writes the mandate's Speed-to-Lead goal into the same Monthly Targets field
+// the rest of the dashboard uses (goal_speed_to_lead) — one number, two doors.
+function saveMandateStlGoal(val) {
+  const el = document.getElementById('goal_speed_to_lead');
+  if (el) el.value = val;
+  saveGoals();
+  renderDashboard();
+}
 function renderMandateSection() {
-  if (!allDataAll || !rawByDay) return;
+  if (!allDataB2B || !rawByDay) return;
   const today = dubaiTodayKey();
   const monthPrefix = today.slice(0, 7);
   const monthDays = mandateDayKeys(null, monthPrefix);
@@ -3347,42 +3360,42 @@ function renderMandateSection() {
       ok: (() => { const g = MANDATE_GATES.filter(x => x.deadline <= today).pop(); return g ? s.activeCoordinators >= g.expectTeam : (s.activeCoordinators >= 4 || null); })()
     },
     {
-      name: 'Team meetings booked', info: 'Total meetings your team booked this calendar month (all leads, all SDRs). The briefing calls the meeting THE conversion milestone. Target = your Meeting Booked Rate target × this month\'s lead volume.',
+      name: 'Team meetings booked', info: 'The whole team added together (all four SDRs), B2B leads only, this calendar month so far — the counter resets on the 1st. The onboarding doc measures you on the team roll-up, not per SDR; per-SDR detail is in the Meetings Booked chart above. Target = your Meeting Booked Rate target × this month\'s B2B lead volume.',
       value: `${meetings}`,
       target: meetingsTarget ? `${Math.round(meetingsTarget)} (rate ${d.goalMeetingRate}%)` : 'set Meeting Booked Rate target',
-      ref: 'May baseline: 0 meetings',
+      ref: 'May baseline: 0 meetings · team total, not per SDR',
       ok: meetingsTarget ? meetings >= meetingsTarget : null
     },
     {
-      name: '% of leads qualified', info: 'Qualified ÷ leads this month, on the explicit status allowlist. Company-wide 41% of leads qualify — but your team works the sub-$1k/incomplete tier, so set your own target in Monthly Targets.',
+      name: '% of leads qualified', info: 'Of the B2B leads that came in this month, the share the team qualified (explicit status allowlist). Company-wide, 41% of all business leads qualify — but your team works the sub-$1k/incomplete tier, so set your own target in Monthly Targets.',
       value: qualPct != null ? qualPct.toFixed(1) + '%' : '—',
       target: d.goalPctQual ? d.goalPctQual + '%' : 'set % Qualified target',
       ref: `company: ${MANDATE_REF.qualifyRate}%`,
       ok: (qualPct != null && d.goalPctQual) ? qualPct >= d.goalPctQual : null
     },
     {
-      name: 'Speed-to-lead', info: 'Median minutes to first call this month, all leads. The briefing: "the biggest driver of conversion". Requires the Aircall CSV.',
+      name: 'Speed-to-lead', info: 'Median minutes from a B2B lead arriving to the first call, this month. Industry research (MIT/InsideSales, Chili Piper): calling within 5 minutes makes you ~21× more likely to qualify the lead vs waiting 30 — under 5 minutes is the standard target, and only ~7% of B2B teams hit it. Set your goal in the input below (suggested: 5).',
       value: stl != null ? fmtMinutes(stl) : (rawCalls ? '—' : 'load Aircall CSV'),
-      target: d.goalSpeedToLead ? `≤ ${d.goalSpeedToLead}m` : 'set Speed-to-Lead max',
-      ref: '86% of wins close within 21 days — speed compounds',
+      target: d.goalSpeedToLead ? `≤ ${d.goalSpeedToLead}m` : 'set goal below (suggested: 5m)',
+      ref: 'research: <5 min = ~21× more likely to qualify',
       ok: (stl != null && d.goalSpeedToLead) ? stl <= d.goalSpeedToLead : null
     },
     {
-      name: 'Lead coverage', info: 'Share of this month\'s leads (older than 3 days) actually worked: any Sales status, Meeting Status, or a matched first call. The doc: "share of the monthly lead flow actively worked, no leakage." Scoped to leads routed to your team — that is your domain.',
+      name: 'Lead coverage', info: 'Plain version: of the B2B leads that landed on the team\'s desk this month, how many did anyone actually DO anything with — set a status, book a meeting, or call them? 100% means nothing slipped through the cracks. Every "untouched" lead is paid-for demand nobody has worked yet. (Leads under 4 days old don\'t count either way — they\'re still being worked.)',
       value: cov.pct != null ? cov.pct.toFixed(1) + '%' : '—',
       target: `≥ ${s.coverageTarget}%`,
-      ref: `${cov.total - cov.worked} untouched · load ${leads}/${capacity} of capacity (${s.activeCoordinators} × ${MANDATE_REF.leadsPerCoordinator})`,
+      ref: `${cov.total - cov.worked} untouched · ${leads} leads in vs capacity ${capacity} (${s.activeCoordinators} × ${MANDATE_REF.leadsPerCoordinator})`,
       ok: cov.pct != null ? cov.pct >= s.coverageTarget : null
     },
     {
-      name: 'Handoff quality (proxy)', info: 'No AE rating data exists yet, so this uses the two signals already in the data: the share of resolved meetings that were rejected or not attended, and how many of your team\'s qualified leads the AEs bounced back (Disqualified AE). Lower is better on both.',
+      name: 'Handoff quality (proxy)', info: 'No AE rating data exists yet, so this uses the two signals already in the data: the share of the team\'s resolved meetings that the prospect or AE rejected / didn\'t attend, and how many of the team\'s qualified leads the AEs bounced back (Disqualified AE). Lower is better on both.',
       value: naPct != null ? naPct.toFixed(1) + '% no-show/rejected' : '—',
       target: `≤ ${s.handoffMax}%`,
       ref: `${aeDq} AE-disqualified this month`,
       ok: naPct != null ? naPct <= s.handoffMax : null
     }
   ];
-  document.getElementById('mandateKpiHeading').textContent = `Team Lead KPIs — ${monthLabel}`;
+  document.getElementById('mandateKpiHeading').textContent = `Team Lead KPIs — ${monthLabel} month to date · B2B leads only · team totals`;
   document.getElementById('mandateKpiTable').innerHTML = `
     <thead><tr><th>KPI</th><th>Now</th><th>Target</th><th>Status</th><th>Reference</th></tr></thead>
     <tbody>${kpis.map(k => `<tr>
@@ -3416,37 +3429,43 @@ function renderMandateSection() {
     {
       label: 'Not responsive %', value: nrPct != null ? nrPct.toFixed(1) + '%' : '—',
       color: nrPct != null ? (nrPct < MANDATE_REF.nrShare ? 'var(--green)' : 'var(--red)') : 'var(--muted)',
-      sub: `company baseline ${MANDATE_REF.nrShare}% — the #1 leak${nrDelta != null ? ` · ${nrDelta <= 0 ? '▼' : '▲'} ${Math.abs(nrDelta).toFixed(1)}pt vs last month` : ''}`
+      info: 'Of the team\'s B2B leads this month, the share that died marked Non respondant / Not responsive. The 29% baseline is company-wide, ALL business leads, Jan–May YTD — the briefing calls it the single biggest leak in the funnel. Your team works the low-value/incomplete tier, so expect to start above 29%; what the founders will watch is the direction.',
+      sub: `company baseline ${MANDATE_REF.nrShare}% (all BL, YTD) — the #1 leak${nrDelta != null ? ` · ${nrDelta <= 0 ? '▼' : '▲'} ${Math.abs(nrDelta).toFixed(1)}pt vs last month` : ''}`
     },
     {
-      label: 'Lead → deal (since Jun 1)', value: leadToDeal != null ? leadToDeal.toFixed(1) + '%' : '—',
+      label: 'Lead → closed deal (since Jun 1)', value: leadToDeal != null ? leadToDeal.toFixed(1) + '%' : '—',
       color: 'var(--text)',
-      sub: `${closedSinceStart} closed of ${leadsSinceStart} leads · company ${MANDATE_REF.leadToDeal}% (~17% with lag closes — recent leads still maturing)`
+      info: 'Plain version: of every 100 B2B leads the team has received since your June 1 start, how many have turned into paying (Closed) deals so far. Company benchmark is 14.2% (~17% once slow closes catch up). Recent leads haven\'t had time to close yet, so this number always runs a little low.',
+      sub: `${closedSinceStart} closed of ${leadsSinceStart} B2B leads · company ${MANDATE_REF.leadToDeal}%`
     },
     {
       label: 'Re-engagement pool', value: `${reengage}`,
       color: reengage > 0 ? '#d98e00' : 'var(--green)',
-      sub: 'qualified >21 days ago, still open, no meeting — statistically dying, chase these first'
+      info: 'Plain version: a call-back list. B2B leads the team qualified but never got to a meeting, still sitting open 21+ days later. The briefing: 86% of deals that ever close do so within 21 days — so these are going cold right now. Chasing this list is free pipeline.',
+      sub: 'qualified, no meeting, still open after 21+ days — your call-back list'
     },
     {
       label: 'Meetings trend', value: `${meetings}`,
       color: prevMeetings ? (meetings >= prevMeetings ? 'var(--green)' : '#d98e00') : 'var(--text)',
-      sub: `this month so far vs ${prevMeetings} in all of last month · May baseline was 0`
+      info: 'Plain version: direction of travel on the metric the founders care most about. Meetings booked so far this month (B2B) next to the full previous month — a partial month will naturally look smaller until it catches up. May baseline before your team: zero.',
+      sub: `${monthLabel} so far vs ${prevMeetings} in all of last month · May baseline was 0`
     }
   ];
   document.getElementById('mandateTiles').innerHTML = tiles.map(t => `
     <div class="mandate-tile">
-      <div class="mandate-tile-label">${t.label}</div>
+      <div class="mandate-tile-label">${t.label} <span class="goal-info" title="${escapeHtml(t.info)}">ⓘ</span></div>
       <div class="mandate-tile-value" style="color:${t.color}">${t.value}</div>
       <div class="mandate-tile-sub">${t.sub}</div>
     </div>`).join('');
 
-  // ── Editable mandate inputs (targets that don't live in Monthly Targets) ──
+  // ── Editable mandate inputs. Speed-to-Lead goal writes to the same Monthly
+  // Targets field the charts use — one number everywhere. ──
   document.getElementById('mandateInputs').innerHTML = `
     <span>Active Coordinators: <input type="number" min="0" max="12" value="${s.activeCoordinators}" onchange="saveMandateNum('activeCoordinators', this.value)"></span>
+    <span>Speed-to-Lead goal (min): <input type="number" min="1" max="240" placeholder="5" value="${d.goalSpeedToLead || ''}" onchange="saveMandateStlGoal(this.value)" title="Research-backed target: under 5 minutes. Shared with Monthly Targets below."></span>
     <span>Coverage target %: <input type="number" min="0" max="100" value="${s.coverageTarget}" onchange="saveMandateNum('coverageTarget', this.value)"></span>
     <span>Handoff max no-show/rejected %: <input type="number" min="0" max="100" value="${s.handoffMax}" onchange="saveMandateNum('handoffMax', this.value)"></span>
-    <span style="opacity:0.8">Meetings / % Qualified / Speed-to-Lead targets come from Monthly Targets below.</span>`;
+    <span style="opacity:0.8">Meetings & % Qualified targets come from Monthly Targets below.</span>`;
 
   const overallOk = kpis.filter(k => k.ok === true).length;
   const overallScored = kpis.filter(k => k.ok !== null).length;
