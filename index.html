@@ -350,6 +350,7 @@
   }
   .chart-cumulative-toggle input:checked + .toggle-track::after { transform: translateX(13px); }
   .chart-cumulative-toggle:hover .toggle-text { color: var(--text); }
+  .activity-metric-checks { display: flex; align-items: center; gap: 12px; }
 
   /* GOALS SECTION */
   .goals-section {
@@ -945,12 +946,23 @@
           <span class="chart-title"><span id="chartActivityTitle">Meetings Booked</span> <span class="goal-info" id="info-chartActivity" title="Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartActivity"></div>
-            <select class="chart-granularity" id="metric-chartActivity" onchange="onActivityMetricChange()">
-              <option value="funnel" selected>Metric: Volume → Booked → Held (overlay)</option>
-              <option value="meetings">Metric: Meetings Booked</option>
-              <option value="leadVol">Metric: Lead Volume</option>
-              <option value="meetingsHeld">Metric: Meetings Held</option>
-            </select>
+            <span class="activity-metric-checks">
+              <label class="chart-cumulative-toggle activity-metric-check" style="margin-right:0">
+                <input type="checkbox" class="metric-check-chartActivity" value="leadVol" checked onchange="onActivityMetricChange(event)">
+                <span class="toggle-track"></span>
+                <span class="toggle-text">Lead Volume</span>
+              </label>
+              <label class="chart-cumulative-toggle activity-metric-check" style="margin-right:0">
+                <input type="checkbox" class="metric-check-chartActivity" value="meetings" checked onchange="onActivityMetricChange(event)">
+                <span class="toggle-track"></span>
+                <span class="toggle-text">Meetings Booked</span>
+              </label>
+              <label class="chart-cumulative-toggle activity-metric-check">
+                <input type="checkbox" class="metric-check-chartActivity" value="meetingsHeld" checked onchange="onActivityMetricChange(event)">
+                <span class="toggle-track"></span>
+                <span class="toggle-text">Meetings Held</span>
+              </label>
+            </span>
             <select class="chart-granularity" id="teamsComparison-chartActivity" onchange="renderCharts(getFilteredDays())">
               <option value="off">Teams comparison: Off</option>
               <option value="on">Teams comparison: On</option>
@@ -2687,75 +2699,77 @@ function makeChart(id, days, spec) {
 
 // Meetings Booked / Lead Volume / Meetings Held used to be three separate
 // charts with identical controls (Teams comparison, granularity, Combined) —
-// merged into one chart with a Metric selector so all three views live in
-// one place without losing any toggle. Only Lead Volume supports Cumulative,
-// so that toggle is hidden for the other two metrics.
+// merged into one chart with a checkbox per metric, so any combination can be
+// shown at once, layered widest-to-narrowest (Lead Volume back, Meetings
+// Booked middle, Meetings Held front) instead of stacked. With exactly one
+// metric checked it falls back to the original single-series chart (with its
+// Target/Pace/AE-Baseline lines and, for Lead Volume, the Cumulative toggle).
+const ACTIVITY_METRIC_ORDER = ['leadVol', 'meetings', 'meetingsHeld'];
 const ACTIVITY_METRICS = {
-  funnel: {
-    title: 'Volume → Booked → Held',
-    info: 'Three metrics overlaid in the same bar, widest-to-narrowest: Lead Volume (back), Meetings Booked (middle), Meetings Held (front) — so you can see at a glance what share of that bucket\'s leads made it to a booked meeting, and how many of those were actually held. Not stacked (they don\'t add up); each bar\'s full height is its own count. Teams comparison splits US Team vs OUS Team side by side; granularity switches week/month buckets.'
-  },
-  meetings: {
-    title: 'Meetings Booked',
-    spec: (d, ae) => ({ type: 'count', field: 'meetings', goal: d.goalMeetings, pace: true, aeBaseline: ae ? ae.meetingsPerDay : null }),
-    info: 'Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).'
-  },
   leadVol: {
-    title: 'Lead Volume',
-    spec: (d, ae) => ({ type: 'count', field: 'leadVol', goal: d.goalLeads, cumulativeAllowed: true, aeBaseline: ae ? ae.leadsPerDay : null }),
+    label: 'Lead Volume', field: 'leadVol', color: '#c7cdf0', barPercentage: 0.94,
+    singleSpec: (d, ae) => ({ type: 'count', field: 'leadVol', goal: d.goalLeads, cumulativeAllowed: true, aeBaseline: ae ? ae.leadsPerDay : null }),
     info: 'Count of leads created per bucket, after your Leads: filter (B2B/B2C/All/Commission) is applied. Cumulative toggle switches from per-bucket counts to a running total across the range. Dashed Target = your Lead Volume goal, prorated to each bucket\'s size; no Pace shown for a straight count chart like this one.'
   },
+  meetings: {
+    label: 'Meetings Booked', field: 'meetings', color: '#8b7ff0', barPercentage: 0.62,
+    singleSpec: (d, ae) => ({ type: 'count', field: 'meetings', goal: d.goalMeetings, pace: true, aeBaseline: ae ? ae.meetingsPerDay : null }),
+    info: 'Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).'
+  },
   meetingsHeld: {
-    title: 'Meetings Held',
-    spec: () => ({ type: 'count', field: 'meetings_held', pace: true }),
+    label: 'Meetings Held', field: 'meetings_held', color: '#453a99', barPercentage: 0.32,
+    singleSpec: () => ({ type: 'count', field: 'meetings_held', pace: true }),
     info: 'Count of leads whose Meeting Status is exactly Meeting Done, per bucket — distinct from Meetings Booked (which also counts still-upcoming Scheduled meetings and includes Closed deals as an implied meeting). Dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected). No goal/Target line for this one.'
   }
 };
 
-// Metric switch resets the ⓘ tooltip's base text and shows/hides the
-// Cumulative toggle (only meaningful for Lead Volume) before re-rendering.
-function onActivityMetricChange() {
-  const metric = document.getElementById('metric-chartActivity').value;
-  const cfg = ACTIVITY_METRICS[metric];
-  const infoEl = document.getElementById('info-chartActivity');
-  if (infoEl) { infoEl.dataset.base = cfg.info; infoEl.title = cfg.info; }
-  const cumWrap = document.getElementById('cumulativeToggleWrap-chartActivity');
-  if (cumWrap) cumWrap.style.display = metric === 'leadVol' ? '' : 'none';
-  const combinedWrap = document.getElementById('combinedToggleWrap-chartActivity');
-  if (combinedWrap) combinedWrap.style.display = metric === 'funnel' ? 'none' : '';
+// Reads the 3 checkboxes, in fixed widest-to-narrowest order (not DOM/click
+// order) so layering is always Lead Volume → Meetings Booked → Meetings Held
+// regardless of which ones happen to be checked.
+function checkedActivityMetrics() {
+  return ACTIVITY_METRIC_ORDER.filter(key => {
+    const el = document.querySelector(`.metric-check-chartActivity[value="${key}"]`);
+    return el && el.checked;
+  });
+}
+
+// A metric checkbox toggle can't leave zero metrics selected — there'd be
+// nothing to plot — so re-check the box the user just tried to uncheck.
+function onActivityMetricChange(event) {
+  if (checkedActivityMetrics().length === 0 && event && event.target) {
+    event.target.checked = true;
+    return;
+  }
   renderCharts(getFilteredDays());
 }
 
 function renderActivityChart(chartDays, d, ae) {
-  const metricEl = document.getElementById('metric-chartActivity');
-  const metric = metricEl ? metricEl.value : 'funnel';
-  const cfg = ACTIVITY_METRICS[metric];
+  const metrics = checkedActivityMetrics();
   const titleEl = document.getElementById('chartActivityTitle');
-  if (titleEl) titleEl.textContent = cfg.title;
+  if (titleEl) titleEl.textContent = metrics.map(k => ACTIVITY_METRICS[k].label).join(' + ');
   const infoEl = document.getElementById('info-chartActivity');
-  if (infoEl && infoEl.dataset.base === undefined) infoEl.dataset.base = cfg.info;
+  const infoText = metrics.length > 1
+    ? `Overlaid, not stacked: ${metrics.map(k => ACTIVITY_METRICS[k].label).join(', ')} — each bar's full height is its own count, layered widest-to-narrowest (Lead Volume back, Meetings Booked middle, Meetings Held front) so you can see at a glance what share of that bucket made it from one stage to the next. These numbers don't sum to anything meaningful, so they're deliberately not stacked. Uncheck a metric above to drop it; Teams comparison still splits US Team vs OUS Team side by side.`
+    : ACTIVITY_METRICS[metrics[0]].info;
+  if (infoEl) infoEl.dataset.base = infoText;
   const cumWrap = document.getElementById('cumulativeToggleWrap-chartActivity');
-  if (cumWrap) cumWrap.style.display = metric === 'leadVol' ? '' : 'none';
+  if (cumWrap) cumWrap.style.display = (metrics.length === 1 && metrics[0] === 'leadVol') ? '' : 'none';
   const combinedWrap = document.getElementById('combinedToggleWrap-chartActivity');
-  if (combinedWrap) combinedWrap.style.display = metric === 'funnel' ? 'none' : '';
-  if (metric === 'funnel') {
-    renderFunnelChart(chartDays);
+  if (combinedWrap) combinedWrap.style.display = metrics.length === 1 ? '' : 'none';
+  if (metrics.length === 1) {
+    makeChart('chartActivity', chartDays, ACTIVITY_METRICS[metrics[0]].singleSpec(d, ae));
   } else {
-    makeChart('chartActivity', chartDays, cfg.spec(d, ae));
+    renderLayeredActivityChart(chartDays, metrics);
   }
   updateChartInfoTooltip('chartActivity');
 }
 
-// Funnel overlay: Lead Volume / Meetings Booked / Meetings Held drawn as three
-// bars of decreasing width sharing the same x slot (grouped:false so they sit
-// on top of each other instead of side by side), widest-at-back to
-// narrowest-at-front — a bullet-chart look showing what share of volume made
-// it to booked, then held, without the visual noise of a stacked bar (these
-// numbers don't sum to anything meaningful, so stacking would mislead).
-// Always shows the combined total per bucket (Combined toggle doesn't apply
-// here — three metrics already share one bar); Teams comparison still splits
-// US Team vs OUS Team into side-by-side bucket groups via combo x-labels.
-function renderFunnelChart(chartDays) {
+// Layers 2-3 checked metrics as bars of decreasing width sharing the same x
+// slot (grouped:false so they sit on top of each other instead of side by
+// side), widest-at-back to narrowest-at-front — a bullet-chart look. Teams
+// comparison still splits US Team vs OUS Team into side-by-side bucket groups
+// via combo x-labels.
+function renderLayeredActivityChart(chartDays, metrics) {
   const id = 'chartActivity';
   const granularity = chartGranularity(id);
   const buckets = bucketize(chartDays, granularity);
@@ -2764,21 +2778,19 @@ function renderFunnelChart(chartDays) {
   const labels = multiGroup
     ? buckets.flatMap(b => groups.map(g => `${b.label} · ${g.label}`))
     : buckets.map(b => b.label);
+  const slots = multiGroup ? buckets.flatMap(b => groups.map(g => ({ b, g }))) : buckets.map(b => ({ b, g: groups[0] }));
 
   function seriesFor(field) {
-    const slots = multiGroup ? buckets.flatMap(b => groups.map(g => ({ b, g }))) : buckets.map(b => ({ b, g: groups[0] }));
     return slots.map(({ b, g }) => {
       const present = b.days.filter(d => allData[d]);
       return present.length ? chartSum(present, g.key, field) : null;
     });
   }
 
-  const FUNNEL_COLORS = { leadVol: '#c7cdf0', meetings: '#8b7ff0', meetingsHeld: '#453a99' };
-  const datasets = [
-    { label: 'Lead Volume', data: seriesFor('leadVol'), backgroundColor: FUNNEL_COLORS.leadVol, borderRadius: 3, borderWidth: 0, categoryPercentage: 0.7, barPercentage: 0.95, grouped: false, order: 1 },
-    { label: 'Meetings Booked', data: seriesFor('meetings'), backgroundColor: FUNNEL_COLORS.meetings, borderRadius: 3, borderWidth: 0, categoryPercentage: 0.7, barPercentage: 0.6, grouped: false, order: 2 },
-    { label: 'Meetings Held', data: seriesFor('meetings_held'), backgroundColor: FUNNEL_COLORS.meetingsHeld, borderRadius: 3, borderWidth: 0, categoryPercentage: 0.7, barPercentage: 0.3, grouped: false, order: 3 }
-  ];
+  const datasets = metrics.map((key, i) => {
+    const m = ACTIVITY_METRICS[key];
+    return { label: m.label, data: seriesFor(m.field), backgroundColor: m.color, borderRadius: 3, borderWidth: 0, categoryPercentage: 0.7, barPercentage: m.barPercentage, grouped: false, order: metrics.length - i };
+  });
 
   if (charts[id]) charts[id].destroy();
   const ctx = document.getElementById(id).getContext('2d');
@@ -2805,14 +2817,10 @@ function renderFunnelChart(chartDays) {
 
   const legendEl = document.getElementById('legend-chartActivity');
   if (legendEl) {
-    const items = [
-      { label: 'Lead Volume', color: FUNNEL_COLORS.leadVol },
-      { label: 'Meetings Booked', color: FUNNEL_COLORS.meetings },
-      { label: 'Meetings Held', color: FUNNEL_COLORS.meetingsHeld }
-    ];
-    legendEl.innerHTML = items.map(it =>
-      `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
-    ).join('');
+    legendEl.innerHTML = metrics.map(key => {
+      const m = ACTIVITY_METRICS[key];
+      return `<span class="legend-item"><span class="legend-dot" style="background:${m.color}"></span>${m.label}</span>`;
+    }).join('');
   }
 }
 
