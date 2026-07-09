@@ -571,6 +571,34 @@
     .header-right { width: 100%; justify-content: space-between; }
   }
 
+  /* DATA HYGIENE */
+  .hygiene-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 16px;
+  }
+  .hygiene-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; gap: 12px; }
+  .hygiene-header-left { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .hygiene-title { font-size: 13px; font-weight: 600; }
+  .hygiene-sub { font-size: 11px; color: var(--muted); }
+  .hygiene-chevron { color: var(--muted); font-size: 12px; transition: transform 0.15s; }
+  .hygiene-section.expanded .hygiene-chevron { transform: rotate(90deg); }
+  .hygiene-body { display: none; margin-top: 16px; }
+  .hygiene-section.expanded .hygiene-body { display: block; }
+  .hygiene-facts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .hygiene-fact { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--surface2); min-width: 0; }
+  .hygiene-fact-name { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .hygiene-fact-score { font-size: 22px; font-weight: 700; }
+  .hygiene-fact-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  #chartHygiene { max-height: 240px; width: 100% !important; }
+  .hygiene-laws { margin-top: 16px; }
+  .hygiene-laws-title { font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+  .hygiene-law-item { font-size: 11px; color: var(--muted); margin-bottom: 5px; line-height: 1.5; }
+  .hygiene-law-item b { color: var(--text); }
+  .hygiene-weight-badge { display: inline-block; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 0 7px; font-size: 10px; font-weight: 700; margin-right: 6px; }
+
   /* QUALIFIED LEADS REPORT (screen: hidden; print: the only thing shown) */
   #reportPrintArea { display: none; }
   .report-title { font-size: 20px; font-weight: 700; margin-bottom: 2px; }
@@ -719,7 +747,7 @@
       </div>
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">% Leads Qualified <span class="goal-info" id="info-chartQualPct" title="Qualified leads ÷ Lead Volume per bucket, summed then divided (not an average of daily rates). Qualified = any Sales status except Non respondant/Cold/Pending/Disqualified(-variant), OR a booked meeting, OR legacy SQL status = Qualified. Dashed Target = your % Qualified target goal; dashed Pace = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
+          <span class="chart-title">% Leads Qualified <span class="goal-info" id="info-chartQualPct" title="Qualified leads ÷ Lead Volume per bucket, summed then divided (not an average of daily rates). Qualified = Sales status on the explicit qualified list (Hot, Warm, Pending, Closed, Lost, refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need a scheduled follow-up, Qualified SDR, Disqualified AE); blank/Disqualified/Cold/Non respondant are non-qualified. Blank-status legacy rows with SQL status = Qualified still count. Dashed Target = your % Qualified target goal; dashed Pace = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartQualPct"></div>
             <select class="chart-granularity" id="teamsComparison-chartQualPct" onchange="renderCharts(getFilteredDays())">
@@ -961,6 +989,27 @@
       </div>
     </div>
 
+    <!-- DATA HYGIENE -->
+    <div class="hygiene-section expanded" id="hygieneSection">
+      <div class="hygiene-header" onclick="toggleHygieneSection()">
+        <div class="hygiene-header-left">
+          <span class="hygiene-title">Data Hygiene <span class="goal-info" title="Checks every lead (all SDRs, B2B + B2C, regardless of the Leads: filter) against the marking laws listed at the bottom of this section — rules derived from the team's own majority conventions in past data. Weekly score per SDR = 100 minus (weighted violation points ÷ leads handled that week) × 100, floored at 0 — so one severe violation in a 30-lead week costs 10 points, and clean marking scores 100. Recomputed from the current CSV on every load, so fixing a lead in Airtable clears its violation on the next refresh.">ⓘ</span></span>
+          <span class="hygiene-sub" id="hygieneHeaderNote">Marking-quality score per SDR — click a bar to see the violations behind it</span>
+        </div>
+        <span class="hygiene-chevron">&#9654;</span>
+      </div>
+      <div class="hygiene-body">
+        <div class="hygiene-facts-grid" id="hygieneSummary"></div>
+        <div class="chart-header">
+          <span class="chart-title">Weekly Hygiene Score by SDR</span>
+          <div class="chart-legend" id="legend-chartHygiene"></div>
+        </div>
+        <canvas id="chartHygiene"></canvas>
+        <div id="hygieneDrilldown" class="speed-to-lead-drilldown" style="display:none"></div>
+        <div class="hygiene-laws" id="hygieneLaws"></div>
+      </div>
+    </div>
+
     <!-- GOALS -->
     <div class="goals-section">
       <div class="goals-title">Monthly Targets</div>
@@ -1197,6 +1246,7 @@ let allData = null;   // { date: { <sdrKey>: metrics, Team: metrics } } — deri
 let allDataB2B = null;   // same shape, always business-leads-only — used by Commission View's Lead Volume card
 let allDataB2C = null;   // same shape, always b2c-leads-only — used by chart-local B2B/B2C/All toggles
 let allDataAll = null;   // same shape, always combined B2B+B2C regardless of the global lead-type filter — used by chart-local B2B/B2C/All toggles
+let datelessLeads = null; // SDR-owned rows with no Creation Date — invisible to every day-bucketed metric; surfaced by the Hygiene Report
 let rawByDay = null;   // { date: { <sdrKey>: [rows] } } — unfiltered raw rows, persisted
 let rawCalls = null;   // [{ phoneDigits, utcMs, sdrKey }] from the Aircall call-history CSV, persisted
 let callsFilename = null;
@@ -1309,11 +1359,17 @@ function parseCSV(text, filename) {
   const sdrRows = rows.filter(r => sdrKeyByName(r['SDR Owner']));
 
   // Group by Dubai-local day and SDR, keeping raw rows so the business-lead filter
-  // can be toggled live
+  // can be toggled live. Rows with no Creation Date can't be bucketed at all —
+  // they're excluded from every metric, so track them for the Hygiene Report
+  // instead of dropping them silently.
   rawByDay = {};
+  datelessLeads = [];
   sdrRows.forEach(r => {
     const raw = r['Creation Date'] || '';
-    if (!raw) return;
+    if (!raw) {
+      datelessLeads.push({ name: (r['Name'] || '').trim() || '(unnamed lead)', sdrKey: sdrKeyByName(r['SDR Owner']) });
+      return;
+    }
     const day = toDubaiDayKey(raw);
     if (!rawByDay[day]) rawByDay[day] = Object.fromEntries(SDRS.map(s => [s.key, []]));
     const key = sdrKeyByName(r['SDR Owner']);
@@ -1709,7 +1765,7 @@ function saveLoadedData(filename) {
   try {
     const prev = JSON.parse(localStorage.getItem('sdr_data') || 'null');
     const finalFilename = filename !== undefined ? filename : (prev && prev.filename);
-    localStorage.setItem('sdr_data', JSON.stringify({ rawByDay, filename: finalFilename, rawCalls, callsFilename }));
+    localStorage.setItem('sdr_data', JSON.stringify({ rawByDay, filename: finalFilename, rawCalls, callsFilename, datelessLeads }));
   } catch (e) {}
 }
 // Wipes the loaded CSV (in-memory and persisted) and drops back to the
@@ -1741,6 +1797,7 @@ function restoreLoadedData() {
     rawByDay = saved.rawByDay;
     rawCalls = saved.rawCalls || null;
     callsFilename = saved.callsFilename || null;
+    datelessLeads = saved.datelessLeads || null;
     matchSpeedToLead();
     loadLeadTypeFilter();
     loadRangeFilter();
@@ -1756,18 +1813,41 @@ function restoreLoadedData() {
   } catch (e) { return false; }
 }
 
-// Qualified = every Sales status EXCEPT the explicit non-qualifying set below,
-// rather than an allowlist — any status not yet excluded here counts as
-// qualified by default. "Pending" is our best-guess mapping for the "blue dot"
-// status the team described (flag to confirm — only a handful of rows today).
+// Qualified = an explicit allowlist of Sales statuses (Chase's definition,
+// July 2026), replacing the old exclude-list where anything unknown counted
+// as qualified by default. Spelling variants that appear in real exports
+// ("Qualified_SDR", "Need a scheduled F-up") are included alongside the
+// canonical names. "Disqualified AE" is QUALIFIED on purpose: the SDR did
+// qualify the lead — the AE bouncing it back is tracked separately by the
+// Disqualified-by-AE metric. The Airtable "blue dot" status (an unnamed
+// select option) exports as an empty string, so it's covered by the
+// blank-is-non-qualified rule.
+const QUALIFIED_SALES_STATUSES = new Set([
+  'hot', 'warm', 'pending', 'closed', 'lost',
+  'partial refund', 'deposit refund', 'full refund',
+  'only deposit collected', 'no payment collected',
+  'quote sent', 'potential deal',
+  'pending to quote', 'pending to contact',
+  'need a scheduled follow-up', 'need a scheduled f-up',
+  'qualified sdr', 'qualified_sdr'
+]);
+// The explicit non-qualified set — used by the Hygiene Report to tell a
+// known non-qualified status apart from an unrecognized (misspelled/new) one.
+const NON_QUALIFIED_SALES_STATUSES = new Set(['', 'disqualified', 'cold', 'non respondant']);
+function normalizeSalesStatus(status) {
+  return (status || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
 function isQualifiedStatus(status) {
-  const s = (status || '').trim().toLowerCase();
-  if (!s) return false;
-  if (s === 'non respondant') return false;
-  if (s === 'cold') return false;
-  if (s === 'pending') return false;
-  if (s.includes('disqualified')) return false;
-  return true;
+  const s = normalizeSalesStatus(status);
+  if (QUALIFIED_SALES_STATUSES.has(s)) return true;
+  // Real export value is "Disqualified AE (wrong SDR qualification)"
+  if (s.startsWith('disqualified ae')) return true;
+  return false;
+}
+// A status covered by neither list — a typo or a newly added Airtable option.
+// Counts as non-qualified (conservative) and is flagged by the Hygiene Report.
+function isUnrecognizedStatus(status) {
+  return !isQualifiedStatus(status) && !NON_QUALIFIED_SALES_STATUSES.has(normalizeSalesStatus(status));
 }
 const MEETING_BOOKED_STATUSES = ['Meeting Scheduled', 'Meeting Done', 'Meeting Rejected', 'Meeting Not Atended'];
 // A closed (won) deal always implies a meeting happened, even when Meeting
@@ -1795,16 +1875,19 @@ const MEETING_RESOLVED_STATUSES = ['Meeting Done', 'Meeting Not Atended', 'Meeti
 function isMeetingResolved(r) {
   return MEETING_RESOLVED_STATUSES.includes(r['Meeting Status']);
 }
-// A lead counts as qualified if its Sales status qualifies on its own, OR it
-// already has a meeting booked (a booked meeting always implies the lead was
-// qualified, even if Sales status hasn't caught up — though not every
-// qualified lead has a meeting booked), OR — for legacy rows from before the
-// team stopped using SQL status — SQL status was explicitly marked Qualified.
+// Sales status is the single source of truth for qualification — a lead is
+// qualified iff its status is on the allowlist. The old booked-meeting
+// override (meeting implies qualified even when status says Disqualified/
+// Cold) is gone on purpose: those rows are contradictions, and the Hygiene
+// Report now flags them instead of silently counting them as qualified.
+// One legacy fallback remains: when Sales status is BLANK, an explicit
+// SQL status = Qualified still counts — that's the only qualification
+// signal that exists on rows from the pre-Sales-status era (mostly the AE
+// Baseline export); it never overrides a filled-in status.
 function isQualifiedLead(r) {
-  if (isQualifiedStatus(r['Sales status'])) return true;
-  if (isMeetingBooked(r)) return true;
-  if ((r['SQL status'] || '').trim().toLowerCase() === 'qualified') return true;
-  return false;
+  const status = (r['Sales status'] || '').trim();
+  if (status) return isQualifiedStatus(status);
+  return (r['SQL status'] || '').trim().toLowerCase() === 'qualified';
 }
 function computeMetrics(leads) {
   if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, meetings_held: 0, speed_to_lead_matched: 0, speed_to_lead_eligible: 0, speed_to_lead_mismatch: 0,
@@ -2113,6 +2196,7 @@ function renderDashboard() {
   const days = getFilteredDays();
   renderSummaryCards(days);
   renderCharts(days);
+  renderHygieneSection(days);
   renderCommissionCalculator(days);
   renderAEBaselineSection();
 }
@@ -2202,10 +2286,10 @@ function renderSummaryCards(days) {
   const infoMeetingRate = isCommission
     ? `Meetings Booked (B2B+B2C combined) ÷ B2B-only Lead Volume — Commission View judges the combined meeting count against the B2B lead denominator.${aeNote}`
     : `Meetings Booked ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
-  const infoQualified = `Count of leads that are qualified — Sales status qualifies on its own, OR the lead has a booked meeting, OR (legacy rows) SQL status = Qualified. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
+  const infoQualified = `Count of leads whose Sales status is on the explicit qualified list (Hot, Warm, Pending, Closed, Lost, refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need a scheduled follow-up, Qualified SDR, Disqualified AE). Blank, Disqualified, Cold, and Non respondant are non-qualified — a booked meeting no longer overrides the status (those contradictions show in the Hygiene Report instead). Blank-status legacy rows with SQL status = Qualified still count. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
   const infoPctQualified = isCommission
     ? `Leads Qualified (B2B+B2C combined) ÷ B2B-only Lead Volume.${aeNote}`
-    : `Leads Qualified ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Excludes Non-responsive/Cold/Pending/Disqualified leads unless they already have a qualifying signal (booked meeting or legacy Qualified SQL status).${aeNote}`;
+    : `Leads Qualified ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Qualified = Sales status on the explicit qualified list; blank/Disqualified/Cold/Non respondant are non-qualified regardless of meeting status.${aeNote}`;
   const infoNR = isCommission
     ? `Non-Responsive leads (B2B+B2C combined) ÷ B2B-only Lead Volume. Non-responsive = Disqualified reason "Not responsive" or Sales status "Non respondant". Lower is better.${aeNote}`
     : `Leads marked Sales status = Non respondant or Disqualified reason = Not responsive, ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Lower is better.${aeNote}`;
@@ -2216,7 +2300,7 @@ function renderSummaryCards(days) {
     ${countCard('Meetings Booked', totalMeetings, perSDR.map(s => ({ ...s, value: s.meetings, goal: s.meetingsGoal })), elapsed, daysInMo, showProjection, undefined, d.goalMeetings, ae ? ae.meetingsPerDay : null, infoMeetingsBooked)}
     ${rateCard('Meeting Booked Rate', meetingRate, perSDR.map(s => ({ ...s, value: s.meetingRate })), isCommission ? meanRateCommission(days, v, 'meetings') : meanMetric(days, v, 'meeting_rate'), isCommission ? 'meetings (B2B+B2C) ÷ B2B leads' : 'meetings ÷ total leads', d.goalMeetingRate, false, ae ? ae.overall.meeting_rate : null, infoMeetingRate)}
     ${countCard('Leads Qualified', totalQualified, perSDR.map(s => ({ ...s, value: s.qualified, goal: s.qualifiedGoal })), elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified, ae ? ae.qualifiedPerDay : null, infoQualified)}
-    ${rateCard('% Leads Qualified', pctQual, perSDR.map(s => ({ ...s, value: s.pctQual })), isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'excludes non-responsive/cold/pending/disqualified', d.goalPctQual, false, ae ? ae.overall.pct_qualified : null, infoPctQualified)}
+    ${rateCard('% Leads Qualified', pctQual, perSDR.map(s => ({ ...s, value: s.pctQual })), isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'status-based: blank/DQ/cold/non-respondant excluded', d.goalPctQual, false, ae ? ae.overall.pct_qualified : null, infoPctQualified)}
     ${rateCard('Non-Responsive Rate', nrRate, perSDR.map(s => ({ ...s, value: s.nrRate })), isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true, ae ? ae.overall.nr_rate : null, infoNR)}
     ${countCard('Disqualified by AE', totalAEDQ, perSDR.map(s => ({ ...s, value: s.aedq })), elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual', undefined, undefined, infoAEDQ)}
     ${pipelineCard('Active Pipeline', activePipeline, perSDR.map(s => ({ ...s, value: s.pipeline })), meanMetric(days, v, 'active_pipeline'), lastDay, infoPipeline)}
@@ -2717,9 +2801,14 @@ function renderSpeedToLeadChart(days) {
       interaction: { mode: 'index', intersect: false },
       // Click a bar/point to drill into every lead over the threshold for
       // that bucket + SDR series (skips the Pace/Target reference lines).
-      onClick: (evt, elements) => {
-        if (!elements.length) return;
-        const { datasetIndex, index } = elements[0];
+      // The chart's hover interaction is mode:'index' (tooltip shows every
+      // SDR at once), so the `elements` argument here contains ALL series at
+      // the clicked x — elements[0] is just whichever dataset is first (MJ),
+      // not the bar actually clicked. Re-resolve the exact clicked element.
+      onClick: (evt, elements, chart) => {
+        const hits = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, false);
+        if (!hits.length) return;
+        const { datasetIndex, index } = hits[0];
         const view = views[datasetIndex];
         if (!view) return;
         renderSpeedToLeadDrilldown(buckets[index], view.key, onHoursFilter, view.label);
@@ -2816,6 +2905,254 @@ function renderSpeedToLeadDrilldown(bucket, sdrKeys, onHoursFilter, viewLabel) {
 }
 function closeSpeedToLeadDrilldown() {
   const el = document.getElementById('speedToLeadDrilldown');
+  if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+}
+
+// ─── DATA HYGIENE ─────────────────────────────────────────────────────────────
+// The "laws": ways a lead can be marked inconsistently in Airtable. Each law's
+// test() returns a human-readable violation detail when broken, else null.
+// Weights: 3 = corrupts dashboard metrics directly, 2 = data going stale,
+// 1 = sloppy but recoverable. Derived from the team's own majority marking
+// conventions in historical data — e.g. Lost leads legitimately carry either
+// a Lost reason or a Disqualified reason (the team does both about equally),
+// so that is NOT a law, while a meeting on a Cold/Disqualified lead
+// contradicts the qualification model and is.
+const HYGIENE_LAWS = [
+  {
+    id: 'meeting_conflict', weight: 3, label: 'Meeting on a non-qualified status',
+    desc: 'The lead has a meeting (Scheduled / Done / Not Atended / Rejected) but its Sales status is blank, Disqualified, Cold, or Non respondant. A lead that reached a meeting was qualified by definition, so one of the two fields is wrong — and the lead loses qualified credit everywhere in the dashboard until it\'s fixed.',
+    test(r) {
+      if (!MEETING_BOOKED_STATUSES.includes(r['Meeting Status'])) return null;
+      if (isQualifiedStatus(r['Sales status'])) return null;
+      const st = (r['Sales status'] || '').trim();
+      return `Meeting Status "${r['Meeting Status']}" but Sales status ${st ? `"${st}"` : 'blank'}`;
+    }
+  },
+  {
+    id: 'unrecognized_status', weight: 3, label: 'Unrecognized Sales status',
+    desc: 'Sales status matches neither the qualified allowlist nor the known non-qualified set — a typo or a newly added Airtable option the dashboard doesn\'t know about. Counted as non-qualified until the list is updated.',
+    test(r) {
+      if (!isUnrecognizedStatus(r['Sales status'])) return null;
+      return `Sales status "${(r['Sales status'] || '').trim()}" isn't a recognized qualified or non-qualified status`;
+    }
+  },
+  {
+    id: 'stale_scheduled', weight: 2, label: 'Stale "Meeting Scheduled"',
+    desc: 'Meeting Status still says Meeting Scheduled 21+ days after the lead was created. The meeting almost certainly resolved one way or another by now but was never marked, so it\'s missing from the attendance stats.',
+    test(r, ageDays) {
+      if (r['Meeting Status'] !== 'Meeting Scheduled' || ageDays <= 21) return null;
+      return `Still "Meeting Scheduled" ${ageDays} days after the lead was created`;
+    }
+  },
+  {
+    id: 'dq_no_reason', weight: 1, label: 'Disqualified without a reason',
+    desc: 'Sales status is Disqualified but the Disqualified reason field is empty — every disqualification should say why.',
+    test(r) {
+      if (normalizeSalesStatus(r['Sales status']) !== 'disqualified') return null;
+      if ((r['Disqualified reason'] || '').trim()) return null;
+      return 'Disqualified with no Disqualified reason';
+    }
+  },
+  {
+    id: 'reason_on_active', weight: 1, label: 'Disqualified reason on a live/won lead',
+    desc: 'A Disqualified reason is filled in on a lead whose Sales status is qualified and not Lost (Closed, Hot, Warm, Qualified SDR, …). Lost is exempt — the team routinely files its reason in either field.',
+    test(r) {
+      const reason = (r['Disqualified reason'] || '').trim();
+      if (!reason) return null;
+      const s = normalizeSalesStatus(r['Sales status']);
+      if (!isQualifiedStatus(r['Sales status']) || s === 'lost' || s.startsWith('disqualified ae')) return null;
+      return `Disqualified reason "${reason}" on a lead marked "${(r['Sales status'] || '').trim()}"`;
+    }
+  },
+  {
+    id: 'nr_reason_mismatch', weight: 1, label: 'Non respondant with a contradictory reason',
+    desc: 'Sales status says Non respondant but the Disqualified reason says something other than Not responsive / Stopped responding — the two fields disagree about why the lead died.',
+    test(r) {
+      if (normalizeSalesStatus(r['Sales status']) !== 'non respondant') return null;
+      const reason = (r['Disqualified reason'] || '').trim();
+      if (!reason || ['not responsive', 'stopped responding'].includes(reason.toLowerCase())) return null;
+      return `Non respondant but Disqualified reason says "${reason}"`;
+    }
+  },
+  {
+    id: 'stale_blank', weight: 1, label: 'Blank Sales status on an old lead',
+    desc: 'The lead is over 3 days old and still has no Sales status at all — either it hasn\'t been worked or the outcome was never recorded.',
+    test(r, ageDays) {
+      if ((r['Sales status'] || '').trim() || ageDays <= 3) return null;
+      return `No Sales status ${ageDays} days after the lead was created`;
+    }
+  }
+];
+
+function dayKeyAgeDays(dayKey, todayKey) {
+  return Math.round((Date.parse(todayKey) - Date.parse(dayKey)) / 86400000);
+}
+// Scans ALL raw leads for the given days — deliberately ignores the B2B/B2C
+// Leads: filter, since marking quality applies to every lead an SDR touches.
+function collectHygieneViolations(days) {
+  const out = [];
+  if (!rawByDay) return out;
+  const today = dubaiTodayKey();
+  days.forEach(d => {
+    const ageDays = dayKeyAgeDays(d, today);
+    SDRS.forEach(s => {
+      ((rawByDay[d] && rawByDay[d][s.key]) || []).forEach(r => {
+        HYGIENE_LAWS.forEach(law => {
+          const detail = law.test(r, ageDays);
+          if (detail) out.push({ day: d, sdrKey: s.key, name: (r['Name'] || '').trim() || '(unnamed lead)', law, detail });
+        });
+      });
+    });
+  });
+  return out;
+}
+function hygieneLeadsCount(days, sdrKey) {
+  return days.reduce((acc, d) => acc + (((rawByDay[d] || {})[sdrKey]) || []).length, 0);
+}
+// 100 minus (weighted violation points per lead handled) × 100, floored at 0.
+// One weight-3 violation in a 30-lead week costs 10 points; null = no leads.
+function hygieneScore(points, leads) {
+  if (!leads) return null;
+  return Math.max(0, 100 - (points / leads) * 100);
+}
+function hygieneScoreColor(score) {
+  if (score == null) return 'var(--muted)';
+  if (score >= 90) return 'var(--green)';
+  if (score >= 70) return '#d98e00';
+  return 'var(--red)';
+}
+function toggleHygieneSection() {
+  document.getElementById('hygieneSection').classList.toggle('expanded');
+}
+function renderHygieneSection(days) {
+  if (!rawByDay) return;
+  closeHygieneDrilldown(); // stale after any filter change
+  const violations = collectHygieneViolations(days);
+
+  // Per-SDR summary tiles over the whole selected range
+  const tiles = SDRS.map(s => {
+    const leads = hygieneLeadsCount(days, s.key);
+    const mine = violations.filter(v => v.sdrKey === s.key);
+    const points = mine.reduce((a, v) => a + v.law.weight, 0);
+    const score = hygieneScore(points, leads);
+    return { ...s, leads, count: mine.length, score };
+  });
+  document.getElementById('hygieneSummary').innerHTML = tiles.map(t => `
+    <div class="hygiene-fact">
+      <div class="hygiene-fact-name" style="color:${t.color}">${t.label}</div>
+      <div class="hygiene-fact-score" style="color:${hygieneScoreColor(t.score)}">${t.score == null ? '—' : t.score.toFixed(1)}</div>
+      <div class="hygiene-fact-sub">${t.count} violation${t.count === 1 ? '' : 's'} · ${t.leads} leads</div>
+    </div>`).join('');
+
+  const totalCount = violations.length;
+  document.getElementById('hygieneHeaderNote').textContent =
+    `${totalCount} violation${totalCount === 1 ? '' : 's'} in the selected range — click a bar to see what's behind it`;
+
+  // Leads with no Creation Date sit outside every week bucket (and every
+  // other dashboard metric), so they get their own callout instead of a bar.
+  // In practice these are contentless stub records (no name/phone/email
+  // either, just an owner + status + empty quote link), so summarize per SDR
+  // — named ones are listed individually.
+  let datelessNote = '';
+  if (datelessLeads && datelessLeads.length) {
+    const named = datelessLeads.filter(l => l.name !== '(unnamed lead)');
+    const perSdr = {};
+    datelessLeads.forEach(l => { const lbl = l.sdrKey ? SDR_BY_KEY[l.sdrKey].label : '?'; perSdr[lbl] = (perSdr[lbl] || 0) + 1; });
+    const breakdown = Object.entries(perSdr).map(([k, n]) => `${k}: ${n}`).join(', ');
+    datelessNote = `
+    <div class="hygiene-law-item" style="margin-bottom:12px"><span class="hygiene-weight-badge" style="color:var(--red);border-color:var(--red)">!</span><b>${datelessLeads.length} record${datelessLeads.length === 1 ? ' has' : 's have'} no Creation Date</b> and are invisible to every dashboard metric (${escapeHtml(breakdown)})${named.length ? ` — named: ${escapeHtml(named.map(l => l.name).join(', '))}` : ' — all of them are contentless stubs (no name, phone, or email; just an owner, a status, and an empty quote link), likely auto-created rows that never populated'}. Fix or delete them in Airtable.</div>`;
+  }
+  document.getElementById('hygieneLaws').innerHTML = `
+    ${datelessNote}
+    <div class="hygiene-laws-title">The Laws</div>
+    ${HYGIENE_LAWS.map(l => `<div class="hygiene-law-item"><span class="hygiene-weight-badge">−${l.weight}</span><b>${escapeHtml(l.label)}.</b> ${escapeHtml(l.desc)}</div>`).join('')}
+  `;
+
+  renderHygieneChart(days, violations);
+}
+function renderHygieneChart(days, violations) {
+  const buckets = bucketize(days, 'weekly');
+  const labels = buckets.map(b => b.label);
+  const datasets = SDRS.map(s => ({
+    label: s.label,
+    backgroundColor: s.color,
+    borderRadius: 3,
+    data: buckets.map(b => {
+      const daySet = new Set(b.days);
+      const leads = hygieneLeadsCount(b.days, s.key);
+      if (!leads) return null;
+      const points = violations.reduce((a, v) => a + (v.sdrKey === s.key && daySet.has(v.day) ? v.law.weight : 0), 0);
+      return parseFloat(hygieneScore(points, leads).toFixed(1));
+    })
+  }));
+  if (charts.chartHygiene) charts.chartHygiene.destroy();
+  const ctx = document.getElementById('chartHygiene').getContext('2d');
+  charts.chartHygiene = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      // Same clicked-bar resolution as the Speed-to-Lead chart — resolve the
+      // exact bar, not just the first dataset at that x.
+      onClick: (evt, elements, chart) => {
+        const hits = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, false);
+        if (!hits.length) return;
+        const { datasetIndex, index } = hits[0];
+        renderHygieneDrilldown(buckets[index], SDRS[datasetIndex].key);
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
+          titleColor: '#ffffff', bodyColor: '#cfd2e3',
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y} — click bar for violations`
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { display: false } },
+        y: { beginAtZero: true, max: 100, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' } }
+      }
+    }
+  });
+  const legendEl = document.getElementById('legend-chartHygiene');
+  if (legendEl) {
+    legendEl.innerHTML = SDRS.map(s =>
+      `<span class="legend-item"><span class="legend-dot" style="background:${s.color}"></span>${s.label}</span>`
+    ).join('');
+  }
+}
+function renderHygieneDrilldown(bucket, sdrKey) {
+  const el = document.getElementById('hygieneDrilldown');
+  if (!el) return;
+  const rows = collectHygieneViolations(bucket.days).filter(v => v.sdrKey === sdrKey);
+  rows.sort((a, b) => b.law.weight - a.law.weight || (a.day < b.day ? -1 : 1));
+  const sdr = SDR_BY_KEY[sdrKey];
+  const bodyHtml = rows.length ? `<table class="report-table">
+      <thead><tr><th>Lead</th><th>Created</th><th>Law broken</th><th>Violation</th></tr></thead>
+      <tbody>${rows.map(v => `<tr>
+        <td>${escapeHtml(v.name)}</td>
+        <td>${escapeHtml(v.day)}</td>
+        <td><span class="hygiene-weight-badge">−${v.law.weight}</span>${escapeHtml(v.law.label)}</td>
+        <td>${escapeHtml(v.detail)}</td>
+      </tr>`).join('')}</tbody>
+    </table>` : `<div class="speed-to-lead-drilldown-empty">No violations for ${escapeHtml(sdr.label)} in this week — clean marking.</div>`;
+  el.innerHTML = `
+    <div class="speed-to-lead-drilldown-header">
+      <div>
+        <div class="speed-to-lead-drilldown-title">${escapeHtml(bucket.label)} · ${escapeHtml(sdr.label)} · ${rows.length} violation${rows.length === 1 ? '' : 's'}</div>
+        <div class="speed-to-lead-drilldown-sub">Fix the lead in Airtable and reload the CSV — the violation clears on the next refresh.</div>
+      </div>
+      <button class="speed-to-lead-drilldown-close" onclick="closeHygieneDrilldown()">Close</button>
+    </div>
+    ${bodyHtml}
+  `;
+  el.style.display = 'block';
+}
+function closeHygieneDrilldown() {
+  const el = document.getElementById('hygieneDrilldown');
   if (el) { el.style.display = 'none'; el.innerHTML = ''; }
 }
 
