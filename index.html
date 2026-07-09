@@ -940,79 +940,38 @@
         <canvas id="chartSpeedToLead"></canvas>
         <div id="speedToLeadDrilldown" class="speed-to-lead-drilldown" style="display:none"></div>
       </div>
-      <div class="chart-card">
+      <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">Meetings Booked <span class="goal-info" id="info-chartMeetings" title="Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
+          <span class="chart-title"><span id="chartActivityTitle">Meetings Booked</span> <span class="goal-info" id="info-chartActivity" title="Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
-            <div class="chart-legend" id="legend-chartMeetings"></div>
-            <select class="chart-granularity" id="teamsComparison-chartMeetings" onchange="renderCharts(getFilteredDays())">
+            <div class="chart-legend" id="legend-chartActivity"></div>
+            <select class="chart-granularity" id="metric-chartActivity" onchange="onActivityMetricChange()">
+              <option value="meetings" selected>Metric: Meetings Booked</option>
+              <option value="leadVol">Metric: Lead Volume</option>
+              <option value="meetingsHeld">Metric: Meetings Held</option>
+            </select>
+            <select class="chart-granularity" id="teamsComparison-chartActivity" onchange="renderCharts(getFilteredDays())">
               <option value="off">Teams comparison: Off</option>
               <option value="on">Teams comparison: On</option>
             </select>
-            <select class="chart-granularity" id="granularity-chartMeetings" onchange="renderCharts(getFilteredDays())">
+            <select class="chart-granularity" id="granularity-chartActivity" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
               <option value="weekly" selected>Weekly</option>
               <option value="monthly">Monthly</option>
             </select>
             <label class="chart-cumulative-toggle">
-              <input type="checkbox" id="modeToggle-chartMeetings" onchange="renderCharts(getFilteredDays())">
+              <input type="checkbox" id="modeToggle-chartActivity" onchange="renderCharts(getFilteredDays())">
               <span class="toggle-track"></span>
               <span class="toggle-text">Combined</span>
             </label>
-          </div>
-        </div>
-        <canvas id="chartMeetings"></canvas>
-      </div>
-      <div class="chart-card">
-        <div class="chart-header">
-          <span class="chart-title">Lead Volume <span class="goal-info" id="info-chartLeads" title="Count of leads created per bucket, after your Leads: filter (B2B/B2C/All/Commission) is applied. Cumulative toggle switches from per-bucket counts to a running total across the range. Dashed Target = your Lead Volume goal, prorated to each bucket's size; no Pace shown for a straight count chart like this one.">ⓘ</span></span>
-          <div class="chart-header-right">
-            <div class="chart-legend" id="legend-chartLeads"></div>
-            <select class="chart-granularity" id="teamsComparison-chartLeads" onchange="renderCharts(getFilteredDays())">
-              <option value="off">Teams comparison: Off</option>
-              <option value="on">Teams comparison: On</option>
-            </select>
-            <select class="chart-granularity" id="granularity-chartLeads" onchange="renderCharts(getFilteredDays())">
-              <option value="daily">Daily</option>
-              <option value="weekly" selected>Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-            <label class="chart-cumulative-toggle">
-              <input type="checkbox" id="modeToggle-chartLeads" onchange="renderCharts(getFilteredDays())">
-              <span class="toggle-track"></span>
-              <span class="toggle-text">Combined</span>
-            </label>
-            <label class="chart-cumulative-toggle">
-              <input type="checkbox" id="cumulativeToggle-chartLeads" onchange="renderCharts(getFilteredDays())">
+            <label class="chart-cumulative-toggle" id="cumulativeToggleWrap-chartActivity" style="display:none">
+              <input type="checkbox" id="cumulativeToggle-chartActivity" onchange="renderCharts(getFilteredDays())">
               <span class="toggle-track"></span>
               <span class="toggle-text">Cumulative</span>
             </label>
           </div>
         </div>
-        <canvas id="chartLeads"></canvas>
-      </div>
-      <div class="chart-card full">
-        <div class="chart-header">
-          <span class="chart-title">Meetings Held <span class="goal-info" id="info-chartMeetingsHeld" title="Count of leads whose Meeting Status is exactly Meeting Done, per bucket — distinct from Meetings Booked (which also counts still-upcoming Scheduled meetings and includes Closed deals as an implied meeting). Dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected). No goal/Target line for this one.">ⓘ</span></span>
-          <div class="chart-header-right">
-            <div class="chart-legend" id="legend-chartMeetingsHeld"></div>
-            <select class="chart-granularity" id="teamsComparison-chartMeetingsHeld" onchange="renderCharts(getFilteredDays())">
-              <option value="off">Teams comparison: Off</option>
-              <option value="on">Teams comparison: On</option>
-            </select>
-            <select class="chart-granularity" id="granularity-chartMeetingsHeld" onchange="renderCharts(getFilteredDays())">
-              <option value="daily">Daily</option>
-              <option value="weekly" selected>Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-            <label class="chart-cumulative-toggle">
-              <input type="checkbox" id="modeToggle-chartMeetingsHeld" onchange="renderCharts(getFilteredDays())">
-              <span class="toggle-track"></span>
-              <span class="toggle-text">Combined</span>
-            </label>
-          </div>
-        </div>
-        <canvas id="chartMeetingsHeld"></canvas>
+        <canvas id="chartActivity"></canvas>
       </div>
       <div class="chart-card full">
         <div class="chart-header">
@@ -2725,6 +2684,55 @@ function makeChart(id, days, spec) {
   }
 }
 
+// Meetings Booked / Lead Volume / Meetings Held used to be three separate
+// charts with identical controls (Teams comparison, granularity, Combined) —
+// merged into one chart with a Metric selector so all three views live in
+// one place without losing any toggle. Only Lead Volume supports Cumulative,
+// so that toggle is hidden for the other two metrics.
+const ACTIVITY_METRICS = {
+  meetings: {
+    title: 'Meetings Booked',
+    spec: (d, ae) => ({ type: 'count', field: 'meetings', goal: d.goalMeetings, pace: true, aeBaseline: ae ? ae.meetingsPerDay : null }),
+    info: 'Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).'
+  },
+  leadVol: {
+    title: 'Lead Volume',
+    spec: (d, ae) => ({ type: 'count', field: 'leadVol', goal: d.goalLeads, cumulativeAllowed: true, aeBaseline: ae ? ae.leadsPerDay : null }),
+    info: 'Count of leads created per bucket, after your Leads: filter (B2B/B2C/All/Commission) is applied. Cumulative toggle switches from per-bucket counts to a running total across the range. Dashed Target = your Lead Volume goal, prorated to each bucket\'s size; no Pace shown for a straight count chart like this one.'
+  },
+  meetingsHeld: {
+    title: 'Meetings Held',
+    spec: () => ({ type: 'count', field: 'meetings_held', pace: true }),
+    info: 'Count of leads whose Meeting Status is exactly Meeting Done, per bucket — distinct from Meetings Booked (which also counts still-upcoming Scheduled meetings and includes Closed deals as an implied meeting). Dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected). No goal/Target line for this one.'
+  }
+};
+
+// Metric switch resets the ⓘ tooltip's base text and shows/hides the
+// Cumulative toggle (only meaningful for Lead Volume) before re-rendering.
+function onActivityMetricChange() {
+  const metric = document.getElementById('metric-chartActivity').value;
+  const cfg = ACTIVITY_METRICS[metric];
+  const infoEl = document.getElementById('info-chartActivity');
+  if (infoEl) { infoEl.dataset.base = cfg.info; infoEl.title = cfg.info; }
+  const cumWrap = document.getElementById('cumulativeToggleWrap-chartActivity');
+  if (cumWrap) cumWrap.style.display = metric === 'leadVol' ? '' : 'none';
+  renderCharts(getFilteredDays());
+}
+
+function renderActivityChart(chartDays, d, ae) {
+  const metricEl = document.getElementById('metric-chartActivity');
+  const metric = metricEl ? metricEl.value : 'meetings';
+  const cfg = ACTIVITY_METRICS[metric];
+  const titleEl = document.getElementById('chartActivityTitle');
+  if (titleEl) titleEl.textContent = cfg.title;
+  const infoEl = document.getElementById('info-chartActivity');
+  if (infoEl && infoEl.dataset.base === undefined) infoEl.dataset.base = cfg.info;
+  const cumWrap = document.getElementById('cumulativeToggleWrap-chartActivity');
+  if (cumWrap) cumWrap.style.display = metric === 'leadVol' ? '' : 'none';
+  makeChart('chartActivity', chartDays, cfg.spec(d, ae));
+  updateChartInfoTooltip('chartActivity');
+}
+
 // All days of the current calendar month (including days not yet reached), so the
 // featured charts span the full month even before it's over.
 function monthDayKeys() {
@@ -2750,12 +2758,10 @@ function renderCharts(days) {
   makeChart('chartNR', chartDays, { type: 'rate', num: 'non_responsive', denom: 'leadVol', goal: d.goalNRRate, pace: true, aeBaseline: ae ? ae.overall.nr_rate : null });
   makeChart('chartAEDQ', chartDays, { type: 'rate', num: 'ae_dq', denom: 'qualified', pace: true });
   makeChart('chartSDRDQ', chartDays, { type: 'rate', num: 'sdr_dq', denom: 'leadVol', pace: true, aeBaseline: ae ? ae.sdrDqRate : null });
-  makeChart('chartMeetings', chartDays, { type: 'count', field: 'meetings', goal: d.goalMeetings, pace: true, aeBaseline: ae ? ae.meetingsPerDay : null });
-  makeChart('chartLeads', chartDays, { type: 'count', field: 'leadVol', goal: d.goalLeads, cumulativeAllowed: true, aeBaseline: ae ? ae.leadsPerDay : null });
-  makeChart('chartMeetingsHeld', chartDays, { type: 'count', field: 'meetings_held', pace: true });
+  renderActivityChart(chartDays, d, ae);
   renderSpeedToLeadChart(chartDays);
   renderMeetingAttendanceChart(days);
-  ['chartMeetingRate', 'chartQualPct', 'chartNR', 'chartAEDQ', 'chartSDRDQ', 'chartSpeedToLead', 'chartMeetings', 'chartLeads', 'chartMeetingsHeld']
+  ['chartMeetingRate', 'chartQualPct', 'chartNR', 'chartAEDQ', 'chartSDRDQ', 'chartSpeedToLead']
     .forEach(id => updateChartInfoTooltip(id));
   updateChartInfoTooltip('chartMeetingAttendance', true);
 }
