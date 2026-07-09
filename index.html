@@ -1246,7 +1246,6 @@ let allData = null;   // { date: { <sdrKey>: metrics, Team: metrics } } — deri
 let allDataB2B = null;   // same shape, always business-leads-only — used by Commission View's Lead Volume card
 let allDataB2C = null;   // same shape, always b2c-leads-only — used by chart-local B2B/B2C/All toggles
 let allDataAll = null;   // same shape, always combined B2B+B2C regardless of the global lead-type filter — used by chart-local B2B/B2C/All toggles
-let datelessLeads = null; // SDR-owned rows with no Creation Date — invisible to every day-bucketed metric; surfaced by the Hygiene Report
 let rawByDay = null;   // { date: { <sdrKey>: [rows] } } — unfiltered raw rows, persisted
 let rawCalls = null;   // [{ phoneDigits, utcMs, sdrKey }] from the Aircall call-history CSV, persisted
 let callsFilename = null;
@@ -1360,16 +1359,13 @@ function parseCSV(text, filename) {
 
   // Group by Dubai-local day and SDR, keeping raw rows so the business-lead filter
   // can be toggled live. Rows with no Creation Date can't be bucketed at all —
-  // they're excluded from every metric, so track them for the Hygiene Report
-  // instead of dropping them silently.
+  // they're disregarded entirely (not counted toward any metric or score);
+  // in practice these are contentless stub records (no name/phone/email,
+  // just an owner + status + empty quote link) rather than real leads.
   rawByDay = {};
-  datelessLeads = [];
   sdrRows.forEach(r => {
     const raw = r['Creation Date'] || '';
-    if (!raw) {
-      datelessLeads.push({ name: (r['Name'] || '').trim() || '(unnamed lead)', sdrKey: sdrKeyByName(r['SDR Owner']) });
-      return;
-    }
+    if (!raw) return;
     const day = toDubaiDayKey(raw);
     if (!rawByDay[day]) rawByDay[day] = Object.fromEntries(SDRS.map(s => [s.key, []]));
     const key = sdrKeyByName(r['SDR Owner']);
@@ -1765,7 +1761,7 @@ function saveLoadedData(filename) {
   try {
     const prev = JSON.parse(localStorage.getItem('sdr_data') || 'null');
     const finalFilename = filename !== undefined ? filename : (prev && prev.filename);
-    localStorage.setItem('sdr_data', JSON.stringify({ rawByDay, filename: finalFilename, rawCalls, callsFilename, datelessLeads }));
+    localStorage.setItem('sdr_data', JSON.stringify({ rawByDay, filename: finalFilename, rawCalls, callsFilename }));
   } catch (e) {}
 }
 // Wipes the loaded CSV (in-memory and persisted) and drops back to the
@@ -1797,7 +1793,6 @@ function restoreLoadedData() {
     rawByDay = saved.rawByDay;
     rawCalls = saved.rawCalls || null;
     callsFilename = saved.callsFilename || null;
-    datelessLeads = saved.datelessLeads || null;
     matchSpeedToLead();
     loadLeadTypeFilter();
     loadRangeFilter();
@@ -3048,22 +3043,7 @@ function renderHygieneSection(days) {
   document.getElementById('hygieneHeaderNote').textContent =
     `${totalCount} violation${totalCount === 1 ? '' : 's'} in the selected range — click a bar to see what's behind it`;
 
-  // Leads with no Creation Date sit outside every week bucket (and every
-  // other dashboard metric), so they get their own callout instead of a bar.
-  // In practice these are contentless stub records (no name/phone/email
-  // either, just an owner + status + empty quote link), so summarize per SDR
-  // — named ones are listed individually.
-  let datelessNote = '';
-  if (datelessLeads && datelessLeads.length) {
-    const named = datelessLeads.filter(l => l.name !== '(unnamed lead)');
-    const perSdr = {};
-    datelessLeads.forEach(l => { const lbl = l.sdrKey ? SDR_BY_KEY[l.sdrKey].label : '?'; perSdr[lbl] = (perSdr[lbl] || 0) + 1; });
-    const breakdown = Object.entries(perSdr).map(([k, n]) => `${k}: ${n}`).join(', ');
-    datelessNote = `
-    <div class="hygiene-law-item" style="margin-bottom:12px"><span class="hygiene-weight-badge" style="color:var(--red);border-color:var(--red)">!</span><b>${datelessLeads.length} record${datelessLeads.length === 1 ? ' has' : 's have'} no Creation Date</b> and are invisible to every dashboard metric (${escapeHtml(breakdown)})${named.length ? ` — named: ${escapeHtml(named.map(l => l.name).join(', '))}` : ' — all of them are contentless stubs (no name, phone, or email; just an owner, a status, and an empty quote link), likely auto-created rows that never populated'}. Fix or delete them in Airtable.</div>`;
-  }
   document.getElementById('hygieneLaws').innerHTML = `
-    ${datelessNote}
     <div class="hygiene-laws-title">The Laws</div>
     ${HYGIENE_LAWS.map(l => `<div class="hygiene-law-item"><span class="hygiene-weight-badge">−${l.weight}</span><b>${escapeHtml(l.label)}.</b> ${escapeHtml(l.desc)}</div>`).join('')}
   `;
