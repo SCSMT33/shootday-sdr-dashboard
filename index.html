@@ -1215,11 +1215,11 @@
             <p><strong>4. How the New Sales Incentive is earned.</strong> This one is a flat rate, not a bracket: every deal you closed last calendar month (Sales status = Closed), converted to a common currency and summed up, &times; 0.25%. No minimum, no cap. A deal counts toward the month it actually <strong>closed</strong> in, no matter when the lead came in or the meeting was booked. This one is NOT affected by the Meeting Quality Multiplier below.</p>
             <p><strong>5. The Meeting Quality Multiplier.</strong> Booked meetings only create business value if they happen. Individual no-shows are not your fault and one bad week will not hurt you — the multiplier is based on a rolling 30-day window of your B2B rejection/no-show rate, so it only reacts to a sustained pattern, not a single rough patch. That window ends 1 week ago rather than today: meetings usually aren't scheduled more than a week out, so ending the window a week back means every lead counted has had a real chance to resolve (Done, Not Attended, or Rejected) instead of still sitting at "Scheduled." The rate = meetings rejected or not attended &divide; all B2B meetings you booked, in that window. The multiplier scales the Qualified Leads and Meeting incentives only (not New Sales):</p>
             <ul>
-              <li>0&ndash;15%: 100% payout (this is the normal range &mdash; clients sometimes ghost)</li>
-              <li>15&ndash;25%: 85%</li>
-              <li>25&ndash;35%: 60%</li>
-              <li>35&ndash;50%: 30%</li>
-              <li>50%+: no incentive payout</li>
+              <li>0&ndash;10%: 100% payout (the normal range &mdash; clients sometimes ghost)</li>
+              <li>10&ndash;20%: 85%</li>
+              <li>20&ndash;30%: 60%</li>
+              <li>30&ndash;40%: 30%</li>
+              <li>40%+: no incentive payout</li>
             </ul>
             <p><strong>6. It's self-correcting.</strong> Book real meetings that happen and your rate falls back into the free zone &mdash; the multiplier returns to 100% automatically. Nothing is withheld permanently.</p>
           </div>
@@ -4170,23 +4170,24 @@ function bracketTable(brackets, activeIdx, paidInfo, unit) {
 // and meetings-held isn't the payout basis either, since individual no-shows
 // are often not the SDR's fault. Instead, if rejection/no-shows are HABITUAL
 // (visible in the SDR's overall rate), this multiplier reduces their bonus
-// payouts — one bad week doesn't hurt them; a pattern does. It applies to ALL
-// THREE incentives (Qualified Leads, Meeting Set, and New Sales): the
-// rejection rate is the only clean quality signal available, and
-// pipeline-stuffing tends to show up in loose qualification marking (and
-// eventually revenue) too. One multiplier, one message:
-// quality gates all bonus money. It's self-correcting — when the SDR's rate
-// returns to team-normal, the multiplier returns to 100% and full payouts
-// resume. The 0–15% free zone matches the historical baseline of the proven
-// performers (Gospel ~11%, MJ ~18%), so normal business reality (clients
-// ghost sometimes) is not punished; above 35% is treated as a behavior
-// problem, not bad luck.
+// payouts — one bad week doesn't hurt them; a pattern does. It applies to the
+// Qualified Leads and Meeting Set incentives only (NOT New Sales, which is a
+// flat rate off closed revenue — see commissionPayout): the rejection rate is
+// the only clean quality signal available, and pipeline-stuffing tends to
+// show up in loose qualification marking too. It's self-correcting — when the
+// SDR's rate returns to team-normal, the multiplier returns to 100% and full
+// payouts resume. Tightened (July 2026) to set the bar higher while the team
+// is still early: the 0–10% free zone is deliberately tight, not aimed at
+// punishing any one person — MJ and Gospel's normal range (roughly 7–18%)
+// still lands comfortably in the Mild tier, same multiplier they'd have
+// gotten under the old 0–15% zone. 40%+ is treated as a behavior problem, not
+// bad luck; there's plenty of room left below that to course-correct.
 const QUALITY_MULTIPLIER_TIERS = [
-  { minPct: 0,  maxPct: 15,       multiplier: 1.00, label: 'Full payout' },
-  { minPct: 15, maxPct: 25,       multiplier: 0.85, label: 'Mild reduction' },
-  { minPct: 25, maxPct: 35,       multiplier: 0.60, label: 'Significant reduction' },
-  { minPct: 35, maxPct: 50,       multiplier: 0.30, label: 'Severe reduction' },
-  { minPct: 50, maxPct: Infinity, multiplier: 0.00, label: 'No bonus payout' }
+  { minPct: 0,  maxPct: 10,       multiplier: 1.00, label: 'Full payout' },
+  { minPct: 10, maxPct: 20,       multiplier: 0.85, label: 'Mild reduction' },
+  { minPct: 20, maxPct: 30,       multiplier: 0.60, label: 'Significant reduction' },
+  { minPct: 30, maxPct: 40,       multiplier: 0.30, label: 'Severe reduction' },
+  { minPct: 40, maxPct: Infinity, multiplier: 0.00, label: 'No bonus payout' }
 ];
 // The "habitual" measure: a rolling 30-day window, but shifted back a week —
 // it covers days [today-37, today-7], not [today-30, today]. Originally this
