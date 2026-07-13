@@ -811,6 +811,52 @@
     <div class="charts-grid">
       <div class="chart-card full">
         <div class="chart-header">
+          <span class="chart-title"><span id="chartActivityTitle">Meetings Booked</span> <span class="goal-info" id="info-chartActivity" title="Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartActivity"></div>
+            <span class="activity-metric-checks">
+              <label class="chart-cumulative-toggle activity-metric-check" style="margin-right:0">
+                <input type="checkbox" class="metric-check-chartActivity" value="leadVol" checked onchange="onActivityMetricChange(event)">
+                <span class="toggle-track"></span>
+                <span class="toggle-text">Lead Volume</span>
+              </label>
+              <label class="chart-cumulative-toggle activity-metric-check" style="margin-right:0">
+                <input type="checkbox" class="metric-check-chartActivity" value="meetings" checked onchange="onActivityMetricChange(event)">
+                <span class="toggle-track"></span>
+                <span class="toggle-text">Meetings Booked</span>
+              </label>
+              <label class="chart-cumulative-toggle activity-metric-check">
+                <input type="checkbox" class="metric-check-chartActivity" value="meetingsHeld" checked onchange="onActivityMetricChange(event)">
+                <span class="toggle-track"></span>
+                <span class="toggle-text">Meetings Held</span>
+              </label>
+            </span>
+            <select class="chart-granularity" id="teamsComparison-chartActivity" onchange="onActivityGroupChange()">
+              <option value="off" selected>Group: Combined</option>
+              <option value="on">Group: US vs OUS Teams</option>
+              <option value="sdr">Group: Per SDR</option>
+            </select>
+            <select class="chart-granularity" id="granularity-chartActivity" onchange="renderCharts(getFilteredDays())">
+              <option value="daily" id="granularityDailyOpt-chartActivity">Daily</option>
+              <option value="weekly" selected>Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <label class="chart-cumulative-toggle" id="combinedToggleWrap-chartActivity" style="display:none">
+              <input type="checkbox" id="modeToggle-chartActivity" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Combined</span>
+            </label>
+            <label class="chart-cumulative-toggle" id="cumulativeToggleWrap-chartActivity" style="display:none">
+              <input type="checkbox" id="cumulativeToggle-chartActivity" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Cumulative</span>
+            </label>
+          </div>
+        </div>
+        <canvas id="chartActivity"></canvas>
+      </div>
+      <div class="chart-card full">
+        <div class="chart-header">
           <span class="chart-title">Meeting Booked Rate % <span class="goal-info" id="info-chartMeetingRate" title="Meetings Booked ÷ Lead Volume for each bucket — numerator and denominator are summed across the whole bucket first, then divided (never an average of daily rates, which would over-weight thin days). Dashed Target line = your Meeting Booked Rate target goal; dashed Pace line = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetingRate"></div>
@@ -982,52 +1028,6 @@
         </div>
         <canvas id="chartSpeedToLead"></canvas>
         <div id="speedToLeadDrilldown" class="speed-to-lead-drilldown" style="display:none"></div>
-      </div>
-      <div class="chart-card full">
-        <div class="chart-header">
-          <span class="chart-title"><span id="chartActivityTitle">Meetings Booked</span> <span class="goal-info" id="info-chartActivity" title="Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
-          <div class="chart-header-right">
-            <div class="chart-legend" id="legend-chartActivity"></div>
-            <span class="activity-metric-checks">
-              <label class="chart-cumulative-toggle activity-metric-check" style="margin-right:0">
-                <input type="checkbox" class="metric-check-chartActivity" value="leadVol" checked onchange="onActivityMetricChange(event)">
-                <span class="toggle-track"></span>
-                <span class="toggle-text">Lead Volume</span>
-              </label>
-              <label class="chart-cumulative-toggle activity-metric-check" style="margin-right:0">
-                <input type="checkbox" class="metric-check-chartActivity" value="meetings" checked onchange="onActivityMetricChange(event)">
-                <span class="toggle-track"></span>
-                <span class="toggle-text">Meetings Booked</span>
-              </label>
-              <label class="chart-cumulative-toggle activity-metric-check">
-                <input type="checkbox" class="metric-check-chartActivity" value="meetingsHeld" checked onchange="onActivityMetricChange(event)">
-                <span class="toggle-track"></span>
-                <span class="toggle-text">Meetings Held</span>
-              </label>
-            </span>
-            <select class="chart-granularity" id="teamsComparison-chartActivity" onchange="onActivityGroupChange()">
-              <option value="off" selected>Group: Combined</option>
-              <option value="on">Group: US vs OUS Teams</option>
-              <option value="sdr">Group: Per SDR</option>
-            </select>
-            <select class="chart-granularity" id="granularity-chartActivity" onchange="renderCharts(getFilteredDays())">
-              <option value="daily" id="granularityDailyOpt-chartActivity">Daily</option>
-              <option value="weekly" selected>Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-            <label class="chart-cumulative-toggle" id="combinedToggleWrap-chartActivity" style="display:none">
-              <input type="checkbox" id="modeToggle-chartActivity" onchange="renderCharts(getFilteredDays())">
-              <span class="toggle-track"></span>
-              <span class="toggle-text">Combined</span>
-            </label>
-            <label class="chart-cumulative-toggle" id="cumulativeToggleWrap-chartActivity" style="display:none">
-              <input type="checkbox" id="cumulativeToggle-chartActivity" onchange="renderCharts(getFilteredDays())">
-              <span class="toggle-track"></span>
-              <span class="toggle-text">Cumulative</span>
-            </label>
-          </div>
-        </div>
-        <canvas id="chartActivity"></canvas>
       </div>
       <div class="chart-card full">
         <div class="chart-header">
@@ -2443,8 +2443,6 @@ function renderSummaryCards(days) {
     ${countCard('Leads Qualified', totalQualified, perSDR.map(s => ({ ...s, value: s.qualified, goal: s.qualifiedGoal })), elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified, ae ? ae.qualifiedPerDay : null, infoQualified)}
     ${rateCard('% Leads Qualified', pctQual, perSDR.map(s => ({ ...s, value: s.pctQual })), isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'status-based: blank/DQ/cold/non-respondant excluded', d.goalPctQual, false, ae ? ae.overall.pct_qualified : null, infoPctQualified)}
     ${rateCard('Non-Responsive Rate', nrRate, perSDR.map(s => ({ ...s, value: s.nrRate })), isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true, ae ? ae.overall.nr_rate : null, infoNR)}
-    ${countCard('Disqualified by AE', totalAEDQ, perSDR.map(s => ({ ...s, value: s.aedq })), elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual', undefined, undefined, infoAEDQ)}
-    ${pipelineCard('Active Pipeline', activePipeline, perSDR.map(s => ({ ...s, value: s.pipeline })), meanMetric(days, v, 'active_pipeline'), lastDay, infoPipeline)}
     ${rawCalls ? speedToLeadCard('Speed-to-Lead', stlMedian, totalSTLMatched, totalSTLEligible, totalSTLMismatch, perSDR, d.goalSpeedToLead,
         { median: stlOnMedian, matched: totalSTLOnMatched, eligible: totalSTLOnEligible },
         { median: stlOffMedian, matched: totalSTLOffMatched, eligible: totalSTLOffEligible }) : pendingCard('Speed-to-Lead', 'Load a Call History CSV to enable')}
