@@ -3486,9 +3486,9 @@ function closeHygieneDrilldown() {
 // the whole-team view for the weekly 1:1 with Serge.
 const MANDATE_START = '2026-06-01'; // Chase's start: beginning of June 2026
 const MANDATE_GATES = [
-  { id: 'm1', title: 'Month 1 · June', deadline: '2026-06-30', desc: 'First 2 Coordinators hired and onboarded, running the cadence under your supervision, with the operating rhythm and reporting beat live.', expectTeam: 4 },
-  { id: 'm2', title: 'Month 2 · July', deadline: '2026-07-31', desc: '2 additional Coordinators hired and onboarded; team at 5–6; cadence and handoff quality measurably tightening.', expectTeam: 5 },
-  { id: 'm3', title: 'Month 3 · August', deadline: '2026-08-31', desc: 'Full team of 6 active, a running performance rhythm, and strong, trusted coverage of the inbound flow.', expectTeam: 6 }
+  { id: 'm1', title: 'Month 1 · June', deadline: '2026-06-30', desc: 'First 2 Coordinators hired and onboarded, running the cadence under your supervision, with the operating rhythm and reporting beat live.' },
+  { id: 'm2', title: 'Month 2 · July', deadline: '2026-07-31', desc: '2 additional Coordinators hired and onboarded; team at 5–6; cadence and handoff quality measurably tightening.' },
+  { id: 'm3', title: 'Month 3 · August', deadline: '2026-08-31', desc: 'Full team of 6 active, a running performance rhythm, and strong, trusted coverage of the inbound flow.' }
 ];
 // Reference numbers from the strategic briefing (YTD Jan–May 2026 snapshot)
 const MANDATE_REF = { nrShare: 29, qualifyRate: 41, leadToDeal: 14.2, qualToClose: 35, leadsPerCoordinator: 275, targetTeam: 6 };
@@ -3497,7 +3497,13 @@ const MANDATE_REF = { nrShare: 29, qualifyRate: 41, leadToDeal: 14.2, qualToClos
 // rate sits around 4.3% of qualified leads and the historical pure no-show
 // rate sits around 14.2% of resolved meetings across the loaded data — both
 // defaults give some buffer above baseline without being toothless.
-const MANDATE_DEFAULTS = { activeCoordinators: 4, coverageTarget: 95, handoffMax: 10, noShowMax: 20 };
+// nrMax, leadToDealMin, qualToCloseMin default to the strategic briefing's
+// company-wide baselines (MANDATE_REF) so every target row is editable but
+// starts at the documented reference number. gateM1/M2/M3 default to the
+// onboarding doc's hiring gates (4 by June, 5 by July, 6 by August).
+const MANDATE_DEFAULTS = { activeCoordinators: 4, coverageTarget: 95, handoffMax: 10, noShowMax: 20,
+  nrMax: MANDATE_REF.nrShare, leadToDealMin: MANDATE_REF.leadToDeal, qualToCloseMin: MANDATE_REF.qualToClose,
+  gateM1: 4, gateM2: 5, gateM3: 6 };
 
 function mandateState() {
   try { return { ...MANDATE_DEFAULTS, ...JSON.parse(localStorage.getItem('sdr_mandate') || '{}') }; }
@@ -3673,20 +3679,24 @@ function renderMandateSection() {
       covPct: mCov.pct, covOk: hasData && mCov.pct != null ? mCov.pct >= s.coverageTarget : null,
       aeDqPct: mAeDqPct, aeDqOk: hasData && mAeDqPct != null ? mAeDqPct <= s.handoffMax : null,
       noShowPct: mNoShowPct, noShowOk: hasData && mNoShowPct != null ? mNoShowPct <= s.noShowMax : null,
-      nrPct: mNrPct, nrOk: hasData && mNrPct != null ? mNrPct < MANDATE_REF.nrShare : null,
-      leadToDealPct: mLeadToDealPct, leadToDealOk: hasData && mLeadToDealPct != null ? mLeadToDealPct >= MANDATE_REF.leadToDeal : null,
-      qualToClosePct: mQualToClosePct, qualToCloseOk: hasData && mQualToClosePct != null ? mQualToClosePct >= MANDATE_REF.qualToClose : null,
+      nrPct: mNrPct, nrOk: hasData && mNrPct != null ? mNrPct < s.nrMax : null,
+      leadToDealPct: mLeadToDealPct, leadToDealOk: hasData && mLeadToDealPct != null ? mLeadToDealPct >= s.leadToDealMin : null,
+      qualToClosePct: mQualToClosePct, qualToCloseOk: hasData && mQualToClosePct != null ? mQualToClosePct >= s.qualToCloseMin : null,
       closed: mClosed
     };
   });
+  // Editable per-gate headcount targets (default to the onboarding doc's
+  // 4 / 5 / 6), indexed the same order as MANDATE_GATES.
+  const gateTargets = [s.gateM1, s.gateM2, s.gateM3];
   const rows = [
     {
-      label: 'Hiring milestones', info: 'Current active Coordinator count (set below) vs. each month\'s cumulative team-size gate from the onboarding doc — 4 by June, 5–6 by July, 6 by August. There\'s no historical headcount data, so every month compares against the SAME live count; "…" means that gate isn\'t due yet, so it\'s not scored as behind.',
-      target: '4 by Jun · 5–6 by Jul · 6 by Aug',
-      cells: MANDATE_GATES.map(g => {
+      label: 'Hiring milestones', info: 'Current active Coordinator count (set below) vs. each month\'s cumulative team-size gate — editable below, defaults to the onboarding doc\'s 4 by June, 5 by July, 6 by August. There\'s no historical headcount data, so every month compares against the SAME live count; "…" means that gate isn\'t due yet, so it\'s not scored as behind.',
+      target: `${s.gateM1} by Jun · ${s.gateM2} by Jul · ${s.gateM3} by Aug`,
+      cells: MANDATE_GATES.map((g, i) => {
         const due = g.deadline <= today;
-        const ok = due ? s.activeCoordinators >= g.expectTeam : null;
-        return mandateMonthCell(`${s.activeCoordinators} of ${g.expectTeam}`, ok, !due);
+        const target = gateTargets[i];
+        const ok = due ? s.activeCoordinators >= target : null;
+        return mandateMonthCell(`${s.activeCoordinators} of ${target}`, ok, !due);
       })
     },
     {
@@ -3720,18 +3730,18 @@ function renderMandateSection() {
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.noShowPct != null ? r.noShowPct.toFixed(1) + '%' : null, r.noShowOk))
     },
     {
-      label: 'Non-responsive rate', info: 'Leads marked Sales status = Non respondant or Disqualified reason = Not responsive, ÷ that month\'s B2B leads. The briefing calls this the single largest leak in the company funnel. Company baseline is 29% (all business leads, Jan–May YTD) — your team works the low-value/incomplete tier, so expect to run above that; the founders watch the direction, not the absolute number.',
-      target: `< ${MANDATE_REF.nrShare}% (company baseline)`,
+      label: 'Non-responsive rate', info: 'Leads marked Sales status = Non respondant or Disqualified reason = Not responsive, ÷ that month\'s B2B leads. The briefing calls this the single largest leak in the company funnel. Company baseline is 29% (all business leads, Jan–May YTD) — your team works the low-value/incomplete tier, so expect to run above that; the founders watch the direction, not the absolute number. Target editable below.',
+      target: `< ${s.nrMax}%`,
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.nrPct != null ? r.nrPct.toFixed(1) + '%' : null, r.nrOk))
     },
     {
-      label: 'Lead → closed deal', info: 'Closed (won) deals ÷ that month\'s B2B leads — of every 100 leads that arrived that month, how many have turned into paying deals so far. Company benchmark is 14.2%. Recent months always run low here since a lead created this month hasn\'t had time to close yet — this isn\'t a same-month conversion rate, it\'s a running tally that keeps rising as those leads close later.',
-      target: `≥ ${MANDATE_REF.leadToDeal}% (company baseline, catches up over time)`,
+      label: 'Lead → closed deal', info: 'Closed (won) deals ÷ that month\'s B2B leads — of every 100 leads that arrived that month, how many have turned into paying deals so far. Company benchmark is 14.2%. Recent months always run low here since a lead created this month hasn\'t had time to close yet — this isn\'t a same-month conversion rate, it\'s a running tally that keeps rising as those leads close later. Target editable below.',
+      target: `≥ ${s.leadToDealMin}% (catches up over time)`,
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.leadToDealPct != null ? `${r.leadToDealPct.toFixed(1)}% (${r.closed})` : null, r.leadToDealOk))
     },
     {
-      label: 'Qualified → closed rate', info: 'Closed (won) deals ÷ that month\'s qualified B2B leads. The strategic briefing calls this out alongside Lead → closed deal as one of the two key conversion rates — this one isolates the AE\'s close rate on what your team hands off, separate from your own qualification volume. Company benchmark is 35%. Like Lead → closed deal, recent months run low since qualified leads from this month haven\'t all had time to close yet.',
-      target: `≥ ${MANDATE_REF.qualToClose}% (company baseline, catches up over time)`,
+      label: 'Qualified → closed rate', info: 'Closed (won) deals ÷ that month\'s qualified B2B leads. The strategic briefing calls this out alongside Lead → closed deal as one of the two key conversion rates — this one isolates the AE\'s close rate on what your team hands off, separate from your own qualification volume. Company benchmark is 35%. Like Lead → closed deal, recent months run low since qualified leads from this month haven\'t all had time to close yet. Target editable below.',
+      target: `≥ ${s.qualToCloseMin}% (catches up over time)`,
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.qualToClosePct != null ? `${r.qualToClosePct.toFixed(1)}%` : null, r.qualToCloseOk))
     }
   ];
@@ -3755,10 +3765,16 @@ function renderMandateSection() {
     <span>Speed-to-Lead goal (min): <input type="number" min="1" max="240" placeholder="5" value="${d.goalSpeedToLead || ''}" onchange="saveMandateStlGoal(this.value)" title="Research-backed target: under 5 minutes. Shared with Monthly Targets below."></span>
     <span>Coverage target %: <input type="number" min="0" max="100" value="${s.coverageTarget}" onchange="saveMandateNum('coverageTarget', this.value)"></span>
     <span>Handoff (AE Disqualified Rate) max %: <input type="number" min="0" max="100" value="${s.handoffMax}" onchange="saveMandateNum('handoffMax', this.value)" title="Suggested 10% — a buffer above the ~4.3% historical AE Disqualified rate in the loaded data."></span>
-    <span>Meeting no-show max %: <input type="number" min="0" max="100" value="${s.noShowMax}" onchange="saveMandateNum('noShowMax', this.value)" title="Suggested 20% — a buffer above the ~14.2% historical Meeting Not Attended rate in the loaded data."></span>`;
+    <span>Meeting no-show max %: <input type="number" min="0" max="100" value="${s.noShowMax}" onchange="saveMandateNum('noShowMax', this.value)" title="Suggested 20% — a buffer above the ~14.2% historical Meeting Not Attended rate in the loaded data."></span>
+    <span>Non-responsive max %: <input type="number" min="0" max="100" value="${s.nrMax}" onchange="saveMandateNum('nrMax', this.value)" title="Defaults to the strategic briefing's company-wide baseline (29%, all business leads, Jan–May YTD)."></span>
+    <span>Lead → closed deal min %: <input type="number" min="0" max="100" step="0.1" value="${s.leadToDealMin}" onchange="saveMandateNum('leadToDealMin', this.value)" title="Defaults to the strategic briefing's company-wide baseline (14.2%)."></span>
+    <span>Qualified → closed min %: <input type="number" min="0" max="100" value="${s.qualToCloseMin}" onchange="saveMandateNum('qualToCloseMin', this.value)" title="Defaults to the strategic briefing's company-wide baseline (35%)."></span>
+    <span>Hiring gate targets (Jun / Jul / Aug): <input type="number" min="0" max="12" value="${s.gateM1}" onchange="saveMandateNum('gateM1', this.value)" style="width:44px"> / <input type="number" min="0" max="12" value="${s.gateM2}" onchange="saveMandateNum('gateM2', this.value)" style="width:44px"> / <input type="number" min="0" max="12" value="${s.gateM3}" onchange="saveMandateNum('gateM3', this.value)" style="width:44px"></span>`;
 
   const currentMonthRow = monthlyRows[monthCols.indexOf(monthPrefix)];
-  const currentHiringGate = MANDATE_GATES[monthCols.indexOf(monthPrefix)];
+  const currentGateIdx = monthCols.indexOf(monthPrefix);
+  const currentHiringGate = MANDATE_GATES[currentGateIdx];
+  const currentGateTarget = gateTargets[currentGateIdx];
   const currentOks = [
     currentMonthRow ? currentMonthRow.meetingsOk : null,
     currentMonthRow ? currentMonthRow.qualOk : null,
@@ -3766,7 +3782,7 @@ function renderMandateSection() {
     currentMonthRow ? currentMonthRow.covOk : null,
     currentMonthRow ? currentMonthRow.aeDqOk : null,
     currentMonthRow ? currentMonthRow.noShowOk : null,
-    currentHiringGate && currentHiringGate.deadline <= today ? (s.activeCoordinators >= currentHiringGate.expectTeam) : null
+    currentHiringGate && currentHiringGate.deadline <= today ? (s.activeCoordinators >= currentGateTarget) : null
   ];
   const overallOk = currentOks.filter(v => v === true).length;
   const overallScored = currentOks.filter(v => v !== null).length;
