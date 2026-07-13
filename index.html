@@ -1167,7 +1167,7 @@
       <div class="commission-title-row" onclick="toggleCommissionSection()">
         <div>
           <div class="commission-title">Commission Calculator</div>
-          <div class="commission-sub">Recalculates for whichever SDR(s) and date range you've selected above (e.g. pick "Last month" and select just one person). Qualified Leads and Meetings are counted from all leads (B2B + B2C); both are always judged as a percentage of that person's B2B leads only, matching Commission View. New Sales Incentive and Lead Factor are not included here.</div>
+          <div class="commission-sub">Recalculates for whichever SDR(s) you've selected above. Commission always looks at <strong>last calendar month's performance</strong> regardless of the Range: picker (see "How compensation works" below for why). Qualified Leads and Meetings are counted from all leads (B2B + B2C); both are judged as a percentage of that person's B2B leads only, matching Commission View. New Sales Incentive is based on actual closed-deal revenue. Lead Factor is not included here.</div>
         </div>
         <div class="commission-report-btn-group">
           <button class="commission-report-btn" onclick="event.stopPropagation(); previewQualifiedReport()">Preview Report</button>
@@ -1185,9 +1185,11 @@
             <span class="commission-chevron">&#9654;</span>
           </div>
           <div class="commission-explainer-body">
-            <p><strong>1. Pay structure.</strong> Total pay = Base + Bonus (manual, discretionary) + Qualified Leads Incentive + Meeting Set Incentive.</p>
-            <p><strong>2. How the incentives are earned.</strong> Qualified Leads and Meetings are counted from all your leads (B2B + B2C), but both are judged as a percentage of your B2B leads only. Your percentage falls into a bracket; each bracket has a fixed dollar amount — the tables are shown on your card. AE disqualifications do NOT count against you.</p>
-            <p><strong>3. The Meeting Quality Multiplier.</strong> Booked meetings only create business value if they happen. Individual no-shows are not your fault and one bad week will not hurt you — the multiplier is based on your ALL-TIME rejection/no-show rate, so it only reacts to habitual patterns. The rate = meetings rejected or not attended &divide; all B2B meetings you booked (B2C is excluded from this calculation). The multiplier scales BOTH incentives:</p>
+            <p><strong>1. Pay structure.</strong> Total pay = Base + Bonus (manual, discretionary) + Qualified Leads Incentive + Meeting Set Incentive + New Sales Incentive.</p>
+            <p><strong>2. The one-month lag.</strong> Your base salary is paid on the normal schedule for the current month. The three incentives above, however, are always calculated from <strong>last calendar month's</strong> performance — so July's paycheck reflects June's numbers. Why: a deal booked late in a month often hasn't had time to close yet, so judging that same month's payout on its own numbers would unfairly penalize deals that just needed a few more days to land. The one-month lag gives every deal a full month (or more) to actually close before it counts.</p>
+            <p><strong>3. How the Qualified Leads and Meeting incentives are earned.</strong> Qualified Leads and Meetings are counted from all your leads (B2B + B2C), but both are judged as a percentage of your B2B leads only. Your percentage falls into a bracket; each bracket has a fixed dollar amount — the tables are shown on your card. AE disqualifications do NOT count against you.</p>
+            <p><strong>4. How the New Sales Incentive is earned.</strong> This one is based on real closed-deal revenue: every deal you closed last calendar month (Sales status = Closed), converted to a common currency, summed up, and matched to a bracket — same shape as the other two incentives, just keyed to dollars instead of a rate. A deal counts toward the month it actually <strong>closed</strong> in, no matter when the lead came in or the meeting was booked.</p>
+            <p><strong>5. The Meeting Quality Multiplier.</strong> Booked meetings only create business value if they happen. Individual no-shows are not your fault and one bad week will not hurt you — the multiplier is based on your ALL-TIME (not just last month's) B2B rejection/no-show rate, so it only reacts to habitual patterns. The rate = meetings rejected or not attended &divide; all B2B meetings you booked. The multiplier scales ALL THREE incentives:</p>
             <ul>
               <li>0&ndash;15%: 100% payout (this is the normal range &mdash; clients sometimes ghost)</li>
               <li>15&ndash;25%: 85%</li>
@@ -1195,8 +1197,8 @@
               <li>35&ndash;50%: 30%</li>
               <li>50%+: no incentive payout</li>
             </ul>
-            <p><strong>4. It's self-correcting.</strong> Book real meetings that happen and your rate falls back into the free zone &mdash; the multiplier returns to 100% automatically. Nothing is withheld permanently.</p>
-            <p><strong>5. What's NOT included here.</strong> New Sales Incentive and Lead Factor are handled outside this calculator.</p>
+            <p><strong>6. It's self-correcting.</strong> Book real meetings that happen and your rate falls back into the free zone &mdash; the multiplier returns to 100% automatically. Nothing is withheld permanently.</p>
+            <p><strong>7. What's NOT included here.</strong> Lead Factor is handled outside this calculator.</p>
           </div>
         </div>
         <!-- One tab per SDR in the current selection; exactly one card visible at a
@@ -3974,7 +3976,102 @@ function toggleLeadsOverride() {
 // Brackets recreate the original spreadsheet's dynamic-%-of-B2B-leads thresholds
 // as flat rate cutoffs (rate = combined B2B+B2C count ÷ that SDR's B2B leads),
 // which is equivalent to the original's per-SDR recalculated Min/Max counts.
-// New Sales Incentive and Lead Factor are intentionally left out per instruction.
+// Lead Factor is intentionally left out per instruction (handled outside this
+// calculator). New Sales Incentive IS included — see below.
+
+// ─── ONE-MONTH PAYOUT LAG ──────────────────────────────────────────────────────
+// Commission is always computed against LAST CALENDAR MONTH's performance,
+// regardless of whatever the top "Range:" picker has selected — a deal booked
+// late in a month often hasn't had time to close yet, so judging that same
+// month's payout on its own numbers would penalize deals that just needed a
+// few more days. Basing the payout on the prior month gives every deal a full
+// month (or more) to actually close before it's counted. Base salary is
+// unaffected — an SDR is still paid their base for the current month; only
+// the incentive/bonus math looks backward one month.
+function priorMonthKey() {
+  const now = nowInDubai();
+  let y = now.getUTCFullYear(), m = now.getUTCMonth() - 1;
+  if (m < 0) { m = 11; y -= 1; }
+  return `${y}-${String(m + 1).padStart(2, '0')}`;
+}
+function priorMonthDayKeys() {
+  const monthKey = priorMonthKey();
+  const [y, m] = monthKey.split('-').map(Number);
+  const dim = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return Array.from({ length: dim }, (_, i) => `${monthKey}-${String(i + 1).padStart(2, '0')}`);
+}
+const MONTH_LABELS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function monthLabelFromKey(monthKey) {
+  const [y, m] = monthKey.split('-').map(Number);
+  return `${MONTH_LABELS[m - 1]} ${y}`;
+}
+
+// ─── NEW SALES INCENTIVE ───────────────────────────────────────────────────────
+// Based on actual closed-deal revenue from the loaded CSV (Price/Deposit
+// columns), converted to a common currency — the export's "Price AED"/
+// "Deposit AED" column names are legacy; the value is really in whatever the
+// row's own Currency column says (verified against the source CSV: e.g. a row
+// with Currency=GBP has its GBP amount in the "Price AED" column, not an AED
+// conversion). FX_TO_USD is a fixed, approximate table — not live rates — so
+// this is directionally correct, not exact accounting; swap in your finance
+// system's real rates if precise dollar figures matter.
+const FX_TO_USD = { USD: 1, AED: 0.272, SGD: 0.74, EUR: 1.08, GBP: 1.27, CAD: 0.73, SAR: 0.267, AUD: 0.66 };
+function dealValueUSD(r) {
+  const price = parseFloat(r['Price AED']) || 0;
+  const rate = FX_TO_USD[(r['Currency'] || '').trim().toUpperCase()];
+  return price * (rate != null ? rate : 1);
+}
+// "Closed date" is stored as e.g. "July 8, 2026 06:54" or "July 10, 2026
+// 1:24pm" — a different text format than Creation Date's ISO-like string, so
+// it needs its own parser. Mirrors toDubaiDayKey's Romania-wall-clock ->
+// Dubai conversion exactly, just with a different input format.
+const MONTH_NAMES = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+function closedDateToDubaiDayKey(raw) {
+  if (!raw) return '';
+  const m = raw.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})\s+(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+  if (!m) return '';
+  const monthIdx = MONTH_NAMES.indexOf(m[1].toLowerCase());
+  if (monthIdx === -1) return '';
+  const d = +m[2], y = +m[3];
+  let h = +m[4];
+  const mi = +m[5], ampm = (m[6] || '').toLowerCase();
+  if (ampm === 'pm' && h !== 12) h += 12;
+  if (ampm === 'am' && h === 12) h = 0;
+  const asUTC = new Date(Date.UTC(y, monthIdx, d, h, mi));
+  const romaniaOffset = isRomaniaDST(asUTC) ? 3 : 2;
+  const dubai = new Date(asUTC.getTime() - romaniaOffset * 3600000 + 4 * 3600000);
+  return `${dubai.getUTCFullYear()}-${String(dubai.getUTCMonth() + 1).padStart(2, '0')}-${String(dubai.getUTCDate()).padStart(2, '0')}`;
+}
+// A deal counts toward whichever month it CLOSED in, regardless of when the
+// lead was created or the meeting was booked (per the "closed in that month"
+// rule) — so this scans every creation-date bucket in rawByDay for the SDR
+// (not just the target month's bucket), since a lead created in an earlier
+// month can still close in the target month.
+function closedRevenueForSDR(sdrKey, monthKey) {
+  let count = 0, revenueUSD = 0;
+  if (rawByDay) Object.keys(rawByDay).forEach(d => {
+    const rows = rawByDay[d] && rawByDay[d][sdrKey];
+    if (!rows) return;
+    rows.forEach(r => {
+      if (normalizeSalesStatus(r['Sales status']) !== 'closed') return;
+      const closedDay = closedDateToDubaiDayKey(r['Closed date']);
+      if (!closedDay || closedDay.slice(0, 7) !== monthKey) return;
+      count++;
+      revenueUSD += dealValueUSD(r);
+    });
+  });
+  return { count, revenueUSD };
+}
+// Placeholder thresholds — replace with real numbers once finance/the founder
+// confirms them. Same editable bracket shape as the other two tables (dollar
+// thresholds instead of a %, flagged via the bracketTable() unit param).
+const NEW_SALES_BRACKETS = [
+  { minPct: 0,    maxPct: 2000,     amount: 0 },
+  { minPct: 2000, maxPct: 4000,     amount: 100 },
+  { minPct: 4000, maxPct: 6000,     amount: 200 },
+  { minPct: 6000, maxPct: 8000,     amount: 300 },
+  { minPct: 8000, maxPct: Infinity, amount: 500 }
+];
 const QUALIFIED_BRACKETS = [
   { minPct: 0,  maxPct: 40,       amount: 0 },
   { minPct: 40, maxPct: 50,       amount: 150 },
@@ -3998,16 +4095,22 @@ function findBracketIndex(ratePct, brackets) {
 // quality" — gross) and a blue bottom row shows what's actually paid after the
 // Meeting Quality Multiplier; without paidInfo it's the original single blue
 // active-row highlight.
-function bracketTable(brackets, activeIdx, paidInfo) {
+// unit: '%' (default, e.g. Qualified/Meeting rate brackets) or '$' (e.g. New
+// Sales Incentive's closed-revenue brackets) — controls both the column
+// header and how each threshold is formatted.
+function bracketTable(brackets, activeIdx, paidInfo, unit) {
+  unit = unit || '%';
+  const isDollar = unit === '$';
+  const fmt = v => isDollar ? ('$' + v.toLocaleString()) : (v + '%');
   const paidRow = paidInfo ? `<tr class="paid">
         <td>You earn (after &times;${paidInfo.mult.toFixed(2)} quality multiplier)</td>
         <td>$${paidInfo.paid.toLocaleString()}</td>
       </tr>` : '';
   return `<table class="commission-bracket-table">
-    <thead><tr><th>Rate</th><th>Bonus</th></tr></thead>
+    <thead><tr><th>${isDollar ? 'Closed revenue (USD-equiv)' : 'Rate'}</th><th>Bonus</th></tr></thead>
     <tbody>
       ${brackets.map((b, i) => `<tr class="${i === activeIdx ? (paidInfo ? 'potential' : 'active') : ''}">
-        <td>${b.minPct}%${b.maxPct === Infinity ? '+' : ' – <' + b.maxPct + '%'}</td>
+        <td>${fmt(b.minPct)}${b.maxPct === Infinity ? '+' : ' – <' + fmt(b.maxPct)}</td>
         <td>$${b.amount.toLocaleString()}</td>
       </tr>`).join('')}
       ${paidRow}
@@ -4023,10 +4126,11 @@ function bracketTable(brackets, activeIdx, paidInfo) {
 // and meetings-held isn't the payout basis either, since individual no-shows
 // are often not the SDR's fault. Instead, if rejection/no-shows are HABITUAL
 // (visible in the SDR's overall rate), this multiplier reduces their bonus
-// payouts — one bad week doesn't hurt them; a pattern does. It applies to BOTH
-// the Qualified Leads Incentive and the Meeting Set Incentive: the rejection
-// rate is the only clean quality signal available, and pipeline-stuffing tends
-// to show up in loose qualification marking too. One multiplier, one message:
+// payouts — one bad week doesn't hurt them; a pattern does. It applies to ALL
+// THREE incentives (Qualified Leads, Meeting Set, and New Sales): the
+// rejection rate is the only clean quality signal available, and
+// pipeline-stuffing tends to show up in loose qualification marking (and
+// eventually revenue) too. One multiplier, one message:
 // quality gates all bonus money. It's self-correcting — when the SDR's rate
 // returns to team-normal, the multiplier returns to 100% and full payouts
 // resume. The 0–15% free zone matches the historical baseline of the proven
@@ -4084,7 +4188,11 @@ function multiplierTierTable(activeIdx) {
 // Reads directly from rawByDay (not allData) so the calculator's B2B/B2C split
 // and rates are always correct regardless of whatever the "Leads:" filter
 // dropdown is currently set to.
-function commissionMetricsForSDR(days, sdrKey) {
+// monthKey (e.g. "2026-06") is the payout month for the New Sales Incentive's
+// closed-revenue lookup — it scans all-time data for deals that CLOSED in
+// that month, independent of `days` (which is that same month's creation-date
+// buckets, used for Qualified/Meeting).
+function commissionMetricsForSDR(days, sdrKey, monthKey) {
   const rows = [];
   days.forEach(d => {
     const dayRows = rawByDay[d] && rawByDay[d][sdrKey];
@@ -4094,6 +4202,7 @@ function commissionMetricsForSDR(days, sdrKey) {
   const b2cLeads = rows.filter(isB2CLead).length;
   const qualified = rows.filter(isQualifiedLead).length;
   const meetings = rows.filter(isMeetingBooked).length;
+  const closed = closedRevenueForSDR(sdrKey, monthKey);
   return {
     totalLeads: rows.length,
     b2bLeads,
@@ -4101,7 +4210,9 @@ function commissionMetricsForSDR(days, sdrKey) {
     qualified,
     meetings,
     qualifiedRate: b2bLeads ? (qualified / b2bLeads * 100) : 0,
-    meetingRate: b2bLeads ? (meetings / b2bLeads * 100) : 0
+    meetingRate: b2bLeads ? (meetings / b2bLeads * 100) : 0,
+    closedDeals: closed.count,
+    closedRevenueUSD: closed.revenueUSD
   };
 }
 function loadCommissionBases() {
@@ -4116,13 +4227,14 @@ function saveCommissionInputs(key, base, bonus, override) {
 }
 // One place computes the gross → multiplier → paid breakdown so the card, the
 // Calculate box, and the PDF report can never silently disagree.
-function commissionPayout(key, qGross, mGross) {
+function commissionPayout(key, qGross, mGross, nsGross) {
   const q = qualityMultiplierForSDR(key);
   return {
     rate: q.rate, tierIdx: q.idx, tier: q.tier, booked: q.booked, bad: q.bad,
-    qGross, mGross,
+    qGross, mGross, nsGross,
     qPaid: Math.round(qGross * q.tier.multiplier),
-    mPaid: Math.round(mGross * q.tier.multiplier)
+    mPaid: Math.round(mGross * q.tier.multiplier),
+    nsPaid: Math.round(nsGross * q.tier.multiplier)
   };
 }
 function multiplierRowHtml(p) {
@@ -4145,32 +4257,37 @@ function calculateCommission(key) {
   saveCommissionInputs(key, baseInput.value, bonusInput.value, override);
   const qGross = parseFloat(document.getElementById('commissionQIncentive-' + key).dataset.amount) || 0;
   const mGross = parseFloat(document.getElementById('commissionMIncentive-' + key).dataset.amount) || 0;
+  const nsGross = parseFloat(document.getElementById('commissionNSIncentive-' + key).dataset.amount) || 0;
   // Override keeps its pre-multiplier behavior: incentives bypassed entirely,
   // so the multiplier is irrelevant when overridden.
-  const p = commissionPayout(key, qGross, mGross);
-  const total = override ? (base + bonus) : (base + bonus + p.qPaid + p.mPaid);
+  const p = commissionPayout(key, qGross, mGross, nsGross);
+  const total = override ? (base + bonus) : (base + bonus + p.qPaid + p.mPaid + p.nsPaid);
   const box = document.getElementById('commissionTotalBox-' + key);
   box.innerHTML = override ? `
     <div class="commission-incentive-row"><span>Base</span><span>$${base.toLocaleString()}</span></div>
     <div class="commission-incentive-row"><span>Bonus</span><span>$${bonus.toLocaleString()}</span></div>
     <div class="commission-incentive-row ignored"><span>Qualified Leads Incentive (overridden)</span><span>—</span></div>
     <div class="commission-incentive-row ignored"><span>Meeting Incentive (overridden)</span><span>—</span></div>
+    <div class="commission-incentive-row ignored"><span>New Sales Incentive (overridden)</span><span>—</span></div>
     <div class="commission-incentive-row grand-total"><span>Total Compensation</span><span>$${total.toLocaleString()}</span></div>
   ` : `
     <div class="commission-incentive-row"><span>Base</span><span>$${base.toLocaleString()}</span></div>
     <div class="commission-incentive-row"><span>Bonus</span><span>$${bonus.toLocaleString()}</span></div>
     ${incentiveLineHtml('Qualified Leads Incentive', p.qPaid, p.tier.multiplier)}
     ${incentiveLineHtml('Meeting Incentive', p.mPaid, p.tier.multiplier)}
+    ${incentiveLineHtml('New Sales Incentive', p.nsPaid, p.tier.multiplier)}
     <div class="commission-incentive-row grand-total"><span>Total Compensation</span><span>$${total.toLocaleString()}</span></div>
   `;
 }
-function commissionCard(sdr, days) {
-  const m = commissionMetricsForSDR(days, sdr.key);
+function commissionCard(sdr, days, monthKey) {
+  const m = commissionMetricsForSDR(days, sdr.key, monthKey);
   const qIdx = findBracketIndex(m.qualifiedRate, QUALIFIED_BRACKETS);
   const mIdx = findBracketIndex(m.meetingRate, MEETING_BRACKETS);
+  const nsIdx = findBracketIndex(m.closedRevenueUSD, NEW_SALES_BRACKETS);
   const qAmount = QUALIFIED_BRACKETS[qIdx].amount;
   const mAmount = MEETING_BRACKETS[mIdx].amount;
-  const payout = commissionPayout(sdr.key, qAmount, mAmount);
+  const nsAmount = NEW_SALES_BRACKETS[nsIdx].amount;
+  const payout = commissionPayout(sdr.key, qAmount, mAmount, nsAmount);
   const bases = loadCommissionBases();
   const savedRaw = bases[sdr.key];
   // Back-compat: earlier versions stored a bare base string, not an object.
@@ -4200,6 +4317,11 @@ function commissionCard(sdr, days) {
         <div class="commission-stat-sub">${m.meetingRate.toFixed(1)}% of B2B leads</div>
       </div>
       <div class="commission-stat" style="grid-column: 1 / -1;">
+        <div class="commission-stat-label">Closed Deals (${monthLabelFromKey(monthKey)})</div>
+        <div class="commission-stat-value">${m.closedDeals}</div>
+        <div class="commission-stat-sub">$${Math.round(m.closedRevenueUSD).toLocaleString()} closed revenue, USD-equivalent (deals that CLOSED this month, regardless of when the lead/meeting originated)</div>
+      </div>
+      <div class="commission-stat" style="grid-column: 1 / -1;">
         <div class="commission-stat-label">Meeting Quality Multiplier</div>
         <div class="commission-stat-value">&times;${payout.tier.multiplier.toFixed(2)}</div>
         <div class="commission-stat-sub">${payout.rate.toFixed(1)}% all-time rejection — ${payout.bad} of ${payout.booked} booked meetings rejected/no-show (all-time, B2B leads only, incl. scheduled &amp; closed)</div>
@@ -4211,6 +4333,9 @@ function commissionCard(sdr, days) {
     <div class="commission-bracket-label">Meeting Set Incentive</div>
     ${bracketTable(MEETING_BRACKETS, mIdx, { paid: payout.mPaid, mult: payout.tier.multiplier })}
     <div class="commission-incentive-row"><span>Bracket bonus (gross)</span><span id="commissionMIncentive-${sdr.key}" data-amount="${mAmount}">$${mAmount.toLocaleString()}</span></div>
+    <div class="commission-bracket-label">New Sales Incentive (closed deal revenue, ${monthLabelFromKey(monthKey)})</div>
+    ${bracketTable(NEW_SALES_BRACKETS, nsIdx, { paid: payout.nsPaid, mult: payout.tier.multiplier }, '$')}
+    <div class="commission-incentive-row"><span>Bracket bonus (gross)</span><span id="commissionNSIncentive-${sdr.key}" data-amount="${nsAmount}">$${nsAmount.toLocaleString()}</span></div>
     <div class="commission-bracket-label">Meeting Quality Multiplier (all-time B2B rejection rate)</div>
     ${multiplierTierTable(payout.tierIdx)}
     ${multiplierRowHtml(payout)}
@@ -4230,11 +4355,22 @@ function commissionCard(sdr, days) {
     <div class="commission-total-box" id="commissionTotalBox-${sdr.key}">
       ${incentiveLineHtml('Qualified Leads Incentive', payout.qPaid, payout.tier.multiplier)}
       ${incentiveLineHtml('Meeting Incentive', payout.mPaid, payout.tier.multiplier)}
+      ${incentiveLineHtml('New Sales Incentive', payout.nsPaid, payout.tier.multiplier)}
       <div class="commission-incentive-row grand-total"><span>Total Compensation</span><span>enter Base/Bonus and click Calculate</span></div>
     </div>
   </div>`;
 }
-function commissionPeriodLabel(days) {
+// Commission always reflects LAST CALENDAR MONTH's performance — see the
+// "ONE-MONTH PAYOUT LAG" comment above priorMonthKey() — so this label is
+// deliberately independent of the top Range: picker (which still only
+// affects the charts/mandate scoreboard).
+function commissionPeriodLabel(monthKey) {
+  return `Payout based on ${monthLabelFromKey(monthKey)} performance (commission always looks at last calendar month, not the Range: picker above)`;
+}
+// Describes a plain range-picker-driven day list — used only for the
+// Qualified Leads Review report's lead-listing section, which (unlike
+// commission) still reflects whatever range/SDR selection is active.
+function commissionPeriodLabelForDays(days) {
   if (!days.length) return 'No data in this range';
   const rangeVal = document.getElementById('rangeSelect').value;
   const rangeLabelEl = document.querySelector('#rangeSelect option[value="' + rangeVal + '"]');
@@ -4264,11 +4400,16 @@ function renderCommissionCalculator(days) {
   const cardsEl = document.getElementById('commissionCards');
   const tabsEl = document.getElementById('commissionTabs');
   if (!periodEl || !cardsEl || !rawByDay) return;
-  periodEl.textContent = commissionPeriodLabel(days);
+  // Deliberately ignores the `days` argument (the top Range: picker) — see
+  // the "ONE-MONTH PAYOUT LAG" comment above priorMonthKey(). Commission
+  // always computes against last calendar month.
+  const monthKey = priorMonthKey();
+  const commissionDays = priorMonthDayKeys();
+  periodEl.textContent = commissionPeriodLabel(monthKey);
   const selected = SDRS.filter(s => selectedSDRs.has(s.key));
-  if (!selected.length || !days.length) {
+  if (!selected.length) {
     if (tabsEl) tabsEl.innerHTML = '';
-    cardsEl.innerHTML = `<div class="commission-empty">No leads in the selected range for the selected SDR(s).</div>`;
+    cardsEl.innerHTML = `<div class="commission-empty">No SDR selected.</div>`;
     return;
   }
   if (!selected.some(s => s.key === commissionActiveTab)) commissionActiveTab = selected[0].key;
@@ -4278,7 +4419,7 @@ function renderCommissionCalculator(days) {
     ).join('');
   }
   cardsEl.innerHTML = selected.map(s =>
-    `<div class="commission-card-wrap" data-key="${s.key}">${commissionCard(s, days)}</div>`
+    `<div class="commission-card-wrap" data-key="${s.key}">${commissionCard(s, commissionDays, monthKey)}</div>`
   ).join('');
   selectCommissionTab(commissionActiveTab);
 }
@@ -4403,7 +4544,15 @@ function reportTable(rows) {
 // Builds the report's inner HTML (title/meta/sections) — shared by the
 // on-screen Preview and the print/PDF export so they're always identical.
 function buildQualifiedReportHtml(days, selected) {
-  const periodLabel = commissionPeriodLabel(days);
+  // The qualified-lead listing below still reflects whatever range was
+  // selected for review (that's this report's original purpose). The
+  // Commission Summary table is different: it must match the on-screen
+  // card exactly, and the card always uses last calendar month regardless of
+  // the range picker — so it's computed here from priorMonthKey()/
+  // priorMonthDayKeys(), independent of the `days` used for the lead listing.
+  const monthKey = priorMonthKey();
+  const commissionDays = priorMonthDayKeys();
+  const periodLabel = `Leads reviewed: ${commissionPeriodLabelForDays(days)} · Commission summary: ${monthLabelFromKey(monthKey)}`;
   const sections = selected.map(sdr => {
     const rows = [];
     days.forEach(d => {
@@ -4416,22 +4565,22 @@ function buildQualifiedReportHtml(days, selected) {
     // Commission summary built through the exact same commissionPayout() path
     // as the on-screen card, so the report can never show a paid number that
     // silently differs from the on-screen math.
-    const m = commissionMetricsForSDR(days, sdr.key);
+    const m = commissionMetricsForSDR(commissionDays, sdr.key, monthKey);
     const qGross = QUALIFIED_BRACKETS[findBracketIndex(m.qualifiedRate, QUALIFIED_BRACKETS)].amount;
     const mGross = MEETING_BRACKETS[findBracketIndex(m.meetingRate, MEETING_BRACKETS)].amount;
-    const p = commissionPayout(sdr.key, qGross, mGross);
+    const nsGross = NEW_SALES_BRACKETS[findBracketIndex(m.closedRevenueUSD, NEW_SALES_BRACKETS)].amount;
+    const p = commissionPayout(sdr.key, qGross, mGross, nsGross);
     return `
       <div class="report-sdr-heading">${escapeHtml(sdr.name)}</div>
-      <div class="report-section-heading">Commission Summary (this period)</div>
+      <div class="report-section-heading">Commission Summary (${escapeHtml(monthLabelFromKey(monthKey))})</div>
       <table class="report-table">
-        <thead><tr><th>All-time rejection rate</th><th>Quality Multiplier</th><th>Qualified Incentive (gross)</th><th>Qualified Incentive (paid)</th><th>Meeting Incentive (gross)</th><th>Meeting Incentive (paid)</th></tr></thead>
+        <thead><tr><th>All-time rejection rate</th><th>Quality Multiplier</th><th>Qualified Incentive (gross &rarr; paid)</th><th>Meeting Incentive (gross &rarr; paid)</th><th>New Sales Incentive (gross &rarr; paid)</th></tr></thead>
         <tbody><tr>
           <td>${p.rate.toFixed(1)}%</td>
           <td>&times;${p.tier.multiplier.toFixed(2)} (${escapeHtml(p.tier.label)})</td>
-          <td>$${p.qGross.toLocaleString()}</td>
-          <td>$${p.qPaid.toLocaleString()}</td>
-          <td>$${p.mGross.toLocaleString()}</td>
-          <td>$${p.mPaid.toLocaleString()}</td>
+          <td>$${p.qGross.toLocaleString()} &rarr; $${p.qPaid.toLocaleString()}</td>
+          <td>$${p.mGross.toLocaleString()} &rarr; $${p.mPaid.toLocaleString()}</td>
+          <td>$${p.nsGross.toLocaleString()} &rarr; $${p.nsPaid.toLocaleString()}</td>
         </tr></tbody>
       </table>
       <div class="report-section-heading">Qualified &amp; Meeting Booked (${qualifiedBooked.length})</div>
