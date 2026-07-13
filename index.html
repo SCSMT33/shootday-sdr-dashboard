@@ -461,6 +461,18 @@
   .commission-report-btn:hover { border-color: var(--accent); color: var(--accent); }
   .commission-report-btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
   .commission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  /* One-SDR-at-a-time: with tabs active only a single card shows, so cap its width */
+  .commission-grid.single-card { grid-template-columns: minmax(320px, 560px); justify-content: start; }
+  .commission-tabs { margin: 4px 0 14px; width: fit-content; }
+  .commission-explainer { border: 1px solid var(--border); border-radius: 10px; background: var(--surface2); margin: 4px 0 14px; }
+  .commission-explainer-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; padding: 11px 14px; font-size: 13px; font-weight: 700; }
+  .commission-explainer .commission-chevron { transform: none; }
+  .commission-explainer.expanded .commission-chevron { transform: rotate(90deg); }
+  .commission-explainer-body { display: none; padding: 0 14px 14px; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+  .commission-explainer.expanded .commission-explainer-body { display: block; }
+  .commission-explainer-body strong { color: var(--text); }
+  .commission-explainer-body ul { margin: 6px 0 10px 18px; }
+  .commission-explainer-body li { margin: 2px 0; }
   .commission-card { border: 1px solid var(--border); border-radius: 10px; padding: 16px; background: var(--surface2); }
   .commission-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
   .commission-card-name { font-size: 15px; font-weight: 700; }
@@ -1161,7 +1173,33 @@
       </div>
       <div class="commission-body">
         <div class="commission-period" id="commissionPeriod"></div>
-        <div class="commission-grid" id="commissionCards"></div>
+        <!-- Plain-language compensation explainer, shown to SDRs during 1:1 reviews.
+             Collapsed by default; neutral, factual tone by design. -->
+        <div class="commission-explainer" id="commissionExplainer">
+          <div class="commission-explainer-header" onclick="toggleCommissionExplainer()">
+            <span>How compensation works</span>
+            <span class="commission-chevron">&#9654;</span>
+          </div>
+          <div class="commission-explainer-body">
+            <p><strong>1. Pay structure.</strong> Total pay = Base + Bonus (manual, discretionary) + Qualified Leads Incentive + Meeting Set Incentive.</p>
+            <p><strong>2. How the incentives are earned.</strong> Qualified Leads and Meetings are counted from all your leads (B2B + B2C), but both are judged as a percentage of your B2B leads only. Your percentage falls into a bracket; each bracket has a fixed dollar amount — the tables are shown on your card. AE disqualifications do NOT count against you.</p>
+            <p><strong>3. The Meeting Quality Multiplier.</strong> Booked meetings only create business value if they happen. Individual no-shows are not your fault and one bad week will not hurt you — the multiplier is based on your ALL-TIME rejection/no-show rate, so it only reacts to habitual patterns. The rate = meetings rejected or not attended &divide; all meetings you booked. The multiplier scales BOTH incentives:</p>
+            <ul>
+              <li>0&ndash;15%: 100% payout (this is the normal range &mdash; clients sometimes ghost)</li>
+              <li>15&ndash;25%: 85%</li>
+              <li>25&ndash;35%: 60%</li>
+              <li>35&ndash;50%: 30%</li>
+              <li>50%+: no incentive payout</li>
+            </ul>
+            <p><strong>4. It's self-correcting.</strong> Book real meetings that happen and your rate falls back into the free zone &mdash; the multiplier returns to 100% automatically. Nothing is withheld permanently.</p>
+            <p><strong>5. What's NOT included here.</strong> New Sales Incentive and Lead Factor are handled outside this calculator.</p>
+          </div>
+        </div>
+        <!-- One tab per SDR in the current selection; exactly one card visible at a
+             time so a manager can screen-share a single SDR's card during a 1:1
+             review without exposing teammates' compensation. -->
+        <div class="view-tabs commission-tabs" id="commissionTabs"></div>
+        <div class="commission-grid single-card" id="commissionCards"></div>
       </div>
     </div>
 
@@ -1666,6 +1704,9 @@ function toggleAEBaselineSection() {
 }
 function toggleCommissionSection() {
   document.getElementById('commissionSection').classList.toggle('expanded');
+}
+function toggleCommissionExplainer() {
+  document.getElementById('commissionExplainer').classList.toggle('expanded');
 }
 function isAEBaselineOn() {
   const el = document.getElementById('aeBaselineToggle');
@@ -3960,6 +4001,68 @@ function bracketTable(brackets, activeIdx, isPct) {
     </tbody>
   </table>`;
 }
+
+// ─── MEETING QUALITY MULTIPLIER ("the handicapper") ───────────────────────────
+// The brackets pay on meetings BOOKED and leads MARKED qualified, judged as a %
+// of B2B leads — which is gameable: an SDR can book low-quality meetings that
+// get rejected or no-showed and still max out both incentives. Management
+// decision: AE disqualifications must NOT affect SDR commission (unchanged),
+// and meetings-held isn't the payout basis either, since individual no-shows
+// are often not the SDR's fault. Instead, if rejection/no-shows are HABITUAL
+// (visible in the SDR's overall rate), this multiplier reduces their bonus
+// payouts — one bad week doesn't hurt them; a pattern does. It applies to BOTH
+// the Qualified Leads Incentive and the Meeting Set Incentive: the rejection
+// rate is the only clean quality signal available, and pipeline-stuffing tends
+// to show up in loose qualification marking too. One multiplier, one message:
+// quality gates all bonus money. It's self-correcting — when the SDR's rate
+// returns to team-normal, the multiplier returns to 100% and full payouts
+// resume. The 0–15% free zone matches the historical baseline of the proven
+// performers (Gospel ~11%, MJ ~18% all-time), so normal business reality
+// (clients ghost sometimes) is not punished; above 35% is treated as a
+// behavior problem, not bad luck.
+const QUALITY_MULTIPLIER_TIERS = [
+  { minPct: 0,  maxPct: 15,       multiplier: 1.00, label: 'Full payout' },
+  { minPct: 15, maxPct: 25,       multiplier: 0.85, label: 'Mild reduction' },
+  { minPct: 25, maxPct: 35,       multiplier: 0.60, label: 'Significant reduction' },
+  { minPct: 35, maxPct: 50,       multiplier: 0.30, label: 'Severe reduction' },
+  { minPct: 50, maxPct: Infinity, multiplier: 0.00, label: 'No bonus payout' }
+];
+// The "habitual" measure: computed from the SDR's ALL-TIME data in the loaded
+// CSV (every date in rawByDay), deliberately immune to the date-range picker —
+// unlike the bracket incentives, which keep using the selected range. Reads
+// from rawByDay (not allData) so the Leads: filter dropdown cannot affect it —
+// same reasoning as commissionMetricsForSDR: counted from ALL leads (B2B+B2C),
+// consistent with how meetings are already counted there.
+function allTimeRejectionRate(sdrKey) {
+  if (!rawByDay) return 0;
+  let booked = 0, bad = 0;
+  Object.keys(rawByDay).forEach(d => {
+    const rows = rawByDay[d] && rawByDay[d][sdrKey];
+    if (!rows) return;
+    rows.forEach(r => {
+      if (isMeetingBooked(r)) booked++;
+      if (isMeetingNotAttended(r)) bad++;
+    });
+  });
+  return booked ? bad / booked * 100 : 0;
+}
+function qualityMultiplierForSDR(sdrKey) {
+  const rate = allTimeRejectionRate(sdrKey);
+  const idx = findBracketIndex(rate, QUALITY_MULTIPLIER_TIERS);
+  return { rate, idx, tier: QUALITY_MULTIPLIER_TIERS[idx] };
+}
+function multiplierTierTable(activeIdx) {
+  return `<table class="commission-bracket-table">
+    <thead><tr><th>All-time rejection rate</th><th>Multiplier</th><th></th></tr></thead>
+    <tbody>
+      ${QUALITY_MULTIPLIER_TIERS.map((t, i) => `<tr class="${i === activeIdx ? 'active' : ''}">
+        <td>${t.minPct}%${t.maxPct === Infinity ? '+' : ' – <' + t.maxPct + '%'}</td>
+        <td>&times;${t.multiplier.toFixed(2)}</td>
+        <td>${t.label}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
 // Reads directly from rawByDay (not allData) so the calculator's B2B/B2C split
 // and rates are always correct regardless of whatever the "Leads:" filter
 // dropdown is currently set to.
@@ -3993,6 +4096,20 @@ function saveCommissionInputs(key, base, bonus, override) {
     localStorage.setItem('sdr_commission_bases', JSON.stringify(bases));
   } catch(e) {}
 }
+// One place computes the gross → multiplier → paid breakdown so the card, the
+// Calculate box, and the PDF report can never silently disagree.
+function commissionPayout(key, qGross, mGross) {
+  const q = qualityMultiplierForSDR(key);
+  return {
+    rate: q.rate, tierIdx: q.idx, tier: q.tier,
+    qGross, mGross,
+    qPaid: Math.round(qGross * q.tier.multiplier),
+    mPaid: Math.round(mGross * q.tier.multiplier)
+  };
+}
+function multiplierRowHtml(p) {
+  return `<div class="commission-incentive-row"><span>Meeting Quality Multiplier</span><span>&times;${p.tier.multiplier.toFixed(2)} (${p.rate.toFixed(1)}% rejection — ${p.tier.minPct}${p.tier.maxPct === Infinity ? '%+' : '–' + p.tier.maxPct + '%'} tier)</span></div>`;
+}
 function calculateCommission(key) {
   const baseInput = document.getElementById('commissionBase-' + key);
   const bonusInput = document.getElementById('commissionBonus-' + key);
@@ -4001,15 +4118,27 @@ function calculateCommission(key) {
   const bonus = parseFloat(bonusInput.value) || 0;
   const override = overrideInput.checked;
   saveCommissionInputs(key, baseInput.value, bonusInput.value, override);
-  const qIncentive = parseFloat(document.getElementById('commissionQIncentive-' + key).dataset.amount) || 0;
-  const mIncentive = parseFloat(document.getElementById('commissionMIncentive-' + key).dataset.amount) || 0;
-  const total = override ? (base + bonus) : (base + bonus + qIncentive + mIncentive);
+  const qGross = parseFloat(document.getElementById('commissionQIncentive-' + key).dataset.amount) || 0;
+  const mGross = parseFloat(document.getElementById('commissionMIncentive-' + key).dataset.amount) || 0;
+  // Override keeps its pre-multiplier behavior: incentives bypassed entirely,
+  // so the multiplier is irrelevant when overridden.
+  const p = commissionPayout(key, qGross, mGross);
+  const total = override ? (base + bonus) : (base + bonus + p.qPaid + p.mPaid);
   const box = document.getElementById('commissionTotalBox-' + key);
-  box.innerHTML = `
+  box.innerHTML = override ? `
     <div class="commission-incentive-row"><span>Base</span><span>$${base.toLocaleString()}</span></div>
     <div class="commission-incentive-row"><span>Bonus</span><span>$${bonus.toLocaleString()}</span></div>
-    <div class="commission-incentive-row${override ? ' ignored' : ''}"><span>Qualified Leads Incentive${override ? ' (overridden)' : ''}</span><span>${override ? '—' : '$' + qIncentive.toLocaleString()}</span></div>
-    <div class="commission-incentive-row${override ? ' ignored' : ''}"><span>Meeting Incentive${override ? ' (overridden)' : ''}</span><span>${override ? '—' : '$' + mIncentive.toLocaleString()}</span></div>
+    <div class="commission-incentive-row ignored"><span>Qualified Leads Incentive (overridden)</span><span>—</span></div>
+    <div class="commission-incentive-row ignored"><span>Meeting Incentive (overridden)</span><span>—</span></div>
+    <div class="commission-incentive-row grand-total"><span>Total Compensation</span><span>$${total.toLocaleString()}</span></div>
+  ` : `
+    <div class="commission-incentive-row"><span>Base</span><span>$${base.toLocaleString()}</span></div>
+    <div class="commission-incentive-row"><span>Bonus</span><span>$${bonus.toLocaleString()}</span></div>
+    <div class="commission-incentive-row"><span>Qualified Leads Incentive (gross)</span><span>$${p.qGross.toLocaleString()}</span></div>
+    <div class="commission-incentive-row"><span>Meeting Incentive (gross)</span><span>$${p.mGross.toLocaleString()}</span></div>
+    ${multiplierRowHtml(p)}
+    <div class="commission-incentive-row"><span>Qualified Leads Incentive (paid)</span><span>$${p.qPaid.toLocaleString()}</span></div>
+    <div class="commission-incentive-row"><span>Meeting Incentive (paid)</span><span>$${p.mPaid.toLocaleString()}</span></div>
     <div class="commission-incentive-row grand-total"><span>Total Compensation</span><span>$${total.toLocaleString()}</span></div>
   `;
 }
@@ -4019,6 +4148,7 @@ function commissionCard(sdr, days) {
   const mIdx = findBracketIndex(m.meetingRate, MEETING_BRACKETS);
   const qAmount = QUALIFIED_BRACKETS[qIdx].amount;
   const mAmount = MEETING_BRACKETS[mIdx].amount;
+  const payout = commissionPayout(sdr.key, qAmount, mAmount);
   const bases = loadCommissionBases();
   const savedRaw = bases[sdr.key];
   // Back-compat: earlier versions stored a bare base string, not an object.
@@ -4050,10 +4180,13 @@ function commissionCard(sdr, days) {
     </div>
     <div class="commission-bracket-label">Qualified Leads Incentive</div>
     ${bracketTable(QUALIFIED_BRACKETS, qIdx)}
-    <div class="commission-incentive-row"><span>Bracket bonus</span><span id="commissionQIncentive-${sdr.key}" data-amount="${qAmount}">$${qAmount.toLocaleString()}</span></div>
+    <div class="commission-incentive-row"><span>Bracket bonus (gross)</span><span id="commissionQIncentive-${sdr.key}" data-amount="${qAmount}">$${qAmount.toLocaleString()}</span></div>
     <div class="commission-bracket-label">Meeting Set Incentive</div>
     ${bracketTable(MEETING_BRACKETS, mIdx)}
-    <div class="commission-incentive-row"><span>Bracket bonus</span><span id="commissionMIncentive-${sdr.key}" data-amount="${mAmount}">$${mAmount.toLocaleString()}</span></div>
+    <div class="commission-incentive-row"><span>Bracket bonus (gross)</span><span id="commissionMIncentive-${sdr.key}" data-amount="${mAmount}">$${mAmount.toLocaleString()}</span></div>
+    <div class="commission-bracket-label">Meeting Quality Multiplier (all-time rejection rate)</div>
+    ${multiplierTierTable(payout.tierIdx)}
+    ${multiplierRowHtml(payout)}
     <div class="commission-base-row">
       <span class="commission-stat-label">Base $</span>
       <input class="commission-base-input" type="number" id="commissionBase-${sdr.key}" value="${saved.base}" placeholder="e.g. 2000">
@@ -4068,8 +4201,11 @@ function commissionCard(sdr, days) {
       <button class="commission-calc-btn" onclick="calculateCommission('${sdr.key}')">Calculate</button>
     </div>
     <div class="commission-total-box" id="commissionTotalBox-${sdr.key}">
-      <div class="commission-incentive-row"><span>Qualified Leads Incentive</span><span>$${qAmount.toLocaleString()}</span></div>
-      <div class="commission-incentive-row"><span>Meeting Incentive</span><span>$${mAmount.toLocaleString()}</span></div>
+      <div class="commission-incentive-row"><span>Qualified Leads Incentive (gross)</span><span>$${payout.qGross.toLocaleString()}</span></div>
+      <div class="commission-incentive-row"><span>Meeting Incentive (gross)</span><span>$${payout.mGross.toLocaleString()}</span></div>
+      ${multiplierRowHtml(payout)}
+      <div class="commission-incentive-row"><span>Qualified Leads Incentive (paid)</span><span>$${payout.qPaid.toLocaleString()}</span></div>
+      <div class="commission-incentive-row"><span>Meeting Incentive (paid)</span><span>$${payout.mPaid.toLocaleString()}</span></div>
       <div class="commission-incentive-row grand-total"><span>Total Compensation</span><span>enter Base/Bonus and click Calculate</span></div>
     </div>
   </div>`;
@@ -4082,17 +4218,45 @@ function commissionPeriodLabel(days) {
   const first = days[0], last = days[days.length - 1];
   return `${rangeLabel} · ${first === last ? first : first + ' – ' + last}`;
 }
+// One-SDR-at-a-time tabbed view: a manager screen-shares a single SDR's card
+// during a 1:1 review without exposing teammates' compensation. All selected
+// SDRs' cards are rendered but only the active tab's card is visible —
+// switching tabs only toggles visibility (no re-render), so unsaved Base/Bonus
+// input state survives tab switches. Default tab: first SDR in the existing
+// SDRS ordering (deterministic). Tabs respect the SDR-filter and date-range
+// controls exactly as before: they show whichever SDRs the selection includes.
+let commissionActiveTab = null;
+function selectCommissionTab(key) {
+  commissionActiveTab = key;
+  document.querySelectorAll('#commissionTabs .view-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.key === key);
+  });
+  document.querySelectorAll('#commissionCards .commission-card-wrap').forEach(w => {
+    w.style.display = w.dataset.key === key ? '' : 'none';
+  });
+}
 function renderCommissionCalculator(days) {
   const periodEl = document.getElementById('commissionPeriod');
   const cardsEl = document.getElementById('commissionCards');
+  const tabsEl = document.getElementById('commissionTabs');
   if (!periodEl || !cardsEl || !rawByDay) return;
   periodEl.textContent = commissionPeriodLabel(days);
   const selected = SDRS.filter(s => selectedSDRs.has(s.key));
   if (!selected.length || !days.length) {
+    if (tabsEl) tabsEl.innerHTML = '';
     cardsEl.innerHTML = `<div class="commission-empty">No leads in the selected range for the selected SDR(s).</div>`;
     return;
   }
-  cardsEl.innerHTML = selected.map(s => commissionCard(s, days)).join('');
+  if (!selected.some(s => s.key === commissionActiveTab)) commissionActiveTab = selected[0].key;
+  if (tabsEl) {
+    tabsEl.innerHTML = selected.map(s =>
+      `<button class="view-tab" data-key="${s.key}" onclick="selectCommissionTab('${s.key}')">${s.label}</button>`
+    ).join('');
+  }
+  cardsEl.innerHTML = selected.map(s =>
+    `<div class="commission-card-wrap" data-key="${s.key}">${commissionCard(s, days)}</div>`
+  ).join('');
+  selectCommissionTab(commissionActiveTab);
 }
 
 // Full-history (not range-filtered) per-SDR averages — for direct comparison
@@ -4225,8 +4389,27 @@ function buildQualifiedReportHtml(days, selected) {
     const qualified = rows.filter(isQualifiedLead);
     const qualifiedBooked = qualified.filter(isMeetingBooked);
     const qualifiedNotBooked = qualified.filter(r => !isMeetingBooked(r));
+    // Commission summary built through the exact same commissionPayout() path
+    // as the on-screen card, so the report can never show a paid number that
+    // silently differs from the on-screen math.
+    const m = commissionMetricsForSDR(days, sdr.key);
+    const qGross = QUALIFIED_BRACKETS[findBracketIndex(m.qualifiedRate, QUALIFIED_BRACKETS)].amount;
+    const mGross = MEETING_BRACKETS[findBracketIndex(m.meetingRate, MEETING_BRACKETS)].amount;
+    const p = commissionPayout(sdr.key, qGross, mGross);
     return `
       <div class="report-sdr-heading">${escapeHtml(sdr.name)}</div>
+      <div class="report-section-heading">Commission Summary (this period)</div>
+      <table class="report-table">
+        <thead><tr><th>All-time rejection rate</th><th>Quality Multiplier</th><th>Qualified Incentive (gross)</th><th>Qualified Incentive (paid)</th><th>Meeting Incentive (gross)</th><th>Meeting Incentive (paid)</th></tr></thead>
+        <tbody><tr>
+          <td>${p.rate.toFixed(1)}%</td>
+          <td>&times;${p.tier.multiplier.toFixed(2)} (${escapeHtml(p.tier.label)})</td>
+          <td>$${p.qGross.toLocaleString()}</td>
+          <td>$${p.qPaid.toLocaleString()}</td>
+          <td>$${p.mGross.toLocaleString()}</td>
+          <td>$${p.mPaid.toLocaleString()}</td>
+        </tr></tbody>
+      </table>
       <div class="report-section-heading">Qualified &amp; Meeting Booked (${qualifiedBooked.length})</div>
       ${reportTable(qualifiedBooked)}
       <div class="report-section-heading">Qualified but Not Booked (${qualifiedNotBooked.length})</div>
