@@ -631,11 +631,6 @@
   .mandate-goal-item b, .mandate-gatetext-item b { white-space: nowrap; }
   .mandate-gatetext-item.current { color: var(--text); }
   .mandate-gatetext-deadline { color: var(--muted); font-weight: 500; font-size: 11px; }
-  .mandate-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
-  .mandate-tile { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--surface2); min-width: 0; }
-  .mandate-tile-label { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
-  .mandate-tile-value { font-size: 20px; font-weight: 700; }
-  .mandate-tile-sub { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
   .mandate-inputs { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; align-items: center; font-size: 11px; color: var(--muted); }
   .mandate-inputs input[type=number] { width: 62px; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 5px; padding: 3px 6px; font-size: 12px; }
 
@@ -816,6 +811,52 @@
     <div class="charts-grid">
       <div class="chart-card full">
         <div class="chart-header">
+          <span class="chart-title"><span id="chartActivityTitle">Meetings Booked</span> <span class="goal-info" id="info-chartActivity" title="Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartActivity"></div>
+            <span class="activity-metric-checks">
+              <label class="chart-cumulative-toggle activity-metric-check" style="margin-right:0">
+                <input type="checkbox" class="metric-check-chartActivity" value="leadVol" checked onchange="onActivityMetricChange(event)">
+                <span class="toggle-track"></span>
+                <span class="toggle-text">Lead Volume</span>
+              </label>
+              <label class="chart-cumulative-toggle activity-metric-check" style="margin-right:0">
+                <input type="checkbox" class="metric-check-chartActivity" value="meetings" checked onchange="onActivityMetricChange(event)">
+                <span class="toggle-track"></span>
+                <span class="toggle-text">Meetings Booked</span>
+              </label>
+              <label class="chart-cumulative-toggle activity-metric-check">
+                <input type="checkbox" class="metric-check-chartActivity" value="meetingsHeld" checked onchange="onActivityMetricChange(event)">
+                <span class="toggle-track"></span>
+                <span class="toggle-text">Meetings Held</span>
+              </label>
+            </span>
+            <select class="chart-granularity" id="teamsComparison-chartActivity" onchange="onActivityGroupChange()">
+              <option value="off" selected>Group: Combined</option>
+              <option value="on">Group: US vs OUS Teams</option>
+              <option value="sdr">Group: Per SDR</option>
+            </select>
+            <select class="chart-granularity" id="granularity-chartActivity" onchange="renderCharts(getFilteredDays())">
+              <option value="daily" id="granularityDailyOpt-chartActivity">Daily</option>
+              <option value="weekly" selected>Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <label class="chart-cumulative-toggle" id="combinedToggleWrap-chartActivity" style="display:none">
+              <input type="checkbox" id="modeToggle-chartActivity" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Combined</span>
+            </label>
+            <label class="chart-cumulative-toggle" id="cumulativeToggleWrap-chartActivity" style="display:none">
+              <input type="checkbox" id="cumulativeToggle-chartActivity" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Cumulative</span>
+            </label>
+          </div>
+        </div>
+        <canvas id="chartActivity"></canvas>
+      </div>
+      <div class="chart-card full">
+        <div class="chart-header">
           <span class="chart-title">Meeting Booked Rate % <span class="goal-info" id="info-chartMeetingRate" title="Meetings Booked ÷ Lead Volume for each bucket — numerator and denominator are summed across the whole bucket first, then divided (never an average of daily rates, which would over-weight thin days). Dashed Target line = your Meeting Booked Rate target goal; dashed Pace line = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetingRate"></div>
@@ -990,53 +1031,7 @@
       </div>
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title"><span id="chartActivityTitle">Meetings Booked</span> <span class="goal-info" id="info-chartActivity" title="Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
-          <div class="chart-header-right">
-            <div class="chart-legend" id="legend-chartActivity"></div>
-            <span class="activity-metric-checks">
-              <label class="chart-cumulative-toggle activity-metric-check" style="margin-right:0">
-                <input type="checkbox" class="metric-check-chartActivity" value="leadVol" checked onchange="onActivityMetricChange(event)">
-                <span class="toggle-track"></span>
-                <span class="toggle-text">Lead Volume</span>
-              </label>
-              <label class="chart-cumulative-toggle activity-metric-check" style="margin-right:0">
-                <input type="checkbox" class="metric-check-chartActivity" value="meetings" checked onchange="onActivityMetricChange(event)">
-                <span class="toggle-track"></span>
-                <span class="toggle-text">Meetings Booked</span>
-              </label>
-              <label class="chart-cumulative-toggle activity-metric-check">
-                <input type="checkbox" class="metric-check-chartActivity" value="meetingsHeld" checked onchange="onActivityMetricChange(event)">
-                <span class="toggle-track"></span>
-                <span class="toggle-text">Meetings Held</span>
-              </label>
-            </span>
-            <select class="chart-granularity" id="teamsComparison-chartActivity" onchange="onActivityGroupChange()">
-              <option value="off" selected>Group: Combined</option>
-              <option value="on">Group: US vs OUS Teams</option>
-              <option value="sdr">Group: Per SDR</option>
-            </select>
-            <select class="chart-granularity" id="granularity-chartActivity" onchange="renderCharts(getFilteredDays())">
-              <option value="daily" id="granularityDailyOpt-chartActivity">Daily</option>
-              <option value="weekly" selected>Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-            <label class="chart-cumulative-toggle" id="combinedToggleWrap-chartActivity" style="display:none">
-              <input type="checkbox" id="modeToggle-chartActivity" onchange="renderCharts(getFilteredDays())">
-              <span class="toggle-track"></span>
-              <span class="toggle-text">Combined</span>
-            </label>
-            <label class="chart-cumulative-toggle" id="cumulativeToggleWrap-chartActivity" style="display:none">
-              <input type="checkbox" id="cumulativeToggle-chartActivity" onchange="renderCharts(getFilteredDays())">
-              <span class="toggle-track"></span>
-              <span class="toggle-text">Cumulative</span>
-            </label>
-          </div>
-        </div>
-        <canvas id="chartActivity"></canvas>
-      </div>
-      <div class="chart-card full">
-        <div class="chart-header">
-          <span class="chart-title">Meeting Attendance by SDR <span class="goal-info" id="info-chartMeetingAttendance" title="Bar height = resolved meetings (Meeting Done + Meeting Not Atended + Meeting Rejected) for that SDR, bucketed by when the LEAD was created (not when the meeting was booked/held — that date isn't available in the export), over the selected date range — Meeting Scheduled is excluded since it hasn't happened yet. The dark segment is the portion that was Meeting Not Atended or Meeting Rejected — the % shown is that segment's share of the SDR's resolved meetings. Always shows all 4 SDRs regardless of the view-tab selection above. Average = one bar per SDR totaling the whole selected range; Week over week = one grouped bar per SDR per week, so you can see the trend instead of just the period total.">ⓘ</span></span>
+          <span class="chart-title">Meeting Attendance by SDR <span class="goal-info" id="info-chartMeetingAttendance" title="Bar height = resolved meetings (Meeting Done + Meeting Not Atended + Meeting Rejected) for that SDR, bucketed by when the LEAD was created (not when the meeting was booked/held — that date isn't available in the export), over the selected date range — Meeting Scheduled is excluded since it hasn't happened yet. The dark segment is Meeting Not Atended only (Meeting Rejected is excluded — that's an AE call, tracked separately) — the % shown is that segment's share of the SDR's resolved meetings. Always shows all 4 SDRs regardless of the view-tab selection above. Average = one bar per SDR totaling the whole selected range; Week over week = one grouped bar per SDR per week, so you can see the trend instead of just the period total. 100% view normalizes every bar to the same height so you can compare the not-attended share directly, instead of eyeballing it against varying bar heights.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetingAttendance"></div>
             <select class="chart-granularity" id="teamsComparison-chartMeetingAttendance" onchange="renderCharts(getFilteredDays())">
@@ -1052,6 +1047,11 @@
               <option value="business">B2B only</option>
               <option value="b2c">B2C only</option>
             </select>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="pctToggle-chartMeetingAttendance" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">100% view</span>
+            </label>
           </div>
         </div>
         <canvas id="chartMeetingAttendance"></canvas>
@@ -1059,7 +1059,7 @@
     </div>
 
     <!-- DATA HYGIENE -->
-    <div class="hygiene-section expanded" id="hygieneSection">
+    <div class="hygiene-section" id="hygieneSection">
       <div class="hygiene-header" onclick="toggleHygieneSection()">
         <div class="hygiene-header-left">
           <span class="hygiene-title">Data Hygiene <span class="goal-info" title="Checks every lead (all SDRs, B2B + B2C, regardless of the Leads: filter) against the marking laws listed at the bottom of this section — rules derived from the team's own majority conventions in past data. Weekly score per SDR = 100 minus (weighted violation points ÷ leads handled that week) × 100, floored at 0 — so one severe violation in a 30-lead week costs 10 points, and clean marking scores 100. Recomputed from the current CSV on every load, so fixing a lead in Airtable clears its violation on the next refresh.">ⓘ</span></span>
@@ -1154,7 +1154,7 @@
     </div>
 
     <!-- MANDATE SCOREBOARD (progress vs. the founders' onboarding + strategic briefing docs) -->
-    <div class="mandate-section expanded" id="mandateSection">
+    <div class="mandate-section" id="mandateSection">
       <div class="mandate-header" onclick="toggleMandateSection()">
         <div class="mandate-header-left">
           <span class="mandate-title">Mandate Scoreboard <span class="goal-info" title="Progress against the SDR Team Lead onboarding doc and strategic briefing (May 2026): the six Team Lead KPIs, the 90-day gates (counted from June 1, 2026), and the funnel numbers the founders watch. Everything here counts B2B leads only — the briefing's 1,700/month figure is business leads (BL), which is what the mandate is about — summed across all SDRs (team roll-up, not per SDR) for the current calendar month, regardless of the filters above. Doc baselines are shown as references; targets are editable below and via Monthly Targets.">ⓘ</span></span>
@@ -1177,19 +1177,17 @@
           <div class="mandate-subheading" id="mandateKpiHeading">Month over Month</div>
           <select class="chart-granularity" id="mandateHoursFilter" onchange="renderMandateSection()">
             <option value="all">Speed-to-Lead: On + Off hours</option>
-            <option value="on">Speed-to-Lead: On-hours only</option>
+            <option value="on" selected>Speed-to-Lead: On-hours only</option>
             <option value="off">Speed-to-Lead: Off-hours only</option>
           </select>
         </div>
         <div style="overflow-x:auto"><table class="mandate-kpi-table" id="mandateKpiTable"></table></div>
-        <div class="mandate-subheading">Move the Needle <span class="goal-info" title="The four numbers from the strategic briefing that the founders actually watch. Not-responsive is the single largest leak in the company funnel ('move this number and you move the whole business'). All four count B2B leads only, team-wide.">ⓘ</span></div>
-        <div class="mandate-tiles" id="mandateTiles"></div>
         <div class="mandate-inputs" id="mandateInputs"></div>
       </div>
     </div>
 
     <!-- COMMISSION CALCULATOR -->
-    <div class="commission-section expanded" id="commissionSection">
+    <div class="commission-section" id="commissionSection">
       <div class="commission-title-row" onclick="toggleCommissionSection()">
         <div>
           <div class="commission-title">Commission Calculator</div>
@@ -2049,12 +2047,13 @@ function isQualifiedLead(r) {
   return (r['SQL status'] || '').trim().toLowerCase() === 'qualified';
 }
 function computeMetrics(leads) {
-  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, meetings_held: 0, speed_to_lead_matched: 0, speed_to_lead_eligible: 0, speed_to_lead_mismatch: 0,
+  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, meetings_held: 0, meetings_no_show: 0, speed_to_lead_matched: 0, speed_to_lead_eligible: 0, speed_to_lead_mismatch: 0,
     speed_to_lead_on_matched: 0, speed_to_lead_on_eligible: 0,
     speed_to_lead_off_matched: 0, speed_to_lead_off_eligible: 0 };
   const meetings = leads.filter(isMeetingBooked).length;
   const meetings_not_attended = leads.filter(isMeetingNotAttended).length;
   const meetings_resolved = leads.filter(isMeetingResolved).length;
+  const meetings_no_show = leads.filter(r => r['Meeting Status'] === 'Meeting Not Atended').length;
   // Meetings that actually took place — Meeting Status = Meeting Done exactly
   // (distinct from "Booked", which also counts still-upcoming Scheduled
   // meetings and the Closed-implies-a-meeting-happened inference).
@@ -2096,6 +2095,7 @@ function computeMetrics(leads) {
     meetings_not_attended,
     meetings_resolved,
     meetings_held,
+    meetings_no_show,
     speed_to_lead_matched,
     speed_to_lead_eligible,
     speed_to_lead_mismatch,
@@ -2286,13 +2286,13 @@ function metricsForSelection(dataset, day, view) {
   const sum = f => parts.reduce((a, p) => a + (p[f] || 0), 0);
   const leads = sum('leads'), meetings = sum('meetings'), qualified = sum('qualified'),
         non_responsive = sum('non_responsive'), ae_dq = sum('ae_dq'), sdr_dq = sum('sdr_dq'), active_pipeline = sum('active_pipeline'),
-        meetings_not_attended = sum('meetings_not_attended'), meetings_resolved = sum('meetings_resolved'), meetings_held = sum('meetings_held'),
+        meetings_not_attended = sum('meetings_not_attended'), meetings_resolved = sum('meetings_resolved'), meetings_held = sum('meetings_held'), meetings_no_show = sum('meetings_no_show'),
         speed_to_lead_matched = sum('speed_to_lead_matched'), speed_to_lead_eligible = sum('speed_to_lead_eligible'), speed_to_lead_mismatch = sum('speed_to_lead_mismatch'),
         speed_to_lead_on_matched = sum('speed_to_lead_on_matched'), speed_to_lead_on_eligible = sum('speed_to_lead_on_eligible'),
         speed_to_lead_off_matched = sum('speed_to_lead_off_matched'), speed_to_lead_off_eligible = sum('speed_to_lead_off_eligible');
   return {
     leads, meetings, qualified, non_responsive, ae_dq, sdr_dq, active_pipeline,
-    meetings_not_attended, meetings_resolved, meetings_held,
+    meetings_not_attended, meetings_resolved, meetings_held, meetings_no_show,
     speed_to_lead_matched, speed_to_lead_eligible, speed_to_lead_mismatch,
     speed_to_lead_on_matched, speed_to_lead_on_eligible,
     speed_to_lead_off_matched, speed_to_lead_off_eligible,
@@ -2462,8 +2462,6 @@ function renderSummaryCards(days) {
     ${countCard('Leads Qualified', totalQualified, perSDR.map(s => ({ ...s, value: s.qualified, goal: s.qualifiedGoal })), elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified, ae ? ae.qualifiedPerDay : null, infoQualified)}
     ${rateCard('% Leads Qualified', pctQual, perSDR.map(s => ({ ...s, value: s.pctQual })), isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'status-based: blank/DQ/cold/non-respondant excluded', d.goalPctQual, false, ae ? ae.overall.pct_qualified : null, infoPctQualified)}
     ${rateCard('Non-Responsive Rate', nrRate, perSDR.map(s => ({ ...s, value: s.nrRate })), isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true, ae ? ae.overall.nr_rate : null, infoNR)}
-    ${countCard('Disqualified by AE', totalAEDQ, perSDR.map(s => ({ ...s, value: s.aedq })), elapsed, daysInMo, showProjection, totalAEDQ === 0 ? 'none this period' : 'wrong SDR qual', undefined, undefined, infoAEDQ)}
-    ${pipelineCard('Active Pipeline', activePipeline, perSDR.map(s => ({ ...s, value: s.pipeline })), meanMetric(days, v, 'active_pipeline'), lastDay, infoPipeline)}
     ${rawCalls ? speedToLeadCard('Speed-to-Lead', stlMedian, totalSTLMatched, totalSTLEligible, totalSTLMismatch, perSDR, d.goalSpeedToLead,
         { median: stlOnMedian, matched: totalSTLOnMatched, eligible: totalSTLOnEligible },
         { median: stlOffMedian, matched: totalSTLOffMatched, eligible: totalSTLOffEligible }) : pendingCard('Speed-to-Lead', 'Load a Call History CSV to enable')}
@@ -2816,8 +2814,8 @@ const ACTIVITY_METRIC_ORDER = ['leadVol', 'meetings', 'meetingsHeld'];
 const ACTIVITY_METRICS = {
   leadVol: {
     label: 'Lead Volume', field: 'leadVol',
-    singleSpec: (d, ae) => ({ type: 'count', field: 'leadVol', goal: d.goalLeads, cumulativeAllowed: true, aeBaseline: ae ? ae.leadsPerDay : null }),
-    info: 'Count of leads created per bucket, after your Leads: filter (B2B/B2C/All/Commission) is applied. Cumulative toggle switches from per-bucket counts to a running total across the range. Dashed Target = your Lead Volume goal, prorated to each bucket\'s size; no Pace shown for a straight count chart like this one.'
+    singleSpec: (d, ae) => ({ type: 'count', field: 'leadVol', cumulativeAllowed: true, aeBaseline: ae ? ae.leadsPerDay : null }),
+    info: 'Count of leads created per bucket, after your Leads: filter (B2B/B2C/All/Commission) is applied. Cumulative toggle switches from per-bucket counts to a running total across the range. No Target/Pace line shown for this straight count chart.'
   },
   meetings: {
     label: 'Meetings Booked', field: 'meetings',
@@ -3374,7 +3372,12 @@ function hygieneScoreColor(score) {
   return 'var(--red)';
 }
 function toggleHygieneSection() {
-  document.getElementById('hygieneSection').classList.toggle('expanded');
+  const section = document.getElementById('hygieneSection');
+  section.classList.toggle('expanded');
+  // Chart.js sizes off the canvas's rendered dimensions, which are 0 while
+  // the section is display:none — resize once it's actually visible so the
+  // chart isn't stuck at whatever size it had (or didn't have) at creation.
+  if (section.classList.contains('expanded') && charts.chartHygiene) charts.chartHygiene.resize();
 }
 function renderHygieneSection(days) {
   if (!rawByDay) return;
@@ -3502,13 +3505,24 @@ function closeHygieneDrilldown() {
 // the whole-team view for the weekly 1:1 with Serge.
 const MANDATE_START = '2026-06-01'; // Chase's start: beginning of June 2026
 const MANDATE_GATES = [
-  { id: 'm1', title: 'Month 1 · June', deadline: '2026-06-30', desc: 'First 2 Coordinators hired and onboarded, running the cadence under your supervision, with the operating rhythm and reporting beat live.', expectTeam: 4 },
-  { id: 'm2', title: 'Month 2 · July', deadline: '2026-07-31', desc: '2 additional Coordinators hired and onboarded; team at 5–6; cadence and handoff quality measurably tightening.', expectTeam: 5 },
-  { id: 'm3', title: 'Month 3 · August', deadline: '2026-08-31', desc: 'Full team of 6 active, a running performance rhythm, and strong, trusted coverage of the inbound flow.', expectTeam: 6 }
+  { id: 'm1', title: 'Month 1 · June', deadline: '2026-06-30', desc: 'First 2 Coordinators hired and onboarded, running the cadence under your supervision, with the operating rhythm and reporting beat live.' },
+  { id: 'm2', title: 'Month 2 · July', deadline: '2026-07-31', desc: '2 additional Coordinators hired and onboarded; team at 5–6; cadence and handoff quality measurably tightening.' },
+  { id: 'm3', title: 'Month 3 · August', deadline: '2026-08-31', desc: 'Full team of 6 active, a running performance rhythm, and strong, trusted coverage of the inbound flow.' }
 ];
 // Reference numbers from the strategic briefing (YTD Jan–May 2026 snapshot)
 const MANDATE_REF = { nrShare: 29, qualifyRate: 41, leadToDeal: 14.2, qualToClose: 35, leadsPerCoordinator: 275, targetTeam: 6 };
-const MANDATE_DEFAULTS = { activeCoordinators: 4, coverageTarget: 95, handoffMax: 30 };
+// handoffMax (AE Disqualified Rate threshold) default of 10% and noShowMax
+// default of 20% are data-driven suggestions: the historical AE Disqualified
+// rate sits around 4.3% of qualified leads and the historical pure no-show
+// rate sits around 14.2% of resolved meetings across the loaded data — both
+// defaults give some buffer above baseline without being toothless.
+// nrMax, leadToDealMin, qualToCloseMin default to the strategic briefing's
+// company-wide baselines (MANDATE_REF) so every target row is editable but
+// starts at the documented reference number. gateM1/M2/M3 default to the
+// onboarding doc's hiring gates (4 by June, 5 by July, 6 by August).
+const MANDATE_DEFAULTS = { activeCoordinators: 4, coverageTarget: 95, handoffMax: 10, noShowMax: 20,
+  nrMax: MANDATE_REF.nrShare, leadToDealMin: MANDATE_REF.leadToDeal, qualToCloseMin: MANDATE_REF.qualToClose,
+  gateM1: 4, gateM2: 5, gateM3: 6 };
 
 function mandateState() {
   try { return { ...MANDATE_DEFAULTS, ...JSON.parse(localStorage.getItem('sdr_mandate') || '{}') }; }
@@ -3577,23 +3591,6 @@ function mandateCoverage(days) {
 // by status but still open (not Closed/Lost/refunded, not AE-disqualified),
 // with no meeting ever set, created more than 21 days ago — statistically
 // dying per the "86% of wins close within 21 days" rule.
-const MANDATE_TERMINAL_STATUSES = new Set(['closed', 'lost', 'partial refund', 'deposit refund', 'full refund']);
-function mandateReengagementCount(days) {
-  const today = dubaiTodayKey();
-  let count = 0;
-  days.forEach(d => {
-    if (dayKeyAgeDays(d, today) <= 21) return;
-    SDRS.forEach(s => (((rawByDay[d] || {})[s.key]) || []).forEach(r => {
-      if (!isBusinessLead(r)) return;
-      if (!isQualifiedStatus(r['Sales status'])) return;
-      const n = normalizeSalesStatus(r['Sales status']);
-      if (MANDATE_TERMINAL_STATUSES.has(n) || n.startsWith('disqualified ae')) return;
-      if ((r['Meeting Status'] || '').trim()) return;
-      count++;
-    }));
-  });
-  return count;
-}
 function mandateClosedCount(days) {
   let count = 0;
   days.forEach(d => SDRS.forEach(s => (((rawByDay[d] || {})[s.key]) || []).forEach(r => {
@@ -3619,37 +3616,24 @@ function saveMandateStlGoal(val) {
   saveGoals();
   renderDashboard();
 }
+// Generic version of the above for any other Monthly Targets field (Meeting
+// Booked Rate, % Qualified) — lets the Mandate Scoreboard write straight into
+// the same goal inputs the rest of the dashboard reads from.
+function saveMandateGoal(fieldId, val) {
+  const el = document.getElementById(fieldId);
+  if (el) el.value = val;
+  saveGoals();
+  renderDashboard();
+}
 function renderMandateSection() {
   if (!allDataB2B || !rawByDay) return;
   const today = dubaiTodayKey();
   const monthPrefix = today.slice(0, 7);
-  const monthDays = mandateDayKeys(null, monthPrefix);
-  const prevMonthDate = new Date(Date.parse(monthPrefix + '-01') - 86400000);
-  const prevPrefix = prevMonthDate.toISOString().slice(0, 7);
-  const prevDays = mandateDayKeys(null, prevPrefix);
-  const mandateAll = mandateDayKeys(MANDATE_START, null);
   const s = mandateState();
   const d = derivedGoals();
   const monthLabel = new Date(monthPrefix + '-01').toLocaleString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
-
-  // ── This month's raw numbers (all leads, all SDRs) ──
-  const leads = mandateSum(monthDays, 'leads');
-  const meetings = mandateSum(monthDays, 'meetings');
-  const qualified = mandateSum(monthDays, 'qualified');
-  const nr = mandateSum(monthDays, 'non_responsive');
-  const aeDq = mandateSum(monthDays, 'ae_dq');
-  const resolved = mandateSum(monthDays, 'meetings_resolved');
-  const notAttended = mandateSum(monthDays, 'meetings_not_attended');
   const hoursFilter = mandateHoursFilterValue();
   const hoursLabel = hoursFilter === true ? 'on-hours' : hoursFilter === false ? 'off-hours' : 'on+off hours';
-  const stl = rawCalls ? mandateStlMedian(monthDays, hoursFilter) : null;
-  const cov = mandateCoverage(monthDays);
-  const qualPct = leads ? qualified / leads * 100 : null;
-  const nrPct = leads ? nr / leads * 100 : null;
-  const naPct = resolved ? notAttended / resolved * 100 : null;
-  const prevLeads = mandateSum(prevDays, 'leads');
-  const prevMeetings = mandateSum(prevDays, 'meetings');
-  const prevNrPct = prevLeads ? mandateSum(prevDays, 'non_responsive') / prevLeads * 100 : null;
 
   // ── Your Goals (left) / Your Gates (right): static reference text, sourced
   // straight from the onboarding doc's "Your KPIs as Team Lead" table and its
@@ -3661,7 +3645,7 @@ function renderMandateSection() {
     ['% of leads qualified', 'Quality of the team\'s qualification, not just volume.'],
     ['Speed-to-lead', 'How fast the team makes first contact — the biggest driver of conversion.'],
     ['Lead coverage', 'Share of the monthly lead flow actively worked, no leakage.'],
-    ['Handoff quality', 'How well the AE team rates the meetings and context you pass (tracked here via a data proxy — no direct AE rating exists yet).']
+    ['Handoff quality', 'How well the AE team rates the meetings and context you pass — measured via the AE Disqualified Rate, the AE\'s own call on qualifications the team handed off.']
   ];
   document.getElementById('mandateGoalsList').innerHTML = MANDATE_GOAL_TEXT.map(([name, desc]) =>
     `<div class="mandate-goal-item"><b>${escapeHtml(name)}:</b><span>${escapeHtml(desc)}</span></div>`).join('');
@@ -3686,36 +3670,58 @@ function renderMandateSection() {
     const mMeetings = mandateSum(days, 'meetings');
     const mQualified = mandateSum(days, 'qualified');
     const mResolved = mandateSum(days, 'meetings_resolved');
-    const mNotAttended = mandateSum(days, 'meetings_not_attended');
+    const mNoShow = mandateSum(days, 'meetings_no_show');
+    const mAeDq = mandateSum(days, 'ae_dq');
+    const mNr = mandateSum(days, 'non_responsive');
+    const mClosed = mandateClosedCount(days);
     const mStl = rawCalls ? mandateStlMedian(days, hoursFilter) : null;
     const mCov = mandateCoverage(days);
     const mQualPct = mLeads ? mQualified / mLeads * 100 : null;
-    const mNaPct = mResolved ? mNotAttended / mResolved * 100 : null;
+    const mNoShowPct = mResolved ? mNoShow / mResolved * 100 : null;
+    const mAeDqPct = mQualified ? mAeDq / mQualified * 100 : null;
+    const mNrPct = mLeads ? mNr / mLeads * 100 : null;
+    const mLeadToDealPct = mLeads ? mClosed / mLeads * 100 : null;
+    const mQualToClosePct = mQualified ? mClosed / mQualified * 100 : null;
     const mMeetingsTarget = d.goalMeetingRate ? d.goalMeetingRate / 100 * mLeads : null;
+    const mMeetingRatePct = mLeads ? mMeetings / mLeads * 100 : null;
+    // Compare the same rounded-to-the-minute value the table displays
+    // (fmtMinutes rounds) so a value shown as e.g. "5m" that's really 5.4m
+    // doesn't fail a "<=5m" target while displaying as a pass.
+    const mStlRounded = mStl != null ? Math.round(mStl) : null;
     return {
       prefix, isPartial, hasData,
       label: new Date(prefix + '-01').toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }) + (isPartial ? ' (MTD)' : ''),
       meetings: mMeetings, meetingsOk: hasData && mMeetingsTarget != null ? mMeetings >= mMeetingsTarget : null,
+      meetingRatePct: mMeetingRatePct,
       qualPct: mQualPct, qualOk: hasData && mQualPct != null && d.goalPctQual ? mQualPct >= d.goalPctQual : null,
-      stl: mStl, stlOk: hasData && mStl != null && d.goalSpeedToLead ? mStl <= d.goalSpeedToLead : null,
+      stl: mStl, stlOk: hasData && mStlRounded != null && d.goalSpeedToLead ? mStlRounded <= d.goalSpeedToLead : null,
       covPct: mCov.pct, covOk: hasData && mCov.pct != null ? mCov.pct >= s.coverageTarget : null,
-      naPct: mNaPct, naOk: hasData && mNaPct != null ? mNaPct <= s.handoffMax : null
+      aeDqPct: mAeDqPct, aeDqOk: hasData && mAeDqPct != null ? mAeDqPct <= s.handoffMax : null,
+      noShowPct: mNoShowPct, noShowOk: hasData && mNoShowPct != null ? mNoShowPct <= s.noShowMax : null,
+      nrPct: mNrPct, nrOk: hasData && mNrPct != null ? mNrPct < s.nrMax : null,
+      leadToDealPct: mLeadToDealPct, leadToDealOk: hasData && mLeadToDealPct != null ? mLeadToDealPct >= s.leadToDealMin : null,
+      qualToClosePct: mQualToClosePct, qualToCloseOk: hasData && mQualToClosePct != null ? mQualToClosePct >= s.qualToCloseMin : null,
+      closed: mClosed
     };
   });
+  // Editable per-gate headcount targets (default to the onboarding doc's
+  // 4 / 5 / 6), indexed the same order as MANDATE_GATES.
+  const gateTargets = [s.gateM1, s.gateM2, s.gateM3];
   const rows = [
     {
-      label: 'Hiring milestones', info: 'Current active Coordinator count (set below) vs. each month\'s cumulative team-size gate from the onboarding doc — 4 by June, 5–6 by July, 6 by August. There\'s no historical headcount data, so every month compares against the SAME live count; "…" means that gate isn\'t due yet, so it\'s not scored as behind.',
-      target: '4 by Jun · 5–6 by Jul · 6 by Aug',
-      cells: MANDATE_GATES.map(g => {
+      label: 'Hiring milestones', info: 'Current active Coordinator count (set below) vs. each month\'s cumulative team-size gate — editable below, defaults to the onboarding doc\'s 4 by June, 5 by July, 6 by August. There\'s no historical headcount data, so every month compares against the SAME live count; "…" means that gate isn\'t due yet, so it\'s not scored as behind.',
+      target: `${s.gateM1} by Jun · ${s.gateM2} by Jul · ${s.gateM3} by Aug`,
+      cells: MANDATE_GATES.map((g, i) => {
         const due = g.deadline <= today;
-        const ok = due ? s.activeCoordinators >= g.expectTeam : null;
-        return mandateMonthCell(`${s.activeCoordinators} of ${g.expectTeam}`, ok, !due);
+        const target = gateTargets[i];
+        const ok = due ? s.activeCoordinators >= target : null;
+        return mandateMonthCell(`${s.activeCoordinators} of ${target}`, ok, !due);
       })
     },
     {
-      label: 'Team meetings booked', info: 'Whole team (all 4 SDRs), B2B leads only, per calendar month — the onboarding doc measures the roll-up, not per SDR. Target = your Meeting Booked Rate target × that month\'s B2B lead volume.',
-      target: d.goalMeetingRate ? `rate ${d.goalMeetingRate}% × that month's leads` : 'set Meeting Booked Rate target',
-      cells: monthlyRows.map(r => mandateMonthCell(r.hasData ? String(r.meetings) : null, r.meetingsOk))
+      label: 'Team meetings booked', info: 'Meetings booked ÷ B2B leads, whole team (all 4 SDRs), per calendar month — the onboarding doc measures the roll-up, not per SDR. Raw counts shown in parentheses. Target = your Meeting Booked Rate target.',
+      target: d.goalMeetingRate ? `≥ ${d.goalMeetingRate}%` : 'set Meeting Booked Rate target',
+      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.meetingRatePct != null ? `${r.meetingRatePct.toFixed(1)}% (${r.meetings})` : null, r.meetingsOk))
     },
     {
       label: '% of leads qualified', info: 'Qualified ÷ B2B leads for that month, explicit status allowlist. Company-wide 41% of all business leads qualify; your team works the sub-$1k/incomplete tier.',
@@ -3733,9 +3739,29 @@ function renderMandateSection() {
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.covPct != null ? r.covPct.toFixed(1) + '%' : null, r.covOk))
     },
     {
-      label: 'Handoff quality (proxy)', info: 'No AE rating data exists, so this uses the share of the team\'s resolved meetings that were rejected or not attended. Lower is better.',
-      target: `≤ ${s.handoffMax}% no-show/rejected`,
-      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.naPct != null ? r.naPct.toFixed(1) + '%' : null, r.naOk))
+      label: 'Handoff quality (AE-rated)', info: 'AE Disqualified Rate: leads the AE bounced back as "Disqualified AE (wrong SDR qualification)" ÷ the team\'s qualified leads for that month. This is the AE\'s own judgment on the qualifications the team handed off — not a proxy — since it\'s the one place an AE explicitly overrules an SDR\'s call. Lower is better.',
+      target: `≤ ${s.handoffMax}%`,
+      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.aeDqPct != null ? r.aeDqPct.toFixed(1) + '%' : null, r.aeDqOk))
+    },
+    {
+      label: 'Meeting no-show rate', info: 'Meeting Status = Meeting Not Attended ÷ that month\'s resolved meetings (Done + Not Attended + Rejected). A lead simply not showing up — distinct from Handoff quality above, which is the AE\'s judgment on qualification.',
+      target: `≤ ${s.noShowMax}%`,
+      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.noShowPct != null ? r.noShowPct.toFixed(1) + '%' : null, r.noShowOk))
+    },
+    {
+      label: 'Non-responsive rate', info: 'Leads marked Sales status = Non respondant or Disqualified reason = Not responsive, ÷ that month\'s B2B leads. The briefing calls this the single largest leak in the company funnel. Company baseline is 29% (all business leads, Jan–May YTD) — your team works the low-value/incomplete tier, so expect to run above that; the founders watch the direction, not the absolute number. Target editable below.',
+      target: `< ${s.nrMax}%`,
+      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.nrPct != null ? r.nrPct.toFixed(1) + '%' : null, r.nrOk))
+    },
+    {
+      label: 'Lead → closed deal', info: 'Closed (won) deals ÷ that month\'s B2B leads — of every 100 leads that arrived that month, how many have turned into paying deals so far. Company benchmark is 14.2%. Recent months always run low here since a lead created this month hasn\'t had time to close yet — this isn\'t a same-month conversion rate, it\'s a running tally that keeps rising as those leads close later. Target editable below.',
+      target: `≥ ${s.leadToDealMin}% (catches up over time)`,
+      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.leadToDealPct != null ? `${r.leadToDealPct.toFixed(1)}% (${r.closed})` : null, r.leadToDealOk))
+    },
+    {
+      label: 'Qualified → closed rate', info: 'Closed (won) deals ÷ that month\'s qualified B2B leads. The strategic briefing calls this out alongside Lead → closed deal as one of the two key conversion rates — this one isolates the AE\'s close rate on what your team hands off, separate from your own qualification volume. Company benchmark is 35%. Like Lead → closed deal, recent months run low since qualified leads from this month haven\'t all had time to close yet. Target editable below.',
+      target: `≥ ${s.qualToCloseMin}% (catches up over time)`,
+      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.qualToClosePct != null ? `${r.qualToClosePct.toFixed(1)}%` : null, r.qualToCloseOk))
     }
   ];
   document.getElementById('mandateKpiHeading').textContent = 'Month over Month';
@@ -3747,63 +3773,35 @@ function renderMandateSection() {
       <td class="mandate-kpi-note">${escapeHtml(row.target)}</td>
     </tr>`).join('')}</tbody>`;
 
-  // ── Band 3: the briefing's "move the needle" numbers ──
-  const closedSinceStart = mandateClosedCount(mandateAll);
-  const leadsSinceStart = mandateSum(mandateAll, 'leads');
-  const leadToDeal = leadsSinceStart ? closedSinceStart / leadsSinceStart * 100 : null;
-  const reengage = mandateReengagementCount(mandateDayKeys(null, null));
-  const nrDelta = (nrPct != null && prevNrPct != null) ? nrPct - prevNrPct : null;
-  const tiles = [
-    {
-      label: 'Not responsive %', value: nrPct != null ? nrPct.toFixed(1) + '%' : '—',
-      color: nrPct != null ? (nrPct < MANDATE_REF.nrShare ? 'var(--green)' : 'var(--red)') : 'var(--muted)',
-      info: 'Of the team\'s B2B leads this month, the share that died marked Non respondant / Not responsive. The 29% baseline is company-wide, ALL business leads, Jan–May YTD — the briefing calls it the single biggest leak in the funnel. Your team works the low-value/incomplete tier, so expect to start above 29%; what the founders will watch is the direction.',
-      sub: `company baseline ${MANDATE_REF.nrShare}% (all BL, YTD) — the #1 leak${nrDelta != null ? ` · ${nrDelta <= 0 ? '▼' : '▲'} ${Math.abs(nrDelta).toFixed(1)}pt vs last month` : ''}`
-    },
-    {
-      label: 'Lead → closed deal (since Jun 1)', value: leadToDeal != null ? leadToDeal.toFixed(1) + '%' : '—',
-      color: 'var(--text)',
-      info: 'Plain version: of every 100 B2B leads the team has received since your June 1 start, how many have turned into paying (Closed) deals so far. Company benchmark is 14.2% (~17% once slow closes catch up). Recent leads haven\'t had time to close yet, so this number always runs a little low.',
-      sub: `${closedSinceStart} closed of ${leadsSinceStart} B2B leads · company ${MANDATE_REF.leadToDeal}%`
-    },
-    {
-      label: 'Re-engagement pool', value: `${reengage}`,
-      color: reengage > 0 ? '#d98e00' : 'var(--green)',
-      info: 'Plain version: a call-back list. B2B leads the team qualified but never got to a meeting, still sitting open 21+ days later. The briefing: 86% of deals that ever close do so within 21 days — so these are going cold right now. Chasing this list is free pipeline.',
-      sub: 'qualified, no meeting, still open after 21+ days — your call-back list'
-    },
-    {
-      label: 'Meetings trend', value: `${meetings}`,
-      color: prevMeetings ? (meetings >= prevMeetings ? 'var(--green)' : '#d98e00') : 'var(--text)',
-      info: 'Plain version: direction of travel on the metric the founders care most about. Meetings booked so far this month (B2B) next to the full previous month — a partial month will naturally look smaller until it catches up. May baseline before your team: zero.',
-      sub: `${monthLabel} so far vs ${prevMeetings} in all of last month · May baseline was 0`
-    }
-  ];
-  document.getElementById('mandateTiles').innerHTML = tiles.map(t => `
-    <div class="mandate-tile">
-      <div class="mandate-tile-label">${t.label} <span class="goal-info" title="${escapeHtml(t.info)}">ⓘ</span></div>
-      <div class="mandate-tile-value" style="color:${t.color}">${t.value}</div>
-      <div class="mandate-tile-sub">${t.sub}</div>
-    </div>`).join('');
-
-  // ── Editable mandate inputs. Speed-to-Lead goal writes to the same Monthly
-  // Targets field the charts use — one number everywhere. ──
+  // ── Editable mandate inputs. Every target row in the Month over Month
+  // table has a goal input right here — Meeting Booked Rate and % Qualified
+  // write to the same Monthly Targets fields the rest of the dashboard uses
+  // (one number, two doors), same pattern as the existing Speed-to-Lead goal. ──
   document.getElementById('mandateInputs').innerHTML = `
     <span>Active Coordinators: <input type="number" min="0" max="12" value="${s.activeCoordinators}" onchange="saveMandateNum('activeCoordinators', this.value)"></span>
+    <span>Meeting Booked Rate goal %: <input type="number" min="0" max="100" placeholder="20" value="${d.goalMeetingRate || ''}" onchange="saveMandateGoal('goal_meeting_rate', this.value)"></span>
+    <span>% Qualified goal: <input type="number" min="0" max="100" placeholder="40" value="${d.goalPctQual || ''}" onchange="saveMandateGoal('goal_pct_qual', this.value)"></span>
     <span>Speed-to-Lead goal (min): <input type="number" min="1" max="240" placeholder="5" value="${d.goalSpeedToLead || ''}" onchange="saveMandateStlGoal(this.value)" title="Research-backed target: under 5 minutes. Shared with Monthly Targets below."></span>
     <span>Coverage target %: <input type="number" min="0" max="100" value="${s.coverageTarget}" onchange="saveMandateNum('coverageTarget', this.value)"></span>
-    <span>Handoff max no-show/rejected %: <input type="number" min="0" max="100" value="${s.handoffMax}" onchange="saveMandateNum('handoffMax', this.value)"></span>
-    <span style="opacity:0.8">Meetings & % Qualified targets come from Monthly Targets below.</span>`;
+    <span>Handoff (AE Disqualified Rate) max %: <input type="number" min="0" max="100" value="${s.handoffMax}" onchange="saveMandateNum('handoffMax', this.value)" title="Suggested 10% — a buffer above the ~4.3% historical AE Disqualified rate in the loaded data."></span>
+    <span>Meeting no-show max %: <input type="number" min="0" max="100" value="${s.noShowMax}" onchange="saveMandateNum('noShowMax', this.value)" title="Suggested 20% — a buffer above the ~14.2% historical Meeting Not Attended rate in the loaded data."></span>
+    <span>Non-responsive max %: <input type="number" min="0" max="100" value="${s.nrMax}" onchange="saveMandateNum('nrMax', this.value)" title="Defaults to the strategic briefing's company-wide baseline (29%, all business leads, Jan–May YTD)."></span>
+    <span>Lead → closed deal min %: <input type="number" min="0" max="100" step="0.1" value="${s.leadToDealMin}" onchange="saveMandateNum('leadToDealMin', this.value)" title="Defaults to the strategic briefing's company-wide baseline (14.2%)."></span>
+    <span>Qualified → closed min %: <input type="number" min="0" max="100" value="${s.qualToCloseMin}" onchange="saveMandateNum('qualToCloseMin', this.value)" title="Defaults to the strategic briefing's company-wide baseline (35%)."></span>
+    <span>Hiring gate targets (Jun / Jul / Aug): <input type="number" min="0" max="12" value="${s.gateM1}" onchange="saveMandateNum('gateM1', this.value)" style="width:44px"> / <input type="number" min="0" max="12" value="${s.gateM2}" onchange="saveMandateNum('gateM2', this.value)" style="width:44px"> / <input type="number" min="0" max="12" value="${s.gateM3}" onchange="saveMandateNum('gateM3', this.value)" style="width:44px"></span>`;
 
   const currentMonthRow = monthlyRows[monthCols.indexOf(monthPrefix)];
-  const currentHiringGate = MANDATE_GATES[monthCols.indexOf(monthPrefix)];
+  const currentGateIdx = monthCols.indexOf(monthPrefix);
+  const currentHiringGate = MANDATE_GATES[currentGateIdx];
+  const currentGateTarget = gateTargets[currentGateIdx];
   const currentOks = [
     currentMonthRow ? currentMonthRow.meetingsOk : null,
     currentMonthRow ? currentMonthRow.qualOk : null,
     currentMonthRow ? currentMonthRow.stlOk : null,
     currentMonthRow ? currentMonthRow.covOk : null,
-    currentMonthRow ? currentMonthRow.naOk : null,
-    currentHiringGate && currentHiringGate.deadline <= today ? (s.activeCoordinators >= currentHiringGate.expectTeam) : null
+    currentMonthRow ? currentMonthRow.aeDqOk : null,
+    currentMonthRow ? currentMonthRow.noShowOk : null,
+    currentHiringGate && currentHiringGate.deadline <= today ? (s.activeCoordinators >= currentGateTarget) : null
   ];
   const overallOk = currentOks.filter(v => v === true).length;
   const overallScored = currentOks.filter(v => v !== null).length;
@@ -3855,6 +3853,8 @@ function renderMeetingAttendanceChart(days) {
   const leadTypeEl = document.getElementById('leadType-chartMeetingAttendance');
   const leadType = leadTypeEl ? leadTypeEl.value : 'all';
   const dataSource = leadType === 'business' ? allDataB2B : leadType === 'b2c' ? allDataB2C : allDataAll;
+  const pctEl = document.getElementById('pctToggle-chartMeetingAttendance');
+  const pct100 = !!(pctEl && pctEl.checked);
   // Teams comparison collapses the normal 4-SDR breakdown into US Team/OUS
   // Team groups instead — each "group" below is either a single SDR (key: a
   // string) or a team (key: an array of member keys); sumMetric() already
@@ -3863,24 +3863,34 @@ function renderMeetingAttendanceChart(days) {
   const buckets = weekly ? bucketize(days, 'weekly') : [{ label: null, days }];
   const labels = weekly ? buckets.map(b => b.label) : groups.map(g => g.label);
 
+  // Not Attended only — Meeting Rejected is excluded from this ratio (a
+  // rejection is the AE's call, tracked separately as Handoff quality; this
+  // chart is specifically about the lead not showing up).
   const datasets = weekly
     ? groups.flatMap(g => {
-        const naData = buckets.map(b => sumMetricFrom(dataSource, b.days, g.key, 'meetings_not_attended'));
+        const naData = buckets.map(b => sumMetricFrom(dataSource, b.days, g.key, 'meetings_no_show'));
         const doneData = buckets.map((b, i) => sumMetricFrom(dataSource, b.days, g.key, 'meetings_resolved') - naData[i]);
+        const totals = naData.map((na, i) => na + doneData[i]);
+        const naOut = pct100 ? naData.map((na, i) => totals[i] ? na / totals[i] * 100 : 0) : naData;
+        const doneOut = pct100 ? doneData.map((done, i) => totals[i] ? done / totals[i] * 100 : 0) : doneData;
         return [
-          { label: `${g.label} — Not Attended/Rejected`, data: naData, backgroundColor: '#8a1f1f', stack: g.label, _pairId: g.label, _isNA: true },
-          { label: `${g.label} — Meeting Done`, data: doneData, backgroundColor: g.color, stack: g.label, _pairId: g.label, _isNA: false }
+          { label: `${g.label} — Not Attended`, data: naOut, _rawNA: naData, _rawDone: doneData, backgroundColor: '#8a1f1f', stack: g.label, _pairId: g.label, _isNA: true },
+          { label: `${g.label} — Meeting Done`, data: doneOut, _rawNA: naData, _rawDone: doneData, backgroundColor: g.color, stack: g.label, _pairId: g.label, _isNA: false }
         ];
       })
     : (() => {
         const rows = groups.map(g => {
           const total = sumMetricFrom(dataSource, days, g.key, 'meetings_resolved');
-          const notAttended = sumMetricFrom(dataSource, days, g.key, 'meetings_not_attended');
+          const notAttended = sumMetricFrom(dataSource, days, g.key, 'meetings_no_show');
           return { ...g, total, notAttended, completed: total - notAttended };
         });
+        const naRaw = rows.map(r => r.notAttended);
+        const doneRaw = rows.map(r => r.completed);
+        const naOut = pct100 ? rows.map(r => r.total ? r.notAttended / r.total * 100 : 0) : naRaw;
+        const doneOut = pct100 ? rows.map(r => r.total ? r.completed / r.total * 100 : 0) : doneRaw;
         return [
-          { label: 'Not Attended / Rejected', data: rows.map(r => r.notAttended), backgroundColor: '#8a1f1f', stack: 's', _pairId: 'all', _isNA: true },
-          { label: 'Meeting Done', data: rows.map(r => r.completed), backgroundColor: rows.map(r => r.color), stack: 's', _pairId: 'all', _isNA: false }
+          { label: 'Not Attended', data: naOut, _rawNA: naRaw, _rawDone: doneRaw, backgroundColor: '#8a1f1f', stack: 's', _pairId: 'all', _isNA: true },
+          { label: 'Meeting Done', data: doneOut, _rawNA: naRaw, _rawDone: doneRaw, backgroundColor: rows.map(r => r.color), stack: 's', _pairId: 'all', _isNA: false }
         ];
       })();
 
@@ -3900,22 +3910,20 @@ function renderMeetingAttendanceChart(days) {
           callbacks: {
             label: ctx => {
               const ds = ctx.dataset;
-              const pairDs = ctx.chart.data.datasets.find(d => d._pairId === ds._pairId && d._isNA !== ds._isNA);
               const i = ctx.dataIndex;
-              const na = (ds._isNA ? ds : pairDs).data[i] || 0;
-              const done = (ds._isNA ? pairDs : ds).data[i] || 0;
+              const na = ds._rawNA[i] || 0;
+              const done = ds._rawDone[i] || 0;
               if (ds._isNA) {
                 const total = na + done;
                 const pct = total ? (na / total * 100).toFixed(1) : '0.0';
-                return ` ${weekly ? 'Not Attended/Rejected' : ds.label}: ${na} (${pct}%)`;
+                return ` ${weekly ? 'Not Attended' : ds.label}: ${na} (${pct}%)`;
               }
               return ` ${weekly ? 'Meeting Done' : ds.label}: ${done}`;
             },
             footer: items => {
               const ds = items[0].dataset;
-              const pairDs = items[0].chart.data.datasets.find(d => d._pairId === ds._pairId && d._isNA !== ds._isNA);
               const i = items[0].dataIndex;
-              const total = (ds.data[i] || 0) + (pairDs.data[i] || 0);
+              const total = (ds._rawNA[i] || 0) + (ds._rawDone[i] || 0);
               return weekly ? ` ${ds._pairId} total resolved: ${total}` : ` Total resolved: ${total}`;
             }
           }
@@ -3923,7 +3931,9 @@ function renderMeetingAttendanceChart(days) {
       },
       scales: {
         x: { stacked: true, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { display: false } },
-        y: { stacked: true, beginAtZero: true, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' } }
+        y: { stacked: true, beginAtZero: true, max: pct100 ? 100 : undefined,
+          ticks: { color: '#5b5f78', font: { size: 11 }, callback: v => pct100 ? `${v}%` : v },
+          grid: { color: '#e4e6ef' } }
       }
     },
     plugins: [meetingAttendancePctPlugin]
@@ -3931,8 +3941,8 @@ function renderMeetingAttendanceChart(days) {
   const legendEl = document.getElementById('legend-chartMeetingAttendance');
   if (legendEl) {
     const items = weekly
-      ? [{ label: 'Not Attended / Rejected', color: '#8a1f1f' }, ...groups.map(g => ({ label: g.label, color: g.color }))]
-      : [{ label: 'Not Attended / Rejected (%)', color: '#8a1f1f' }, { label: 'Meeting Done', color: '#4285f4' }];
+      ? [{ label: 'Not Attended', color: '#8a1f1f' }, ...groups.map(g => ({ label: g.label, color: g.color }))]
+      : [{ label: 'Not Attended (%)', color: '#8a1f1f' }, { label: 'Meeting Done', color: '#4285f4' }];
     legendEl.innerHTML = items.map(it =>
       `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
     ).join('');
@@ -4352,30 +4362,30 @@ function commissionCard(sdr, days, monthKey) {
     </div>
     <div class="commission-stats">
       <div class="commission-stat">
-        <div class="commission-stat-label">New Business Leads</div>
+        <div class="commission-stat-label">New Business Leads <span class="goal-info" title="Count of B2B (business) leads that arrived in the selected period, for this SDR only. Does not include B2C leads — those are the card to the right.">ⓘ</span></div>
         <div class="commission-stat-value">${m.b2bLeads}</div>
       </div>
       <div class="commission-stat">
-        <div class="commission-stat-label">B2C Leads</div>
+        <div class="commission-stat-label">B2C Leads <span class="goal-info" title="Count of B2C (consumer) leads that arrived in the selected period, for this SDR only. Not used as the denominator for any incentive rate below — those are all judged as a % of B2B leads only — but B2C leads DO count toward the Qualified Leads and Meetings totals themselves.">ⓘ</span></div>
         <div class="commission-stat-value">${m.b2cLeads}</div>
       </div>
       <div class="commission-stat">
-        <div class="commission-stat-label">Qualified Leads</div>
+        <div class="commission-stat-label">Qualified Leads <span class="goal-info" title="Counted from ALL of this SDR's leads in the period — B2B and B2C combined, not B2B-only — using the same qualified-status allowlist as the rest of the dashboard. The rate shown below is that count divided by B2B leads only (the incentive brackets are judged against B2B volume), so a B2C qualification can push the rate above 100% of B2B leads in an unusual month.">ⓘ</span></div>
         <div class="commission-stat-value">${m.qualified}</div>
         <div class="commission-stat-sub">${m.qualifiedRate.toFixed(1)}% of B2B leads</div>
       </div>
       <div class="commission-stat">
-        <div class="commission-stat-label">Meetings</div>
+        <div class="commission-stat-label">Meetings <span class="goal-info" title="Counted from ALL of this SDR's leads in the period — B2B and B2C combined, not B2B-only. Meeting Status = Scheduled, Done, Rejected, or Not Attended, plus any Closed deal (which implies a meeting happened even if status was left blank). The rate shown below is that count divided by B2B leads only, so B2C meetings can push the rate above 100% of B2B leads in an unusual month.">ⓘ</span></div>
         <div class="commission-stat-value">${m.meetings}</div>
         <div class="commission-stat-sub">${m.meetingRate.toFixed(1)}% of B2B leads</div>
       </div>
       <div class="commission-stat" style="grid-column: 1 / -1;">
-        <div class="commission-stat-label">Closed Deals (${monthLabelFromKey(monthKey)})</div>
+        <div class="commission-stat-label">Closed Deals (${monthLabelFromKey(monthKey)}) <span class="goal-info" title="Deals with Sales status = Closed whose Closed date falls in this calendar month — regardless of when the lead arrived or the meeting was booked (could be from an earlier month). Includes both B2B and B2C leads. Looks across this SDR's ENTIRE loaded history, not just the currently selected date range, since a deal can close well after the lead/meeting that started it.">ⓘ</span></div>
         <div class="commission-stat-value">${m.closedDeals}</div>
         <div class="commission-stat-sub">$${Math.round(m.closedRevenueUSD).toLocaleString()} closed revenue, USD-equivalent (deals that CLOSED this month, regardless of when the lead/meeting originated)</div>
       </div>
       <div class="commission-stat" style="grid-column: 1 / -1;">
-        <div class="commission-stat-label">Meeting Quality Multiplier</div>
+        <div class="commission-stat-label">Meeting Quality Multiplier <span class="goal-info" title="Rejected or no-show meetings ÷ all meetings this SDR booked, B2B leads only, in a trailing 30-day window ending 1 week ago (not the selected date range or calendar month — see \'How compensation works\' below for why). Includes meetings still Scheduled or already Closed within that window. Scales the Qualified Leads and Meeting incentives only — New Sales Incentive is unaffected.">ⓘ</span></div>
         <div class="commission-stat-value">&times;${payout.tier.multiplier.toFixed(2)}</div>
         <div class="commission-stat-sub">${payout.rate.toFixed(1)}% rejection — ${payout.bad} of ${payout.booked} booked meetings rejected/no-show (trailing 30 days, ending 1 week ago; B2B leads only, incl. scheduled &amp; closed)</div>
       </div>
