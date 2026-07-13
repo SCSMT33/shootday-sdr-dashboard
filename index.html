@@ -2035,13 +2035,13 @@ function isQualifiedLead(r) {
   return (r['SQL status'] || '').trim().toLowerCase() === 'qualified';
 }
 function computeMetrics(leads) {
-  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, meetings_held: 0, meetings_rejected: 0, speed_to_lead_matched: 0, speed_to_lead_eligible: 0, speed_to_lead_mismatch: 0,
+  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, meetings_held: 0, meetings_no_show: 0, speed_to_lead_matched: 0, speed_to_lead_eligible: 0, speed_to_lead_mismatch: 0,
     speed_to_lead_on_matched: 0, speed_to_lead_on_eligible: 0,
     speed_to_lead_off_matched: 0, speed_to_lead_off_eligible: 0 };
   const meetings = leads.filter(isMeetingBooked).length;
   const meetings_not_attended = leads.filter(isMeetingNotAttended).length;
   const meetings_resolved = leads.filter(isMeetingResolved).length;
-  const meetings_rejected = leads.filter(r => r['Meeting Status'] === 'Meeting Rejected').length;
+  const meetings_no_show = leads.filter(r => r['Meeting Status'] === 'Meeting Not Atended').length;
   // Meetings that actually took place — Meeting Status = Meeting Done exactly
   // (distinct from "Booked", which also counts still-upcoming Scheduled
   // meetings and the Closed-implies-a-meeting-happened inference).
@@ -2083,7 +2083,7 @@ function computeMetrics(leads) {
     meetings_not_attended,
     meetings_resolved,
     meetings_held,
-    meetings_rejected,
+    meetings_no_show,
     speed_to_lead_matched,
     speed_to_lead_eligible,
     speed_to_lead_mismatch,
@@ -2274,13 +2274,13 @@ function metricsForSelection(dataset, day, view) {
   const sum = f => parts.reduce((a, p) => a + (p[f] || 0), 0);
   const leads = sum('leads'), meetings = sum('meetings'), qualified = sum('qualified'),
         non_responsive = sum('non_responsive'), ae_dq = sum('ae_dq'), sdr_dq = sum('sdr_dq'), active_pipeline = sum('active_pipeline'),
-        meetings_not_attended = sum('meetings_not_attended'), meetings_resolved = sum('meetings_resolved'), meetings_held = sum('meetings_held'), meetings_rejected = sum('meetings_rejected'),
+        meetings_not_attended = sum('meetings_not_attended'), meetings_resolved = sum('meetings_resolved'), meetings_held = sum('meetings_held'), meetings_no_show = sum('meetings_no_show'),
         speed_to_lead_matched = sum('speed_to_lead_matched'), speed_to_lead_eligible = sum('speed_to_lead_eligible'), speed_to_lead_mismatch = sum('speed_to_lead_mismatch'),
         speed_to_lead_on_matched = sum('speed_to_lead_on_matched'), speed_to_lead_on_eligible = sum('speed_to_lead_on_eligible'),
         speed_to_lead_off_matched = sum('speed_to_lead_off_matched'), speed_to_lead_off_eligible = sum('speed_to_lead_off_eligible');
   return {
     leads, meetings, qualified, non_responsive, ae_dq, sdr_dq, active_pipeline,
-    meetings_not_attended, meetings_resolved, meetings_held, meetings_rejected,
+    meetings_not_attended, meetings_resolved, meetings_held, meetings_no_show,
     speed_to_lead_matched, speed_to_lead_eligible, speed_to_lead_mismatch,
     speed_to_lead_on_matched, speed_to_lead_on_eligible,
     speed_to_lead_off_matched, speed_to_lead_off_eligible,
@@ -3496,12 +3496,12 @@ const MANDATE_GATES = [
 ];
 // Reference numbers from the strategic briefing (YTD Jan–May 2026 snapshot)
 const MANDATE_REF = { nrShare: 29, qualifyRate: 41, leadToDeal: 14.2, qualToClose: 35, leadsPerCoordinator: 275, targetTeam: 6 };
-// rejectedMax default of 10% is a data-driven suggestion: the historical
-// Meeting Rejected (AE rejects the meeting outright) rate across the loaded
-// B2B data sits around 6% — 10% gives some buffer above that baseline
-// without being toothless, matching how handoffMax (30%) sits above the
-// observed ~20% combined no-show/rejected proxy rate.
-const MANDATE_DEFAULTS = { activeCoordinators: 4, coverageTarget: 95, handoffMax: 30, rejectedMax: 10 };
+// handoffMax (AE Disqualified Rate threshold) default of 10% and noShowMax
+// default of 20% are data-driven suggestions: the historical AE Disqualified
+// rate sits around 4.3% of qualified leads and the historical pure no-show
+// rate sits around 14.2% of resolved meetings across the loaded data — both
+// defaults give some buffer above baseline without being toothless.
+const MANDATE_DEFAULTS = { activeCoordinators: 4, coverageTarget: 95, handoffMax: 10, noShowMax: 20 };
 
 function mandateState() {
   try { return { ...MANDATE_DEFAULTS, ...JSON.parse(localStorage.getItem('sdr_mandate') || '{}') }; }
@@ -3612,6 +3612,15 @@ function saveMandateStlGoal(val) {
   saveGoals();
   renderDashboard();
 }
+// Generic version of the above for any other Monthly Targets field (Meeting
+// Booked Rate, % Qualified) — lets the Mandate Scoreboard write straight into
+// the same goal inputs the rest of the dashboard reads from.
+function saveMandateGoal(fieldId, val) {
+  const el = document.getElementById(fieldId);
+  if (el) el.value = val;
+  saveGoals();
+  renderDashboard();
+}
 function renderMandateSection() {
   if (!allDataB2B || !rawByDay) return;
   const today = dubaiTodayKey();
@@ -3630,16 +3639,12 @@ function renderMandateSection() {
   const meetings = mandateSum(monthDays, 'meetings');
   const qualified = mandateSum(monthDays, 'qualified');
   const nr = mandateSum(monthDays, 'non_responsive');
-  const aeDq = mandateSum(monthDays, 'ae_dq');
-  const resolved = mandateSum(monthDays, 'meetings_resolved');
-  const notAttended = mandateSum(monthDays, 'meetings_not_attended');
   const hoursFilter = mandateHoursFilterValue();
   const hoursLabel = hoursFilter === true ? 'on-hours' : hoursFilter === false ? 'off-hours' : 'on+off hours';
   const stl = rawCalls ? mandateStlMedian(monthDays, hoursFilter) : null;
   const cov = mandateCoverage(monthDays);
   const qualPct = leads ? qualified / leads * 100 : null;
   const nrPct = leads ? nr / leads * 100 : null;
-  const naPct = resolved ? notAttended / resolved * 100 : null;
   const prevLeads = mandateSum(prevDays, 'leads');
   const prevMeetings = mandateSum(prevDays, 'meetings');
   const prevNrPct = prevLeads ? mandateSum(prevDays, 'non_responsive') / prevLeads * 100 : null;
@@ -3654,7 +3659,7 @@ function renderMandateSection() {
     ['% of leads qualified', 'Quality of the team\'s qualification, not just volume.'],
     ['Speed-to-lead', 'How fast the team makes first contact — the biggest driver of conversion.'],
     ['Lead coverage', 'Share of the monthly lead flow actively worked, no leakage.'],
-    ['Handoff quality', 'How well the AE team rates the meetings and context you pass (tracked here via a data proxy — no direct AE rating exists yet).']
+    ['Handoff quality', 'How well the AE team rates the meetings and context you pass — measured via the AE Disqualified Rate, the AE\'s own call on qualifications the team handed off.']
   ];
   document.getElementById('mandateGoalsList').innerHTML = MANDATE_GOAL_TEXT.map(([name, desc]) =>
     `<div class="mandate-goal-item"><b>${escapeHtml(name)}:</b><span>${escapeHtml(desc)}</span></div>`).join('');
@@ -3679,13 +3684,13 @@ function renderMandateSection() {
     const mMeetings = mandateSum(days, 'meetings');
     const mQualified = mandateSum(days, 'qualified');
     const mResolved = mandateSum(days, 'meetings_resolved');
-    const mNotAttended = mandateSum(days, 'meetings_not_attended');
-    const mRejected = mandateSum(days, 'meetings_rejected');
+    const mNoShow = mandateSum(days, 'meetings_no_show');
+    const mAeDq = mandateSum(days, 'ae_dq');
     const mStl = rawCalls ? mandateStlMedian(days, hoursFilter) : null;
     const mCov = mandateCoverage(days);
     const mQualPct = mLeads ? mQualified / mLeads * 100 : null;
-    const mNaPct = mResolved ? mNotAttended / mResolved * 100 : null;
-    const mRejectedPct = mResolved ? mRejected / mResolved * 100 : null;
+    const mNoShowPct = mResolved ? mNoShow / mResolved * 100 : null;
+    const mAeDqPct = mQualified ? mAeDq / mQualified * 100 : null;
     const mMeetingsTarget = d.goalMeetingRate ? d.goalMeetingRate / 100 * mLeads : null;
     const mMeetingRatePct = mLeads ? mMeetings / mLeads * 100 : null;
     // Compare the same rounded-to-the-minute value the table displays
@@ -3700,8 +3705,8 @@ function renderMandateSection() {
       qualPct: mQualPct, qualOk: hasData && mQualPct != null && d.goalPctQual ? mQualPct >= d.goalPctQual : null,
       stl: mStl, stlOk: hasData && mStlRounded != null && d.goalSpeedToLead ? mStlRounded <= d.goalSpeedToLead : null,
       covPct: mCov.pct, covOk: hasData && mCov.pct != null ? mCov.pct >= s.coverageTarget : null,
-      naPct: mNaPct, naOk: hasData && mNaPct != null ? mNaPct <= s.handoffMax : null,
-      rejectedPct: mRejectedPct, rejectedOk: hasData && mRejectedPct != null ? mRejectedPct <= s.rejectedMax : null
+      aeDqPct: mAeDqPct, aeDqOk: hasData && mAeDqPct != null ? mAeDqPct <= s.handoffMax : null,
+      noShowPct: mNoShowPct, noShowOk: hasData && mNoShowPct != null ? mNoShowPct <= s.noShowMax : null
     };
   });
   const rows = [
@@ -3735,14 +3740,14 @@ function renderMandateSection() {
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.covPct != null ? r.covPct.toFixed(1) + '%' : null, r.covOk))
     },
     {
-      label: 'Handoff quality (proxy)', info: 'No AE rating data exists, so this uses the share of the team\'s resolved meetings that were rejected or not attended. Lower is better.',
-      target: `≤ ${s.handoffMax}% no-show/rejected`,
-      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.naPct != null ? r.naPct.toFixed(1) + '%' : null, r.naOk))
+      label: 'Handoff quality (AE-rated)', info: 'AE Disqualified Rate: leads the AE bounced back as "Disqualified AE (wrong SDR qualification)" ÷ the team\'s qualified leads for that month. This is the AE\'s own judgment on the qualifications the team handed off — not a proxy — since it\'s the one place an AE explicitly overrules an SDR\'s call. Lower is better.',
+      target: `≤ ${s.handoffMax}%`,
+      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.aeDqPct != null ? r.aeDqPct.toFixed(1) + '%' : null, r.aeDqOk))
     },
     {
-      label: 'Meeting rejected rate', info: 'Meeting Status = Meeting Rejected ÷ that month\'s resolved meetings (Done + Not Attended + Rejected). Split out from the Handoff quality proxy above because a rejected meeting is the AE actively turning down what the SDR booked — a different signal than a lead simply no-showing. Suggested target (10%) is a buffer above the ~6% historical rate seen across the loaded data.',
-      target: `≤ ${s.rejectedMax}%`,
-      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.rejectedPct != null ? r.rejectedPct.toFixed(1) + '%' : null, r.rejectedOk))
+      label: 'Meeting no-show rate', info: 'Meeting Status = Meeting Not Attended ÷ that month\'s resolved meetings (Done + Not Attended + Rejected). A lead simply not showing up — distinct from Handoff quality above, which is the AE\'s judgment on qualification.',
+      target: `≤ ${s.noShowMax}%`,
+      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.noShowPct != null ? r.noShowPct.toFixed(1) + '%' : null, r.noShowOk))
     }
   ];
   document.getElementById('mandateKpiHeading').textContent = 'Month over Month';
@@ -3793,15 +3798,18 @@ function renderMandateSection() {
       <div class="mandate-tile-sub">${t.sub}</div>
     </div>`).join('');
 
-  // ── Editable mandate inputs. Speed-to-Lead goal writes to the same Monthly
-  // Targets field the charts use — one number everywhere. ──
+  // ── Editable mandate inputs. Every target row in the Month over Month
+  // table has a goal input right here — Meeting Booked Rate and % Qualified
+  // write to the same Monthly Targets fields the rest of the dashboard uses
+  // (one number, two doors), same pattern as the existing Speed-to-Lead goal. ──
   document.getElementById('mandateInputs').innerHTML = `
     <span>Active Coordinators: <input type="number" min="0" max="12" value="${s.activeCoordinators}" onchange="saveMandateNum('activeCoordinators', this.value)"></span>
+    <span>Meeting Booked Rate goal %: <input type="number" min="0" max="100" placeholder="20" value="${d.goalMeetingRate || ''}" onchange="saveMandateGoal('goal_meeting_rate', this.value)"></span>
+    <span>% Qualified goal: <input type="number" min="0" max="100" placeholder="40" value="${d.goalPctQual || ''}" onchange="saveMandateGoal('goal_pct_qual', this.value)"></span>
     <span>Speed-to-Lead goal (min): <input type="number" min="1" max="240" placeholder="5" value="${d.goalSpeedToLead || ''}" onchange="saveMandateStlGoal(this.value)" title="Research-backed target: under 5 minutes. Shared with Monthly Targets below."></span>
     <span>Coverage target %: <input type="number" min="0" max="100" value="${s.coverageTarget}" onchange="saveMandateNum('coverageTarget', this.value)"></span>
-    <span>Handoff max no-show/rejected %: <input type="number" min="0" max="100" value="${s.handoffMax}" onchange="saveMandateNum('handoffMax', this.value)"></span>
-    <span>Meeting rejected max %: <input type="number" min="0" max="100" value="${s.rejectedMax}" onchange="saveMandateNum('rejectedMax', this.value)" title="Suggested 10% — a buffer above the ~6% historical Meeting Rejected rate in the loaded data."></span>
-    <span style="opacity:0.8">Meetings & % Qualified targets come from Monthly Targets below.</span>`;
+    <span>Handoff (AE Disqualified Rate) max %: <input type="number" min="0" max="100" value="${s.handoffMax}" onchange="saveMandateNum('handoffMax', this.value)" title="Suggested 10% — a buffer above the ~4.3% historical AE Disqualified rate in the loaded data."></span>
+    <span>Meeting no-show max %: <input type="number" min="0" max="100" value="${s.noShowMax}" onchange="saveMandateNum('noShowMax', this.value)" title="Suggested 20% — a buffer above the ~14.2% historical Meeting Not Attended rate in the loaded data."></span>`;
 
   const currentMonthRow = monthlyRows[monthCols.indexOf(monthPrefix)];
   const currentHiringGate = MANDATE_GATES[monthCols.indexOf(monthPrefix)];
@@ -3810,7 +3818,8 @@ function renderMandateSection() {
     currentMonthRow ? currentMonthRow.qualOk : null,
     currentMonthRow ? currentMonthRow.stlOk : null,
     currentMonthRow ? currentMonthRow.covOk : null,
-    currentMonthRow ? currentMonthRow.naOk : null,
+    currentMonthRow ? currentMonthRow.aeDqOk : null,
+    currentMonthRow ? currentMonthRow.noShowOk : null,
     currentHiringGate && currentHiringGate.deadline <= today ? (s.activeCoordinators >= currentHiringGate.expectTeam) : null
   ];
   const overallOk = currentOks.filter(v => v === true).length;
