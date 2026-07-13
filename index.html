@@ -4348,30 +4348,30 @@ function commissionCard(sdr, days, monthKey) {
     </div>
     <div class="commission-stats">
       <div class="commission-stat">
-        <div class="commission-stat-label">New Business Leads</div>
+        <div class="commission-stat-label">New Business Leads <span class="goal-info" title="Count of B2B (business) leads that arrived in the selected period, for this SDR only. Does not include B2C leads — those are the card to the right.">ⓘ</span></div>
         <div class="commission-stat-value">${m.b2bLeads}</div>
       </div>
       <div class="commission-stat">
-        <div class="commission-stat-label">B2C Leads</div>
+        <div class="commission-stat-label">B2C Leads <span class="goal-info" title="Count of B2C (consumer) leads that arrived in the selected period, for this SDR only. Not used as the denominator for any incentive rate below — those are all judged as a % of B2B leads only — but B2C leads DO count toward the Qualified Leads and Meetings totals themselves.">ⓘ</span></div>
         <div class="commission-stat-value">${m.b2cLeads}</div>
       </div>
       <div class="commission-stat">
-        <div class="commission-stat-label">Qualified Leads</div>
+        <div class="commission-stat-label">Qualified Leads <span class="goal-info" title="Counted from ALL of this SDR's leads in the period — B2B and B2C combined, not B2B-only — using the same qualified-status allowlist as the rest of the dashboard. The rate shown below is that count divided by B2B leads only (the incentive brackets are judged against B2B volume), so a B2C qualification can push the rate above 100% of B2B leads in an unusual month.">ⓘ</span></div>
         <div class="commission-stat-value">${m.qualified}</div>
         <div class="commission-stat-sub">${m.qualifiedRate.toFixed(1)}% of B2B leads</div>
       </div>
       <div class="commission-stat">
-        <div class="commission-stat-label">Meetings</div>
+        <div class="commission-stat-label">Meetings <span class="goal-info" title="Counted from ALL of this SDR's leads in the period — B2B and B2C combined, not B2B-only. Meeting Status = Scheduled, Done, Rejected, or Not Attended, plus any Closed deal (which implies a meeting happened even if status was left blank). The rate shown below is that count divided by B2B leads only, so B2C meetings can push the rate above 100% of B2B leads in an unusual month.">ⓘ</span></div>
         <div class="commission-stat-value">${m.meetings}</div>
         <div class="commission-stat-sub">${m.meetingRate.toFixed(1)}% of B2B leads</div>
       </div>
       <div class="commission-stat" style="grid-column: 1 / -1;">
-        <div class="commission-stat-label">Closed Deals (${monthLabelFromKey(monthKey)})</div>
+        <div class="commission-stat-label">Closed Deals (${monthLabelFromKey(monthKey)}) <span class="goal-info" title="Deals with Sales status = Closed whose Closed date falls in this calendar month — regardless of when the lead arrived or the meeting was booked (could be from an earlier month). Includes both B2B and B2C leads. Looks across this SDR's ENTIRE loaded history, not just the currently selected date range, since a deal can close well after the lead/meeting that started it.">ⓘ</span></div>
         <div class="commission-stat-value">${m.closedDeals}</div>
         <div class="commission-stat-sub">$${Math.round(m.closedRevenueUSD).toLocaleString()} closed revenue, USD-equivalent (deals that CLOSED this month, regardless of when the lead/meeting originated)</div>
       </div>
       <div class="commission-stat" style="grid-column: 1 / -1;">
-        <div class="commission-stat-label">Meeting Quality Multiplier</div>
+        <div class="commission-stat-label">Meeting Quality Multiplier <span class="goal-info" title="Rejected or no-show meetings ÷ all meetings this SDR booked, B2B leads only, in a trailing 30-day window ending 1 week ago (not the selected date range or calendar month — see \'How compensation works\' below for why). Includes meetings still Scheduled or already Closed within that window. Scales the Qualified Leads and Meeting incentives only — New Sales Incentive is unaffected.">ⓘ</span></div>
         <div class="commission-stat-value">&times;${payout.tier.multiplier.toFixed(2)}</div>
         <div class="commission-stat-sub">${payout.rate.toFixed(1)}% rejection — ${payout.bad} of ${payout.booked} booked meetings rejected/no-show (trailing 30 days, ending 1 week ago; B2B leads only, incl. scheduled &amp; closed)</div>
       </div>
