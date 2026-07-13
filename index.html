@@ -3658,6 +3658,7 @@ function renderMandateSection() {
     const mAeDqPct = mQualified ? mAeDq / mQualified * 100 : null;
     const mNrPct = mLeads ? mNr / mLeads * 100 : null;
     const mLeadToDealPct = mLeads ? mClosed / mLeads * 100 : null;
+    const mQualToClosePct = mQualified ? mClosed / mQualified * 100 : null;
     const mMeetingsTarget = d.goalMeetingRate ? d.goalMeetingRate / 100 * mLeads : null;
     const mMeetingRatePct = mLeads ? mMeetings / mLeads * 100 : null;
     // Compare the same rounded-to-the-minute value the table displays
@@ -3676,6 +3677,7 @@ function renderMandateSection() {
       noShowPct: mNoShowPct, noShowOk: hasData && mNoShowPct != null ? mNoShowPct <= s.noShowMax : null,
       nrPct: mNrPct, nrOk: hasData && mNrPct != null ? mNrPct < MANDATE_REF.nrShare : null,
       leadToDealPct: mLeadToDealPct, leadToDealOk: hasData && mLeadToDealPct != null ? mLeadToDealPct >= MANDATE_REF.leadToDeal : null,
+      qualToClosePct: mQualToClosePct, qualToCloseOk: hasData && mQualToClosePct != null ? mQualToClosePct >= MANDATE_REF.qualToClose : null,
       closed: mClosed
     };
   });
@@ -3728,6 +3730,11 @@ function renderMandateSection() {
       label: 'Lead → closed deal', info: 'Closed (won) deals ÷ that month\'s B2B leads — of every 100 leads that arrived that month, how many have turned into paying deals so far. Company benchmark is 14.2%. Recent months always run low here since a lead created this month hasn\'t had time to close yet — this isn\'t a same-month conversion rate, it\'s a running tally that keeps rising as those leads close later.',
       target: `≥ ${MANDATE_REF.leadToDeal}% (company baseline, catches up over time)`,
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.leadToDealPct != null ? `${r.leadToDealPct.toFixed(1)}% (${r.closed})` : null, r.leadToDealOk))
+    },
+    {
+      label: 'Qualified → closed rate', info: 'Closed (won) deals ÷ that month\'s qualified B2B leads. The strategic briefing calls this out alongside Lead → closed deal as one of the two key conversion rates — this one isolates the AE\'s close rate on what your team hands off, separate from your own qualification volume. Company benchmark is 35%. Like Lead → closed deal, recent months run low since qualified leads from this month haven\'t all had time to close yet.',
+      target: `≥ ${MANDATE_REF.qualToClose}% (company baseline, catches up over time)`,
+      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.qualToClosePct != null ? `${r.qualToClosePct.toFixed(1)}%` : null, r.qualToCloseOk))
     }
   ];
   document.getElementById('mandateKpiHeading').textContent = 'Month over Month';
