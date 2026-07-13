@@ -811,7 +811,7 @@
     <div class="charts-grid">
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title"><span id="chartActivityTitle">Meetings Booked</span> <span class="goal-info" id="info-chartActivity" title="Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
+          <span class="chart-title"><span id="chartActivityTitle">Meetings Booked</span> <span class="goal-info" id="info-chartActivity" title="Count of leads counted as a booked meeting (Meeting Status Scheduled/Done/Rejected/Not Atended, or Sales status Closed) — excluding deals that closed within 2 hours of the lead being created (an instant/self-serve close, not a real SDR-run meeting), regardless of Meeting Status, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartActivity"></div>
             <span class="activity-metric-checks">
@@ -2000,21 +2000,39 @@ const MEETING_BOOKED_STATUSES = ['Meeting Scheduled', 'Meeting Done', 'Meeting R
 // rather than being an AE-only special case. "Meeting Requested" is
 // deliberately NOT treated as booked — 76% of those rows end up Disqualified
 // afterward, suggesting it means "asked for," not "confirmed."
-// A deal that closed the SAME calendar day the lead came in never had time
-// for a real SDR-run meeting to happen in between — the AE closed it
-// instantly (e.g. an instant-checkout-style deal) — so it isn't credited as
-// a meeting, regardless of what Meeting Status says (blank, Scheduled, or
-// even Done). Confirmed against the founder's manual count: MJ's June
-// meetings computed to 104 here vs. the founder's 91 — the exact 13-lead gap
-// was same-day closes (6 blank-status, 7 marked Meeting Done).
-function isSameDayInstantClose(r) {
+// ─── THE "INSTANT CLOSE" RULE ──────────────────────────────────────────────────
+// What counts as a real booked meeting, for every chart, the Mandate
+// Scoreboard, and every commission number in this dashboard: a deal that
+// closed within 2 HOURS of the lead being created never had time for a real
+// SDR-run meeting to happen in between — it's an instant/self-serve-style
+// close the AE processed immediately, not a meeting the SDR actually ran.
+// These are excluded from "meeting booked" entirely, regardless of what
+// Meeting Status says on the row (blank, Scheduled, or even marked Done) —
+// the timestamps are treated as more reliable than that field for this one
+// judgment call. Deals that took longer than 2 hours to close still count
+// normally, even if they closed the same day.
+//
+// Threshold history: originally this was a same-CALENDAR-DAY rule (any Closed
+// deal where Closed date and Creation date fell on the same Dubai-local day),
+// which matched the founder's manual count for MJ's June meetings (104 -> 91,
+// gap = 13 same-day closes). But auditing the actual minute-level gaps behind
+// that rule turned up two false positives it would have wrongly excluded —
+// deals closed ~19 and ~18.75 hours after creation that only shared a
+// calendar day by coincidence of when the lead came in. Switched to a real
+// elapsed-time cutoff (2 hours) instead, which correctly keeps those two as
+// real meetings while still catching every genuine near-instant close (most
+// of which close in 0-15 minutes, per company-wide same-day-close data).
+const INSTANT_CLOSE_MINUTES = 120; // 2 hours
+function isInstantClose(r) {
   if (r['Sales status'] !== 'Closed') return false;
-  const closedDay = closedDateToDubaiDayKey(r['Closed date']);
-  const createdDay = toDubaiDayKey(r['Creation Date']);
-  return !!closedDay && !!createdDay && closedDay === createdDay;
+  const created = creationDateEpochMinutes(r['Creation Date']);
+  const closed = closedDateEpochMinutes(r['Closed date']);
+  if (created == null || closed == null) return false;
+  const gap = closed - created;
+  return gap >= 0 && gap <= INSTANT_CLOSE_MINUTES;
 }
 function isMeetingBooked(r) {
-  if (isSameDayInstantClose(r)) return false;
+  if (isInstantClose(r)) return false;
   return MEETING_BOOKED_STATUSES.includes(r['Meeting Status']) || r['Sales status'] === 'Closed';
 }
 // Of all booked meetings, the subset that didn't actually happen — used by the
@@ -2442,7 +2460,7 @@ function renderSummaryCards(days) {
   const infoLeadVolume = isCommission
     ? `Count of leads created in the selected range, currently filtered to B2B leads only (Commission View always uses B2B as the denominator regardless of the Leads: dropdown).${aeNote}`
     : `Count of leads created in the selected range, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
-  const infoMeetingsBooked = `Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended — filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
+  const infoMeetingsBooked = `Count of leads counted as a booked meeting (Meeting Status Scheduled/Done/Rejected/Not Atended, or Sales status Closed) — excluding deals that closed within 2 hours of the lead being created (an instant/self-serve close, not a real SDR-run meeting), regardless of Meeting Status — filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
   const infoMeetingRate = isCommission
     ? `Meetings Booked (B2B+B2C combined) ÷ B2B-only Lead Volume — Commission View judges the combined meeting count against the B2B lead denominator.${aeNote}`
     : `Meetings Booked ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
@@ -2820,7 +2838,7 @@ const ACTIVITY_METRICS = {
   meetings: {
     label: 'Meetings Booked', field: 'meetings',
     singleSpec: (d, ae) => ({ type: 'count', field: 'meetings', goal: d.goalMeetings, pace: true, aeBaseline: ae ? ae.meetingsPerDay : null }),
-    info: 'Count of leads whose Meeting Status is Meeting Scheduled, Meeting Done, Meeting Rejected, or Meeting Not Atended, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).'
+    info: 'Count of leads counted as a booked meeting (Meeting Status Scheduled/Done/Rejected/Not Atended, or Sales status Closed) — excluding deals that closed within 2 hours of the lead being created (an instant/self-serve close, not a real SDR-run meeting), regardless of Meeting Status, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).'
   },
   meetingsHeld: {
     label: 'Meetings Held', field: 'meetings_held',
@@ -4090,6 +4108,29 @@ function closedDateToDubaiDayKey(raw) {
   const romaniaOffset = isRomaniaDST(asUTC) ? 3 : 2;
   const dubai = new Date(asUTC.getTime() - romaniaOffset * 3600000 + 4 * 3600000);
   return `${dubai.getUTCFullYear()}-${String(dubai.getUTCMonth() + 1).padStart(2, '0')}-${String(dubai.getUTCDate()).padStart(2, '0')}`;
+}
+// Naive wall-clock epoch minutes for the Instant Close rule (see
+// isInstantClose() near isMeetingBooked) — deliberately NOT converted to
+// Dubai/UTC time like the day-key functions above. Creation Date and Closed
+// date come from the same source system in the same timezone, so a fixed
+// zone offset cancels out when computing the gap between them; only day-key
+// bucketing needs the real timezone conversion.
+function creationDateEpochMinutes(raw) {
+  const m = (raw || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (!m) return null;
+  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) / 60000;
+}
+function closedDateEpochMinutes(raw) {
+  if (!raw) return null;
+  const m = raw.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})\s+(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+  if (!m) return null;
+  const monthIdx = MONTH_NAMES.indexOf(m[1].toLowerCase());
+  if (monthIdx === -1) return null;
+  let h = +m[4];
+  const mi = +m[5], ampm = (m[6] || '').toLowerCase();
+  if (ampm === 'pm' && h !== 12) h += 12;
+  if (ampm === 'am' && h === 12) h = 0;
+  return Date.UTC(+m[3], monthIdx, +m[2], h, mi) / 60000;
 }
 // A deal counts toward whichever month it CLOSED in, regardless of when the
 // lead was created or the meeting was booked (per the "closed in that month"
