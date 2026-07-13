@@ -2002,7 +2002,21 @@ const MEETING_BOOKED_STATUSES = ['Meeting Scheduled', 'Meeting Done', 'Meeting R
 // rather than being an AE-only special case. "Meeting Requested" is
 // deliberately NOT treated as booked — 76% of those rows end up Disqualified
 // afterward, suggesting it means "asked for," not "confirmed."
+// A deal that closed the SAME calendar day the lead came in never had time
+// for a real SDR-run meeting to happen in between — the AE closed it
+// instantly (e.g. an instant-checkout-style deal) — so it isn't credited as
+// a meeting, regardless of what Meeting Status says (blank, Scheduled, or
+// even Done). Confirmed against the founder's manual count: MJ's June
+// meetings computed to 104 here vs. the founder's 91 — the exact 13-lead gap
+// was same-day closes (6 blank-status, 7 marked Meeting Done).
+function isSameDayInstantClose(r) {
+  if (r['Sales status'] !== 'Closed') return false;
+  const closedDay = closedDateToDubaiDayKey(r['Closed date']);
+  const createdDay = toDubaiDayKey(r['Creation Date']);
+  return !!closedDay && !!createdDay && closedDay === createdDay;
+}
 function isMeetingBooked(r) {
+  if (isSameDayInstantClose(r)) return false;
   return MEETING_BOOKED_STATUSES.includes(r['Meeting Status']) || r['Sales status'] === 'Closed';
 }
 // Of all booked meetings, the subset that didn't actually happen — used by the
