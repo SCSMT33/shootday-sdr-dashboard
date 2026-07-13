@@ -3687,6 +3687,7 @@ function renderMandateSection() {
     const mNaPct = mResolved ? mNotAttended / mResolved * 100 : null;
     const mRejectedPct = mResolved ? mRejected / mResolved * 100 : null;
     const mMeetingsTarget = d.goalMeetingRate ? d.goalMeetingRate / 100 * mLeads : null;
+    const mMeetingRatePct = mLeads ? mMeetings / mLeads * 100 : null;
     // Compare the same rounded-to-the-minute value the table displays
     // (fmtMinutes rounds) so a value shown as e.g. "5m" that's really 5.4m
     // doesn't fail a "<=5m" target while displaying as a pass.
@@ -3695,6 +3696,7 @@ function renderMandateSection() {
       prefix, isPartial, hasData,
       label: new Date(prefix + '-01').toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }) + (isPartial ? ' (MTD)' : ''),
       meetings: mMeetings, meetingsOk: hasData && mMeetingsTarget != null ? mMeetings >= mMeetingsTarget : null,
+      meetingRatePct: mMeetingRatePct,
       qualPct: mQualPct, qualOk: hasData && mQualPct != null && d.goalPctQual ? mQualPct >= d.goalPctQual : null,
       stl: mStl, stlOk: hasData && mStlRounded != null && d.goalSpeedToLead ? mStlRounded <= d.goalSpeedToLead : null,
       covPct: mCov.pct, covOk: hasData && mCov.pct != null ? mCov.pct >= s.coverageTarget : null,
@@ -3713,9 +3715,9 @@ function renderMandateSection() {
       })
     },
     {
-      label: 'Team meetings booked', info: 'Whole team (all 4 SDRs), B2B leads only, per calendar month — the onboarding doc measures the roll-up, not per SDR. Target = your Meeting Booked Rate target × that month\'s B2B lead volume.',
-      target: d.goalMeetingRate ? `rate ${d.goalMeetingRate}% × that month's leads` : 'set Meeting Booked Rate target',
-      cells: monthlyRows.map(r => mandateMonthCell(r.hasData ? String(r.meetings) : null, r.meetingsOk))
+      label: 'Team meetings booked', info: 'Meetings booked ÷ B2B leads, whole team (all 4 SDRs), per calendar month — the onboarding doc measures the roll-up, not per SDR. Raw counts shown in parentheses. Target = your Meeting Booked Rate target.',
+      target: d.goalMeetingRate ? `≥ ${d.goalMeetingRate}%` : 'set Meeting Booked Rate target',
+      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.meetingRatePct != null ? `${r.meetingRatePct.toFixed(1)}% (${r.meetings})` : null, r.meetingsOk))
     },
     {
       label: '% of leads qualified', info: 'Qualified ÷ B2B leads for that month, explicit status allowlist. Company-wide 41% of all business leads qualify; your team works the sub-$1k/incomplete tier.',
