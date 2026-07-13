@@ -1054,7 +1054,7 @@
     </div>
 
     <!-- DATA HYGIENE -->
-    <div class="hygiene-section expanded" id="hygieneSection">
+    <div class="hygiene-section" id="hygieneSection">
       <div class="hygiene-header" onclick="toggleHygieneSection()">
         <div class="hygiene-header-left">
           <span class="hygiene-title">Data Hygiene <span class="goal-info" title="Checks every lead (all SDRs, B2B + B2C, regardless of the Leads: filter) against the marking laws listed at the bottom of this section — rules derived from the team's own majority conventions in past data. Weekly score per SDR = 100 minus (weighted violation points ÷ leads handled that week) × 100, floored at 0 — so one severe violation in a 30-lead week costs 10 points, and clean marking scores 100. Recomputed from the current CSV on every load, so fixing a lead in Airtable clears its violation on the next refresh.">ⓘ</span></span>
@@ -1149,7 +1149,7 @@
     </div>
 
     <!-- MANDATE SCOREBOARD (progress vs. the founders' onboarding + strategic briefing docs) -->
-    <div class="mandate-section expanded" id="mandateSection">
+    <div class="mandate-section" id="mandateSection">
       <div class="mandate-header" onclick="toggleMandateSection()">
         <div class="mandate-header-left">
           <span class="mandate-title">Mandate Scoreboard <span class="goal-info" title="Progress against the SDR Team Lead onboarding doc and strategic briefing (May 2026): the six Team Lead KPIs, the 90-day gates (counted from June 1, 2026), and the funnel numbers the founders watch. Everything here counts B2B leads only — the briefing's 1,700/month figure is business leads (BL), which is what the mandate is about — summed across all SDRs (team roll-up, not per SDR) for the current calendar month, regardless of the filters above. Doc baselines are shown as references; targets are editable below and via Monthly Targets.">ⓘ</span></span>
@@ -1182,7 +1182,7 @@
     </div>
 
     <!-- COMMISSION CALCULATOR -->
-    <div class="commission-section expanded" id="commissionSection">
+    <div class="commission-section" id="commissionSection">
       <div class="commission-title-row" onclick="toggleCommissionSection()">
         <div>
           <div class="commission-title">Commission Calculator</div>
@@ -3355,7 +3355,12 @@ function hygieneScoreColor(score) {
   return 'var(--red)';
 }
 function toggleHygieneSection() {
-  document.getElementById('hygieneSection').classList.toggle('expanded');
+  const section = document.getElementById('hygieneSection');
+  section.classList.toggle('expanded');
+  // Chart.js sizes off the canvas's rendered dimensions, which are 0 while
+  // the section is display:none — resize once it's actually visible so the
+  // chart isn't stuck at whatever size it had (or didn't have) at creation.
+  if (section.classList.contains('expanded') && charts.chartHygiene) charts.chartHygiene.resize();
 }
 function renderHygieneSection(days) {
   if (!rawByDay) return;
