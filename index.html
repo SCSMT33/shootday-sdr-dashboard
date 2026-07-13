@@ -631,11 +631,6 @@
   .mandate-goal-item b, .mandate-gatetext-item b { white-space: nowrap; }
   .mandate-gatetext-item.current { color: var(--text); }
   .mandate-gatetext-deadline { color: var(--muted); font-weight: 500; font-size: 11px; }
-  .mandate-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
-  .mandate-tile { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--surface2); min-width: 0; }
-  .mandate-tile-label { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
-  .mandate-tile-value { font-size: 20px; font-weight: 700; }
-  .mandate-tile-sub { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
   .mandate-inputs { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; align-items: center; font-size: 11px; color: var(--muted); }
   .mandate-inputs input[type=number] { width: 62px; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 5px; padding: 3px 6px; font-size: 12px; }
 
@@ -1182,8 +1177,6 @@
           </select>
         </div>
         <div style="overflow-x:auto"><table class="mandate-kpi-table" id="mandateKpiTable"></table></div>
-        <div class="mandate-subheading">Move the Needle <span class="goal-info" title="The four numbers from the strategic briefing that the founders actually watch. Not-responsive is the single largest leak in the company funnel ('move this number and you move the whole business'). All four count B2B leads only, team-wide.">ⓘ</span></div>
-        <div class="mandate-tiles" id="mandateTiles"></div>
         <div class="mandate-inputs" id="mandateInputs"></div>
       </div>
     </div>
@@ -3570,23 +3563,6 @@ function mandateCoverage(days) {
 // by status but still open (not Closed/Lost/refunded, not AE-disqualified),
 // with no meeting ever set, created more than 21 days ago — statistically
 // dying per the "86% of wins close within 21 days" rule.
-const MANDATE_TERMINAL_STATUSES = new Set(['closed', 'lost', 'partial refund', 'deposit refund', 'full refund']);
-function mandateReengagementCount(days) {
-  const today = dubaiTodayKey();
-  let count = 0;
-  days.forEach(d => {
-    if (dayKeyAgeDays(d, today) <= 21) return;
-    SDRS.forEach(s => (((rawByDay[d] || {})[s.key]) || []).forEach(r => {
-      if (!isBusinessLead(r)) return;
-      if (!isQualifiedStatus(r['Sales status'])) return;
-      const n = normalizeSalesStatus(r['Sales status']);
-      if (MANDATE_TERMINAL_STATUSES.has(n) || n.startsWith('disqualified ae')) return;
-      if ((r['Meeting Status'] || '').trim()) return;
-      count++;
-    }));
-  });
-  return count;
-}
 function mandateClosedCount(days) {
   let count = 0;
   days.forEach(d => SDRS.forEach(s => (((rawByDay[d] || {})[s.key]) || []).forEach(r => {
@@ -3625,29 +3601,11 @@ function renderMandateSection() {
   if (!allDataB2B || !rawByDay) return;
   const today = dubaiTodayKey();
   const monthPrefix = today.slice(0, 7);
-  const monthDays = mandateDayKeys(null, monthPrefix);
-  const prevMonthDate = new Date(Date.parse(monthPrefix + '-01') - 86400000);
-  const prevPrefix = prevMonthDate.toISOString().slice(0, 7);
-  const prevDays = mandateDayKeys(null, prevPrefix);
-  const mandateAll = mandateDayKeys(MANDATE_START, null);
   const s = mandateState();
   const d = derivedGoals();
   const monthLabel = new Date(monthPrefix + '-01').toLocaleString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
-
-  // ── This month's raw numbers (all leads, all SDRs) ──
-  const leads = mandateSum(monthDays, 'leads');
-  const meetings = mandateSum(monthDays, 'meetings');
-  const qualified = mandateSum(monthDays, 'qualified');
-  const nr = mandateSum(monthDays, 'non_responsive');
   const hoursFilter = mandateHoursFilterValue();
   const hoursLabel = hoursFilter === true ? 'on-hours' : hoursFilter === false ? 'off-hours' : 'on+off hours';
-  const stl = rawCalls ? mandateStlMedian(monthDays, hoursFilter) : null;
-  const cov = mandateCoverage(monthDays);
-  const qualPct = leads ? qualified / leads * 100 : null;
-  const nrPct = leads ? nr / leads * 100 : null;
-  const prevLeads = mandateSum(prevDays, 'leads');
-  const prevMeetings = mandateSum(prevDays, 'meetings');
-  const prevNrPct = prevLeads ? mandateSum(prevDays, 'non_responsive') / prevLeads * 100 : null;
 
   // ── Your Goals (left) / Your Gates (right): static reference text, sourced
   // straight from the onboarding doc's "Your KPIs as Team Lead" table and its
@@ -3686,11 +3644,15 @@ function renderMandateSection() {
     const mResolved = mandateSum(days, 'meetings_resolved');
     const mNoShow = mandateSum(days, 'meetings_no_show');
     const mAeDq = mandateSum(days, 'ae_dq');
+    const mNr = mandateSum(days, 'non_responsive');
+    const mClosed = mandateClosedCount(days);
     const mStl = rawCalls ? mandateStlMedian(days, hoursFilter) : null;
     const mCov = mandateCoverage(days);
     const mQualPct = mLeads ? mQualified / mLeads * 100 : null;
     const mNoShowPct = mResolved ? mNoShow / mResolved * 100 : null;
     const mAeDqPct = mQualified ? mAeDq / mQualified * 100 : null;
+    const mNrPct = mLeads ? mNr / mLeads * 100 : null;
+    const mLeadToDealPct = mLeads ? mClosed / mLeads * 100 : null;
     const mMeetingsTarget = d.goalMeetingRate ? d.goalMeetingRate / 100 * mLeads : null;
     const mMeetingRatePct = mLeads ? mMeetings / mLeads * 100 : null;
     // Compare the same rounded-to-the-minute value the table displays
@@ -3706,7 +3668,10 @@ function renderMandateSection() {
       stl: mStl, stlOk: hasData && mStlRounded != null && d.goalSpeedToLead ? mStlRounded <= d.goalSpeedToLead : null,
       covPct: mCov.pct, covOk: hasData && mCov.pct != null ? mCov.pct >= s.coverageTarget : null,
       aeDqPct: mAeDqPct, aeDqOk: hasData && mAeDqPct != null ? mAeDqPct <= s.handoffMax : null,
-      noShowPct: mNoShowPct, noShowOk: hasData && mNoShowPct != null ? mNoShowPct <= s.noShowMax : null
+      noShowPct: mNoShowPct, noShowOk: hasData && mNoShowPct != null ? mNoShowPct <= s.noShowMax : null,
+      nrPct: mNrPct, nrOk: hasData && mNrPct != null ? mNrPct < MANDATE_REF.nrShare : null,
+      leadToDealPct: mLeadToDealPct, leadToDealOk: hasData && mLeadToDealPct != null ? mLeadToDealPct >= MANDATE_REF.leadToDeal : null,
+      closed: mClosed
     };
   });
   const rows = [
@@ -3748,6 +3713,16 @@ function renderMandateSection() {
       label: 'Meeting no-show rate', info: 'Meeting Status = Meeting Not Attended ÷ that month\'s resolved meetings (Done + Not Attended + Rejected). A lead simply not showing up — distinct from Handoff quality above, which is the AE\'s judgment on qualification.',
       target: `≤ ${s.noShowMax}%`,
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.noShowPct != null ? r.noShowPct.toFixed(1) + '%' : null, r.noShowOk))
+    },
+    {
+      label: 'Non-responsive rate', info: 'Leads marked Sales status = Non respondant or Disqualified reason = Not responsive, ÷ that month\'s B2B leads. The briefing calls this the single largest leak in the company funnel. Company baseline is 29% (all business leads, Jan–May YTD) — your team works the low-value/incomplete tier, so expect to run above that; the founders watch the direction, not the absolute number.',
+      target: `< ${MANDATE_REF.nrShare}% (company baseline)`,
+      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.nrPct != null ? r.nrPct.toFixed(1) + '%' : null, r.nrOk))
+    },
+    {
+      label: 'Lead → closed deal', info: 'Closed (won) deals ÷ that month\'s B2B leads — of every 100 leads that arrived that month, how many have turned into paying deals so far. Company benchmark is 14.2%. Recent months always run low here since a lead created this month hasn\'t had time to close yet — this isn\'t a same-month conversion rate, it\'s a running tally that keeps rising as those leads close later.',
+      target: `≥ ${MANDATE_REF.leadToDeal}% (company baseline, catches up over time)`,
+      cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.leadToDealPct != null ? `${r.leadToDealPct.toFixed(1)}% (${r.closed})` : null, r.leadToDealOk))
     }
   ];
   document.getElementById('mandateKpiHeading').textContent = 'Month over Month';
@@ -3758,45 +3733,6 @@ function renderMandateSection() {
       ${row.cells.map(c => `<td>${c}</td>`).join('')}
       <td class="mandate-kpi-note">${escapeHtml(row.target)}</td>
     </tr>`).join('')}</tbody>`;
-
-  // ── Band 3: the briefing's "move the needle" numbers ──
-  const closedSinceStart = mandateClosedCount(mandateAll);
-  const leadsSinceStart = mandateSum(mandateAll, 'leads');
-  const leadToDeal = leadsSinceStart ? closedSinceStart / leadsSinceStart * 100 : null;
-  const reengage = mandateReengagementCount(mandateDayKeys(null, null));
-  const nrDelta = (nrPct != null && prevNrPct != null) ? nrPct - prevNrPct : null;
-  const tiles = [
-    {
-      label: 'Not responsive %', value: nrPct != null ? nrPct.toFixed(1) + '%' : '—',
-      color: nrPct != null ? (nrPct < MANDATE_REF.nrShare ? 'var(--green)' : 'var(--red)') : 'var(--muted)',
-      info: 'Of the team\'s B2B leads this month, the share that died marked Non respondant / Not responsive. The 29% baseline is company-wide, ALL business leads, Jan–May YTD — the briefing calls it the single biggest leak in the funnel. Your team works the low-value/incomplete tier, so expect to start above 29%; what the founders will watch is the direction.',
-      sub: `company baseline ${MANDATE_REF.nrShare}% (all BL, YTD) — the #1 leak${nrDelta != null ? ` · ${nrDelta <= 0 ? '▼' : '▲'} ${Math.abs(nrDelta).toFixed(1)}pt vs last month` : ''}`
-    },
-    {
-      label: 'Lead → closed deal (since Jun 1)', value: leadToDeal != null ? leadToDeal.toFixed(1) + '%' : '—',
-      color: 'var(--text)',
-      info: 'Plain version: of every 100 B2B leads the team has received since your June 1 start, how many have turned into paying (Closed) deals so far. Company benchmark is 14.2% (~17% once slow closes catch up). Recent leads haven\'t had time to close yet, so this number always runs a little low.',
-      sub: `${closedSinceStart} closed of ${leadsSinceStart} B2B leads · company ${MANDATE_REF.leadToDeal}%`
-    },
-    {
-      label: 'Re-engagement pool', value: `${reengage}`,
-      color: reengage > 0 ? '#d98e00' : 'var(--green)',
-      info: 'Plain version: a call-back list. B2B leads the team qualified but never got to a meeting, still sitting open 21+ days later. The briefing: 86% of deals that ever close do so within 21 days — so these are going cold right now. Chasing this list is free pipeline.',
-      sub: 'qualified, no meeting, still open after 21+ days — your call-back list'
-    },
-    {
-      label: 'Meetings trend', value: `${meetings}`,
-      color: prevMeetings ? (meetings >= prevMeetings ? 'var(--green)' : '#d98e00') : 'var(--text)',
-      info: 'Plain version: direction of travel on the metric the founders care most about. Meetings booked so far this month (B2B) next to the full previous month — a partial month will naturally look smaller until it catches up. May baseline before your team: zero.',
-      sub: `${monthLabel} so far vs ${prevMeetings} in all of last month · May baseline was 0`
-    }
-  ];
-  document.getElementById('mandateTiles').innerHTML = tiles.map(t => `
-    <div class="mandate-tile">
-      <div class="mandate-tile-label">${t.label} <span class="goal-info" title="${escapeHtml(t.info)}">ⓘ</span></div>
-      <div class="mandate-tile-value" style="color:${t.color}">${t.value}</div>
-      <div class="mandate-tile-sub">${t.sub}</div>
-    </div>`).join('');
 
   // ── Editable mandate inputs. Every target row in the Month over Month
   // table has a goal input right here — Meeting Booked Rate and % Qualified
