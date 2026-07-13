@@ -1187,7 +1187,7 @@
           <div class="commission-explainer-body">
             <p><strong>1. Pay structure.</strong> Total pay = Base + Bonus (manual, discretionary) + Qualified Leads Incentive + Meeting Set Incentive.</p>
             <p><strong>2. How the incentives are earned.</strong> Qualified Leads and Meetings are counted from all your leads (B2B + B2C), but both are judged as a percentage of your B2B leads only. Your percentage falls into a bracket; each bracket has a fixed dollar amount — the tables are shown on your card. AE disqualifications do NOT count against you.</p>
-            <p><strong>3. The Meeting Quality Multiplier.</strong> Booked meetings only create business value if they happen. Individual no-shows are not your fault and one bad week will not hurt you — the multiplier is based on your ALL-TIME rejection/no-show rate, so it only reacts to habitual patterns. The rate = meetings rejected or not attended &divide; all meetings you booked. The multiplier scales BOTH incentives:</p>
+            <p><strong>3. The Meeting Quality Multiplier.</strong> Booked meetings only create business value if they happen. Individual no-shows are not your fault and one bad week will not hurt you — the multiplier is based on your ALL-TIME rejection/no-show rate, so it only reacts to habitual patterns. The rate = meetings rejected or not attended &divide; all B2B meetings you booked (B2C is excluded from this calculation). The multiplier scales BOTH incentives:</p>
             <ul>
               <li>0&ndash;15%: 100% payout (this is the normal range &mdash; clients sometimes ghost)</li>
               <li>15&ndash;25%: 85%</li>
@@ -4043,15 +4043,16 @@ const QUALITY_MULTIPLIER_TIERS = [
 // The "habitual" measure: computed from the SDR's ALL-TIME data in the loaded
 // CSV (every date in rawByDay), deliberately immune to the date-range picker —
 // unlike the bracket incentives, which keep using the selected range. Reads
-// from rawByDay (not allData) so the Leads: filter dropdown cannot affect it —
-// same reasoning as commissionMetricsForSDR: counted from ALL leads (B2B+B2C),
-// consistent with how meetings are already counted there.
+// from rawByDay (not allData) so the Leads: filter dropdown cannot affect it.
+// B2B leads only — B2C is excluded from the quality multiplier entirely, since
+// B2C meetings carry no media cost and aren't the "habitual pattern" signal
+// management wants this multiplier to react to.
 function allTimeRejectionCounts(sdrKey) {
   let booked = 0, bad = 0;
   if (rawByDay) Object.keys(rawByDay).forEach(d => {
     const rows = rawByDay[d] && rawByDay[d][sdrKey];
     if (!rows) return;
-    rows.forEach(r => {
+    rows.filter(isBusinessLead).forEach(r => {
       if (isMeetingBooked(r)) booked++;
       if (isMeetingNotAttended(r)) bad++;
     });
@@ -4197,7 +4198,7 @@ function commissionCard(sdr, days) {
       <div class="commission-stat" style="grid-column: 1 / -1;">
         <div class="commission-stat-label">Meeting Quality Multiplier</div>
         <div class="commission-stat-value">&times;${payout.tier.multiplier.toFixed(2)}</div>
-        <div class="commission-stat-sub">${payout.rate.toFixed(1)}% all-time rejection — ${payout.bad} of ${payout.booked} booked meetings rejected/no-show (all-time, all leads, incl. scheduled &amp; closed)</div>
+        <div class="commission-stat-sub">${payout.rate.toFixed(1)}% all-time rejection — ${payout.bad} of ${payout.booked} booked meetings rejected/no-show (all-time, B2B leads only, incl. scheduled &amp; closed)</div>
       </div>
     </div>
     <div class="commission-bracket-label">Qualified Leads Incentive</div>
