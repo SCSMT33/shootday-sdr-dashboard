@@ -482,6 +482,8 @@
   .commission-stat-value { font-size: 17px; font-weight: 700; margin-top: 2px; }
   .commission-stat-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
   .commission-bracket-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 12px 0 6px; }
+  .commission-flat-note { text-transform: none; font-weight: 400; letter-spacing: 0; opacity: 0.8; }
+  .commission-flat-calc { display: flex; justify-content: space-between; align-items: center; background: rgba(26, 158, 106, 0.12); border-radius: 6px; padding: 8px 10px; font-size: 13px; font-weight: 700; color: #1a9e6a; margin-bottom: 4px; }
   .commission-bracket-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 4px; }
   .commission-bracket-table th { text-align: left; font-size: 10px; color: var(--muted); text-transform: uppercase; padding: 4px 6px; border-bottom: 1px solid var(--border); }
   .commission-bracket-table td { padding: 5px 6px; border-bottom: 1px solid var(--border); }
@@ -670,11 +672,32 @@
   .report-title { font-size: 20px; font-weight: 700; margin-bottom: 2px; }
   .report-meta { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
   .report-sdr-heading { font-size: 15px; font-weight: 700; margin: 22px 0 4px; border-bottom: 2px solid var(--text); padding-bottom: 4px; }
+  .report-summary-card .report-sdr-heading { margin-top: 0; }
   .report-section-heading { font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
   .report-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 11px; }
   .report-table th { text-align: left; padding: 5px 6px; border-bottom: 1px solid #999; background: #f1f2f6; }
   .report-table td { padding: 5px 6px; border-bottom: 1px solid #ddd; }
   .report-empty-note { font-size: 11px; color: var(--muted); font-style: italic; margin-bottom: 10px; }
+  /* Big commission numbers up top, per SDR — printed report shows this before
+     the individual lead listing so the headline numbers aren't buried. */
+  .report-summary-card { border: 1px solid #999; border-radius: 8px; padding: 14px 16px; margin: 6px 0 16px; background: #fafafa; page-break-inside: avoid; }
+  .report-summary-period { font-weight: 400; font-size: 12px; color: #666; margin-left: 8px; }
+  .report-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0; }
+  .report-summary-stat { border: 1px solid #ddd; border-radius: 6px; padding: 7px 9px; background: #fff; }
+  .report-summary-stat span { display: block; font-size: 9px; text-transform: uppercase; letter-spacing: 0.03em; color: #666; }
+  .report-summary-stat strong { font-size: 14px; }
+  .report-summary-stat.wide { grid-column: span 2; }
+  .report-summary-stat.total { background: #eef3ff; border-color: #99b8ff; }
+  .report-summary-stat.total strong { color: #2f6fed; }
+  .report-summary-stat.ignored strong { color: #999; font-style: italic; font-size: 12px; }
+  .report-summary-sub { font-size: 10.5px; color: #555; margin-top: 4px; }
+  /* Explanatory text lives once at the very end of the report, after every
+     SDR's numbers and lead listings — the reader wants the numbers first. */
+  .report-explainer { margin-top: 28px; border-top: 2px solid #333; padding-top: 12px; }
+  .report-explainer-heading { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .report-explainer p { font-size: 11px; line-height: 1.5; margin: 6px 0; color: #333; }
+  .report-explainer ul { margin: 4px 0 8px 18px; font-size: 11px; }
+  .report-explainer strong { color: #111; }
 
   /* REPORT PREVIEW (on-screen, at the very bottom of the page) */
   .report-preview-area {
@@ -695,7 +718,10 @@
     #reportPrintArea { display: block !important; }
     .report-table { page-break-inside: auto; }
     .report-table tr { page-break-inside: avoid; }
-    .report-sdr-heading { page-break-before: auto; page-break-after: avoid; }
+    .report-sdr-heading { page-break-after: avoid; }
+    .report-summary-card { page-break-before: always; }
+    .report-summary-card:first-of-type { page-break-before: avoid; }
+    .report-explainer { page-break-before: always; }
   }
 </style>
 </head>
@@ -1167,7 +1193,7 @@
       <div class="commission-title-row" onclick="toggleCommissionSection()">
         <div>
           <div class="commission-title">Commission Calculator</div>
-          <div class="commission-sub">Recalculates for whichever SDR(s) you've selected above. Commission always looks at <strong>last calendar month's performance</strong> regardless of the Range: picker (see "How compensation works" below for why). Qualified Leads and Meetings are counted from all leads (B2B + B2C); both are judged as a percentage of that person's B2B leads only, matching Commission View. New Sales Incentive is based on actual closed-deal revenue. Lead Factor is not included here.</div>
+          <div class="commission-sub">Recalculates for whichever SDR(s) you've selected above. Commission always looks at <strong>last calendar month's performance</strong> regardless of the Range: picker (see "How compensation works" below for why). Qualified Leads and Meetings are counted from all leads (B2B + B2C); both are judged as a percentage of that person's B2B leads only, matching Commission View. New Sales Incentive is a flat 0.25% of actual closed-deal revenue (not multiplier-scaled). Lead Factor is not included here.</div>
         </div>
         <div class="commission-report-btn-group">
           <button class="commission-report-btn" onclick="event.stopPropagation(); previewQualifiedReport()">Preview Report</button>
@@ -1188,8 +1214,8 @@
             <p><strong>1. Pay structure.</strong> Total pay = Base + Bonus (manual, discretionary) + Qualified Leads Incentive + Meeting Set Incentive + New Sales Incentive.</p>
             <p><strong>2. The one-month lag.</strong> Your base salary is paid on the normal schedule for the current month. The three incentives above, however, are always calculated from <strong>last calendar month's</strong> performance — so July's paycheck reflects June's numbers. Why: a deal booked late in a month often hasn't had time to close yet, so judging that same month's payout on its own numbers would unfairly penalize deals that just needed a few more days to land. The one-month lag gives every deal a full month (or more) to actually close before it counts.</p>
             <p><strong>3. How the Qualified Leads and Meeting incentives are earned.</strong> Qualified Leads and Meetings are counted from all your leads (B2B + B2C), but both are judged as a percentage of your B2B leads only. Your percentage falls into a bracket; each bracket has a fixed dollar amount — the tables are shown on your card. AE disqualifications do NOT count against you.</p>
-            <p><strong>4. How the New Sales Incentive is earned.</strong> This one is based on real closed-deal revenue: every deal you closed last calendar month (Sales status = Closed), converted to a common currency, summed up, and matched to a bracket — same shape as the other two incentives, just keyed to dollars instead of a rate. A deal counts toward the month it actually <strong>closed</strong> in, no matter when the lead came in or the meeting was booked.</p>
-            <p><strong>5. The Meeting Quality Multiplier.</strong> Booked meetings only create business value if they happen. Individual no-shows are not your fault and one bad week will not hurt you — the multiplier is based on your ALL-TIME (not just last month's) B2B rejection/no-show rate, so it only reacts to habitual patterns. The rate = meetings rejected or not attended &divide; all B2B meetings you booked. The multiplier scales ALL THREE incentives:</p>
+            <p><strong>4. How the New Sales Incentive is earned.</strong> This one is a flat rate, not a bracket: every deal you closed last calendar month (Sales status = Closed), converted to a common currency and summed up, &times; 0.25%. No minimum, no cap. A deal counts toward the month it actually <strong>closed</strong> in, no matter when the lead came in or the meeting was booked. This one is NOT affected by the Meeting Quality Multiplier below.</p>
+            <p><strong>5. The Meeting Quality Multiplier.</strong> Booked meetings only create business value if they happen. Individual no-shows are not your fault and one bad week will not hurt you — the multiplier is based on your ALL-TIME (not just last month's) B2B rejection/no-show rate, so it only reacts to habitual patterns. The rate = meetings rejected or not attended &divide; all B2B meetings you booked. The multiplier scales the Qualified Leads and Meeting incentives only (not New Sales):</p>
             <ul>
               <li>0&ndash;15%: 100% payout (this is the normal range &mdash; clients sometimes ghost)</li>
               <li>15&ndash;25%: 85%</li>
@@ -4062,16 +4088,11 @@ function closedRevenueForSDR(sdrKey, monthKey) {
   });
   return { count, revenueUSD };
 }
-// Placeholder thresholds — replace with real numbers once finance/the founder
-// confirms them. Same editable bracket shape as the other two tables (dollar
-// thresholds instead of a %, flagged via the bracketTable() unit param).
-const NEW_SALES_BRACKETS = [
-  { minPct: 0,    maxPct: 2000,     amount: 0 },
-  { minPct: 2000, maxPct: 4000,     amount: 100 },
-  { minPct: 4000, maxPct: 6000,     amount: 200 },
-  { minPct: 6000, maxPct: 8000,     amount: 300 },
-  { minPct: 8000, maxPct: Infinity, amount: 500 }
-];
+// Not a bracket — the source Google Sheet computes this as a flat rate off
+// closed-deal revenue (its formula cell reads "=<revenue>*0.0025", i.e. a flat
+// 0.25%), unlike Qualified/Meeting which are threshold brackets. No minimum,
+// no cap: every dollar of closed revenue earns the same 0.25%.
+const NEW_SALES_INCENTIVE_RATE = 0.0025;
 const QUALIFIED_BRACKETS = [
   { minPct: 0,  maxPct: 40,       amount: 0 },
   { minPct: 40, maxPct: 50,       amount: 150 },
@@ -4227,6 +4248,9 @@ function saveCommissionInputs(key, base, bonus, override) {
 }
 // One place computes the gross → multiplier → paid breakdown so the card, the
 // Calculate box, and the PDF report can never silently disagree.
+// The Meeting Quality Multiplier only scales the Qualified Leads and Meeting
+// Set incentives — NOT New Sales. New Sales Incentive is paid straight
+// (revenue × 0.25%, no multiplier), matching the source Google Sheet formula.
 function commissionPayout(key, qGross, mGross, nsGross) {
   const q = qualityMultiplierForSDR(key);
   return {
@@ -4234,7 +4258,7 @@ function commissionPayout(key, qGross, mGross, nsGross) {
     qGross, mGross, nsGross,
     qPaid: Math.round(qGross * q.tier.multiplier),
     mPaid: Math.round(mGross * q.tier.multiplier),
-    nsPaid: Math.round(nsGross * q.tier.multiplier)
+    nsPaid: Math.round(nsGross)
   };
 }
 function multiplierRowHtml(p) {
@@ -4246,6 +4270,11 @@ function multiplierRowHtml(p) {
 // spelling out the whole gross → multiplier → paid chain.
 function incentiveLineHtml(label, paid, multiplier) {
   return `<div class="commission-incentive-row"><span>${label} (&times;${multiplier.toFixed(2)})</span><span>$${paid.toLocaleString()}</span></div>`;
+}
+// New Sales isn't multiplier-scaled, so its line skips the "(×N.NN)" tag that
+// would otherwise misleadingly imply the quality multiplier drove the number.
+function flatIncentiveLineHtml(label, paid) {
+  return `<div class="commission-incentive-row"><span>${label}</span><span>$${paid.toLocaleString()}</span></div>`;
 }
 function calculateCommission(key) {
   const baseInput = document.getElementById('commissionBase-' + key);
@@ -4275,7 +4304,7 @@ function calculateCommission(key) {
     <div class="commission-incentive-row"><span>Bonus</span><span>$${bonus.toLocaleString()}</span></div>
     ${incentiveLineHtml('Qualified Leads Incentive', p.qPaid, p.tier.multiplier)}
     ${incentiveLineHtml('Meeting Incentive', p.mPaid, p.tier.multiplier)}
-    ${incentiveLineHtml('New Sales Incentive', p.nsPaid, p.tier.multiplier)}
+    ${flatIncentiveLineHtml('New Sales Incentive', p.nsPaid)}
     <div class="commission-incentive-row grand-total"><span>Total Compensation</span><span>$${total.toLocaleString()}</span></div>
   `;
 }
@@ -4283,10 +4312,9 @@ function commissionCard(sdr, days, monthKey) {
   const m = commissionMetricsForSDR(days, sdr.key, monthKey);
   const qIdx = findBracketIndex(m.qualifiedRate, QUALIFIED_BRACKETS);
   const mIdx = findBracketIndex(m.meetingRate, MEETING_BRACKETS);
-  const nsIdx = findBracketIndex(m.closedRevenueUSD, NEW_SALES_BRACKETS);
   const qAmount = QUALIFIED_BRACKETS[qIdx].amount;
   const mAmount = MEETING_BRACKETS[mIdx].amount;
-  const nsAmount = NEW_SALES_BRACKETS[nsIdx].amount;
+  const nsAmount = Math.round(m.closedRevenueUSD * NEW_SALES_INCENTIVE_RATE);
   const payout = commissionPayout(sdr.key, qAmount, mAmount, nsAmount);
   const bases = loadCommissionBases();
   const savedRaw = bases[sdr.key];
@@ -4333,10 +4361,12 @@ function commissionCard(sdr, days, monthKey) {
     <div class="commission-bracket-label">Meeting Set Incentive</div>
     ${bracketTable(MEETING_BRACKETS, mIdx, { paid: payout.mPaid, mult: payout.tier.multiplier })}
     <div class="commission-incentive-row"><span>Bracket bonus (gross)</span><span id="commissionMIncentive-${sdr.key}" data-amount="${mAmount}">$${mAmount.toLocaleString()}</span></div>
-    <div class="commission-bracket-label">New Sales Incentive (closed deal revenue, ${monthLabelFromKey(monthKey)})</div>
-    ${bracketTable(NEW_SALES_BRACKETS, nsIdx, { paid: payout.nsPaid, mult: payout.tier.multiplier }, '$')}
-    <div class="commission-incentive-row"><span>Bracket bonus (gross)</span><span id="commissionNSIncentive-${sdr.key}" data-amount="${nsAmount}">$${nsAmount.toLocaleString()}</span></div>
-    <div class="commission-bracket-label">Meeting Quality Multiplier (all-time B2B rejection rate)</div>
+    <div class="commission-bracket-label">New Sales Incentive (closed deal revenue &times; 0.25%, ${monthLabelFromKey(monthKey)}) <span class="commission-flat-note">flat rate, not affected by the quality multiplier below</span></div>
+    <div class="commission-flat-calc">
+      <span>$${Math.round(m.closedRevenueUSD).toLocaleString()} closed revenue &times; 0.25%</span>
+      <span id="commissionNSIncentive-${sdr.key}" data-amount="${nsAmount}">$${nsAmount.toLocaleString()}</span>
+    </div>
+    <div class="commission-bracket-label">Meeting Quality Multiplier (all-time B2B rejection rate — applies to Qualified Leads &amp; Meeting incentives only)</div>
     ${multiplierTierTable(payout.tierIdx)}
     ${multiplierRowHtml(payout)}
     <div class="commission-base-row">
@@ -4355,7 +4385,7 @@ function commissionCard(sdr, days, monthKey) {
     <div class="commission-total-box" id="commissionTotalBox-${sdr.key}">
       ${incentiveLineHtml('Qualified Leads Incentive', payout.qPaid, payout.tier.multiplier)}
       ${incentiveLineHtml('Meeting Incentive', payout.mPaid, payout.tier.multiplier)}
-      ${incentiveLineHtml('New Sales Incentive', payout.nsPaid, payout.tier.multiplier)}
+      ${flatIncentiveLineHtml('New Sales Incentive', payout.nsPaid)}
       <div class="commission-incentive-row grand-total"><span>Total Compensation</span><span>enter Base/Bonus and click Calculate</span></div>
     </div>
   </div>`;
@@ -4543,13 +4573,56 @@ function reportTable(rows) {
 // manually spot-check what counted toward the numbers.
 // Builds the report's inner HTML (title/meta/sections) — shared by the
 // on-screen Preview and the print/PDF export so they're always identical.
+// Big-numbers-up-top summary card: Base/Bonus (whatever's currently entered
+// on that SDR's live card, via loadCommissionBases — so the report always
+// matches on-screen state) + all three incentives (already multiplier/rate
+// applied, matching commissionPayout exactly) + Total Compensation, plus a
+// supporting-detail line with the rates/counts behind those numbers.
+function reportCommissionSummaryHtml(sdr, monthKey, commissionDays) {
+  const m = commissionMetricsForSDR(commissionDays, sdr.key, monthKey);
+  const qGross = QUALIFIED_BRACKETS[findBracketIndex(m.qualifiedRate, QUALIFIED_BRACKETS)].amount;
+  const mGross = MEETING_BRACKETS[findBracketIndex(m.meetingRate, MEETING_BRACKETS)].amount;
+  const nsGross = Math.round(m.closedRevenueUSD * NEW_SALES_INCENTIVE_RATE);
+  const p = commissionPayout(sdr.key, qGross, mGross, nsGross);
+  const bases = loadCommissionBases();
+  const savedRaw = bases[sdr.key];
+  const saved = (savedRaw && typeof savedRaw === 'object') ? savedRaw : { base: savedRaw || '', bonus: '', override: false };
+  const base = parseFloat(saved.base) || 0;
+  const bonus = parseFloat(saved.bonus) || 0;
+  const override = !!saved.override;
+  const total = override ? (base + bonus) : (base + bonus + p.qPaid + p.mPaid + p.nsPaid);
+  const incentiveStats = override
+    ? `<div class="report-summary-stat wide ignored"><span>Incentives</span><strong>Overridden (Base + Bonus only)</strong></div>`
+    : `
+      <div class="report-summary-stat"><span>Qualified Leads Incentive</span><strong>$${p.qPaid.toLocaleString()}</strong></div>
+      <div class="report-summary-stat"><span>Meeting Incentive</span><strong>$${p.mPaid.toLocaleString()}</strong></div>
+      <div class="report-summary-stat"><span>New Sales Incentive</span><strong>$${p.nsPaid.toLocaleString()}</strong></div>
+    `;
+  return `
+    <div class="report-summary-card">
+      <div class="report-sdr-heading">${escapeHtml(sdr.name)}<span class="report-summary-period">${escapeHtml(monthLabelFromKey(monthKey))} performance</span></div>
+      <div class="report-summary-grid">
+        <div class="report-summary-stat"><span>Base</span><strong>$${base.toLocaleString()}</strong></div>
+        <div class="report-summary-stat"><span>Bonus</span><strong>$${bonus.toLocaleString()}</strong></div>
+        ${incentiveStats}
+        <div class="report-summary-stat wide total"><span>Total Compensation</span><strong>$${total.toLocaleString()}</strong></div>
+      </div>
+      <div class="report-summary-sub">
+        Qualified leads: ${m.qualified} (${m.qualifiedRate.toFixed(1)}% of B2B) &middot;
+        Meetings: ${m.meetings} (${m.meetingRate.toFixed(1)}% of B2B) &middot;
+        Closed deals: ${m.closedDeals} ($${Math.round(m.closedRevenueUSD).toLocaleString()} revenue, USD-equiv) &middot;
+        Meeting Quality Multiplier: &times;${p.tier.multiplier.toFixed(2)} (${p.rate.toFixed(1)}% all-time B2B rejection rate — applies to Qualified/Meeting only, not New Sales)
+      </div>
+    </div>
+  `;
+}
 function buildQualifiedReportHtml(days, selected) {
   // The qualified-lead listing below still reflects whatever range was
   // selected for review (that's this report's original purpose). The
-  // Commission Summary table is different: it must match the on-screen
-  // card exactly, and the card always uses last calendar month regardless of
-  // the range picker — so it's computed here from priorMonthKey()/
-  // priorMonthDayKeys(), independent of the `days` used for the lead listing.
+  // commission summary is different: it must match the on-screen card
+  // exactly, and the card always uses last calendar month regardless of the
+  // range picker — so it's computed from priorMonthKey()/priorMonthDayKeys(),
+  // independent of the `days` used for the lead listing.
   const monthKey = priorMonthKey();
   const commissionDays = priorMonthDayKeys();
   const periodLabel = `Leads reviewed: ${commissionPeriodLabelForDays(days)} · Commission summary: ${monthLabelFromKey(monthKey)}`;
@@ -4562,37 +4635,27 @@ function buildQualifiedReportHtml(days, selected) {
     const qualified = rows.filter(isQualifiedLead);
     const qualifiedBooked = qualified.filter(isMeetingBooked);
     const qualifiedNotBooked = qualified.filter(r => !isMeetingBooked(r));
-    // Commission summary built through the exact same commissionPayout() path
-    // as the on-screen card, so the report can never show a paid number that
-    // silently differs from the on-screen math.
-    const m = commissionMetricsForSDR(commissionDays, sdr.key, monthKey);
-    const qGross = QUALIFIED_BRACKETS[findBracketIndex(m.qualifiedRate, QUALIFIED_BRACKETS)].amount;
-    const mGross = MEETING_BRACKETS[findBracketIndex(m.meetingRate, MEETING_BRACKETS)].amount;
-    const nsGross = NEW_SALES_BRACKETS[findBracketIndex(m.closedRevenueUSD, NEW_SALES_BRACKETS)].amount;
-    const p = commissionPayout(sdr.key, qGross, mGross, nsGross);
     return `
-      <div class="report-sdr-heading">${escapeHtml(sdr.name)}</div>
-      <div class="report-section-heading">Commission Summary (${escapeHtml(monthLabelFromKey(monthKey))})</div>
-      <table class="report-table">
-        <thead><tr><th>All-time rejection rate</th><th>Quality Multiplier</th><th>Qualified Incentive (gross &rarr; paid)</th><th>Meeting Incentive (gross &rarr; paid)</th><th>New Sales Incentive (gross &rarr; paid)</th></tr></thead>
-        <tbody><tr>
-          <td>${p.rate.toFixed(1)}%</td>
-          <td>&times;${p.tier.multiplier.toFixed(2)} (${escapeHtml(p.tier.label)})</td>
-          <td>$${p.qGross.toLocaleString()} &rarr; $${p.qPaid.toLocaleString()}</td>
-          <td>$${p.mGross.toLocaleString()} &rarr; $${p.mPaid.toLocaleString()}</td>
-          <td>$${p.nsGross.toLocaleString()} &rarr; $${p.nsPaid.toLocaleString()}</td>
-        </tr></tbody>
-      </table>
+      ${reportCommissionSummaryHtml(sdr, monthKey, commissionDays)}
       <div class="report-section-heading">Qualified &amp; Meeting Booked (${qualifiedBooked.length})</div>
       ${reportTable(qualifiedBooked)}
       <div class="report-section-heading">Qualified but Not Booked (${qualifiedNotBooked.length})</div>
       ${reportTable(qualifiedNotBooked)}
     `;
   }).join('');
+  // Reuses the live "How compensation works" explainer's own markup (single
+  // source of truth, no copy to keep in sync) — shown once at the very end of
+  // the report, after every SDR's numbers and lead listings, not per SDR.
+  const explainerBody = document.querySelector('#commissionExplainer .commission-explainer-body');
+  const explainerHtml = explainerBody ? explainerBody.innerHTML : '';
   return `
     <div class="report-title">Qualified Leads Review Report</div>
     <div class="report-meta">${escapeHtml(periodLabel)} · generated for manual review of every lead counted toward Qualified/Meeting numbers</div>
     ${sections}
+    <div class="report-explainer">
+      <div class="report-explainer-heading">How compensation works</div>
+      ${explainerHtml}
+    </div>
   `;
 }
 function getReportSelection() {
