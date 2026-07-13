@@ -4128,6 +4128,13 @@ function commissionPayout(key, qGross, mGross) {
 function multiplierRowHtml(p) {
   return `<div class="commission-incentive-row"><span>Meeting Quality Multiplier</span><span>&times;${p.tier.multiplier.toFixed(2)} (${p.rate.toFixed(1)}% B2B rejection, all-time — ${p.tier.minPct}${p.tier.maxPct === Infinity ? '%+' : '–' + p.tier.maxPct + '%'} tier)</span></div>`;
 }
+// The Total Compensation box's payout lines: one line per incentive, already
+// multiplier-applied — no separate gross/paid/multiplier rows to parse. The
+// multiplier is annotated inline (×0.85) so the number is traceable without
+// spelling out the whole gross → multiplier → paid chain.
+function incentiveLineHtml(label, paid, multiplier) {
+  return `<div class="commission-incentive-row"><span>${label} (&times;${multiplier.toFixed(2)})</span><span>$${paid.toLocaleString()}</span></div>`;
+}
 function calculateCommission(key) {
   const baseInput = document.getElementById('commissionBase-' + key);
   const bonusInput = document.getElementById('commissionBonus-' + key);
@@ -4152,11 +4159,8 @@ function calculateCommission(key) {
   ` : `
     <div class="commission-incentive-row"><span>Base</span><span>$${base.toLocaleString()}</span></div>
     <div class="commission-incentive-row"><span>Bonus</span><span>$${bonus.toLocaleString()}</span></div>
-    <div class="commission-incentive-row"><span>Qualified Leads Incentive (gross)</span><span>$${p.qGross.toLocaleString()}</span></div>
-    <div class="commission-incentive-row"><span>Meeting Incentive (gross)</span><span>$${p.mGross.toLocaleString()}</span></div>
-    ${multiplierRowHtml(p)}
-    <div class="commission-incentive-row"><span>Qualified Leads Incentive (paid)</span><span>$${p.qPaid.toLocaleString()}</span></div>
-    <div class="commission-incentive-row"><span>Meeting Incentive (paid)</span><span>$${p.mPaid.toLocaleString()}</span></div>
+    ${incentiveLineHtml('Qualified Leads Incentive', p.qPaid, p.tier.multiplier)}
+    ${incentiveLineHtml('Meeting Incentive', p.mPaid, p.tier.multiplier)}
     <div class="commission-incentive-row grand-total"><span>Total Compensation</span><span>$${total.toLocaleString()}</span></div>
   `;
 }
@@ -4224,11 +4228,8 @@ function commissionCard(sdr, days) {
       <button class="commission-calc-btn" onclick="calculateCommission('${sdr.key}')">Calculate</button>
     </div>
     <div class="commission-total-box" id="commissionTotalBox-${sdr.key}">
-      <div class="commission-incentive-row"><span>Qualified Leads Incentive (gross)</span><span>$${payout.qGross.toLocaleString()}</span></div>
-      <div class="commission-incentive-row"><span>Meeting Incentive (gross)</span><span>$${payout.mGross.toLocaleString()}</span></div>
-      ${multiplierRowHtml(payout)}
-      <div class="commission-incentive-row"><span>Qualified Leads Incentive (paid)</span><span>$${payout.qPaid.toLocaleString()}</span></div>
-      <div class="commission-incentive-row"><span>Meeting Incentive (paid)</span><span>$${payout.mPaid.toLocaleString()}</span></div>
+      ${incentiveLineHtml('Qualified Leads Incentive', payout.qPaid, payout.tier.multiplier)}
+      ${incentiveLineHtml('Meeting Incentive', payout.mPaid, payout.tier.multiplier)}
       <div class="commission-incentive-row grand-total"><span>Total Compensation</span><span>enter Base/Bonus and click Calculate</span></div>
     </div>
   </div>`;
