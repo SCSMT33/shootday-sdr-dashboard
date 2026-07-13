@@ -2804,8 +2804,8 @@ const ACTIVITY_METRIC_ORDER = ['leadVol', 'meetings', 'meetingsHeld'];
 const ACTIVITY_METRICS = {
   leadVol: {
     label: 'Lead Volume', field: 'leadVol',
-    singleSpec: (d, ae) => ({ type: 'count', field: 'leadVol', goal: d.goalLeads, cumulativeAllowed: true, aeBaseline: ae ? ae.leadsPerDay : null }),
-    info: 'Count of leads created per bucket, after your Leads: filter (B2B/B2C/All/Commission) is applied. Cumulative toggle switches from per-bucket counts to a running total across the range. Dashed Target = your Lead Volume goal, prorated to each bucket\'s size; no Pace shown for a straight count chart like this one.'
+    singleSpec: (d, ae) => ({ type: 'count', field: 'leadVol', cumulativeAllowed: true, aeBaseline: ae ? ae.leadsPerDay : null }),
+    info: 'Count of leads created per bucket, after your Leads: filter (B2B/B2C/All/Commission) is applied. Cumulative toggle switches from per-bucket counts to a running total across the range. No Target/Pace line shown for this straight count chart.'
   },
   meetings: {
     label: 'Meetings Booked', field: 'meetings',
