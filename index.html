@@ -486,6 +486,10 @@
   .commission-bracket-table th { text-align: left; font-size: 10px; color: var(--muted); text-transform: uppercase; padding: 4px 6px; border-bottom: 1px solid var(--border); }
   .commission-bracket-table td { padding: 5px 6px; border-bottom: 1px solid var(--border); }
   .commission-bracket-table tr.active td { background: rgba(66, 133, 244, 0.12); font-weight: 700; color: var(--accent); }
+  /* Bracket-table earning rows: green = the bracket hit (what they could earn
+     at full quality), blue = what's actually paid after the quality multiplier */
+  .commission-bracket-table tr.potential td { background: rgba(26, 158, 106, 0.12); font-weight: 700; color: #1a9e6a; }
+  .commission-bracket-table tr.paid td { background: rgba(66, 133, 244, 0.14); font-weight: 700; color: var(--accent); border-top: 2px solid var(--accent); }
   .commission-incentive-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; }
   .commission-incentive-row.total { font-weight: 700; font-size: 13px; border-top: 1px solid var(--border); margin-top: 6px; padding-top: 8px; }
   .commission-incentive-row.ignored { color: var(--muted); text-decoration: line-through; }
@@ -3990,14 +3994,23 @@ function findBracketIndex(ratePct, brackets) {
   const idx = brackets.findIndex(b => ratePct >= b.minPct && (b.maxPct === Infinity || ratePct < b.maxPct));
   return idx === -1 ? 0 : idx;
 }
-function bracketTable(brackets, activeIdx, isPct) {
+// With paidInfo the bracket hit is highlighted green ("could earn at full
+// quality" — gross) and a blue bottom row shows what's actually paid after the
+// Meeting Quality Multiplier; without paidInfo it's the original single blue
+// active-row highlight.
+function bracketTable(brackets, activeIdx, paidInfo) {
+  const paidRow = paidInfo ? `<tr class="paid">
+        <td>You earn (after &times;${paidInfo.mult.toFixed(2)} quality multiplier)</td>
+        <td>$${paidInfo.paid.toLocaleString()}</td>
+      </tr>` : '';
   return `<table class="commission-bracket-table">
     <thead><tr><th>Rate</th><th>Bonus</th></tr></thead>
     <tbody>
-      ${brackets.map((b, i) => `<tr class="${i === activeIdx ? 'active' : ''}">
+      ${brackets.map((b, i) => `<tr class="${i === activeIdx ? (paidInfo ? 'potential' : 'active') : ''}">
         <td>${b.minPct}%${b.maxPct === Infinity ? '+' : ' – <' + b.maxPct + '%'}</td>
         <td>$${b.amount.toLocaleString()}</td>
       </tr>`).join('')}
+      ${paidRow}
     </tbody>
   </table>`;
 }
@@ -4033,10 +4046,9 @@ const QUALITY_MULTIPLIER_TIERS = [
 // from rawByDay (not allData) so the Leads: filter dropdown cannot affect it —
 // same reasoning as commissionMetricsForSDR: counted from ALL leads (B2B+B2C),
 // consistent with how meetings are already counted there.
-function allTimeRejectionRate(sdrKey) {
-  if (!rawByDay) return 0;
+function allTimeRejectionCounts(sdrKey) {
   let booked = 0, bad = 0;
-  Object.keys(rawByDay).forEach(d => {
+  if (rawByDay) Object.keys(rawByDay).forEach(d => {
     const rows = rawByDay[d] && rawByDay[d][sdrKey];
     if (!rows) return;
     rows.forEach(r => {
@@ -4044,12 +4056,17 @@ function allTimeRejectionRate(sdrKey) {
       if (isMeetingNotAttended(r)) bad++;
     });
   });
-  return booked ? bad / booked * 100 : 0;
+  return { booked, bad };
+}
+function allTimeRejectionRate(sdrKey) {
+  const c = allTimeRejectionCounts(sdrKey);
+  return c.booked ? c.bad / c.booked * 100 : 0;
 }
 function qualityMultiplierForSDR(sdrKey) {
-  const rate = allTimeRejectionRate(sdrKey);
+  const { booked, bad } = allTimeRejectionCounts(sdrKey);
+  const rate = booked ? bad / booked * 100 : 0;
   const idx = findBracketIndex(rate, QUALITY_MULTIPLIER_TIERS);
-  return { rate, idx, tier: QUALITY_MULTIPLIER_TIERS[idx] };
+  return { rate, idx, tier: QUALITY_MULTIPLIER_TIERS[idx], booked, bad };
 }
 function multiplierTierTable(activeIdx) {
   return `<table class="commission-bracket-table">
@@ -4101,7 +4118,7 @@ function saveCommissionInputs(key, base, bonus, override) {
 function commissionPayout(key, qGross, mGross) {
   const q = qualityMultiplierForSDR(key);
   return {
-    rate: q.rate, tierIdx: q.idx, tier: q.tier,
+    rate: q.rate, tierIdx: q.idx, tier: q.tier, booked: q.booked, bad: q.bad,
     qGross, mGross,
     qPaid: Math.round(qGross * q.tier.multiplier),
     mPaid: Math.round(mGross * q.tier.multiplier)
@@ -4177,12 +4194,17 @@ function commissionCard(sdr, days) {
         <div class="commission-stat-value">${m.meetings}</div>
         <div class="commission-stat-sub">${m.meetingRate.toFixed(1)}% of B2B leads</div>
       </div>
+      <div class="commission-stat" style="grid-column: 1 / -1;">
+        <div class="commission-stat-label">Meeting Quality Multiplier</div>
+        <div class="commission-stat-value">&times;${payout.tier.multiplier.toFixed(2)}</div>
+        <div class="commission-stat-sub">${payout.rate.toFixed(1)}% all-time rejection — ${payout.bad} of ${payout.booked} booked meetings rejected/no-show (all-time, all leads, incl. scheduled &amp; closed)</div>
+      </div>
     </div>
     <div class="commission-bracket-label">Qualified Leads Incentive</div>
-    ${bracketTable(QUALIFIED_BRACKETS, qIdx)}
+    ${bracketTable(QUALIFIED_BRACKETS, qIdx, { paid: payout.qPaid, mult: payout.tier.multiplier })}
     <div class="commission-incentive-row"><span>Bracket bonus (gross)</span><span id="commissionQIncentive-${sdr.key}" data-amount="${qAmount}">$${qAmount.toLocaleString()}</span></div>
     <div class="commission-bracket-label">Meeting Set Incentive</div>
-    ${bracketTable(MEETING_BRACKETS, mIdx)}
+    ${bracketTable(MEETING_BRACKETS, mIdx, { paid: payout.mPaid, mult: payout.tier.multiplier })}
     <div class="commission-incentive-row"><span>Bracket bonus (gross)</span><span id="commissionMIncentive-${sdr.key}" data-amount="${mAmount}">$${mAmount.toLocaleString()}</span></div>
     <div class="commission-bracket-label">Meeting Quality Multiplier (all-time rejection rate)</div>
     ${multiplierTierTable(payout.tierIdx)}
