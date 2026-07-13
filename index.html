@@ -1031,7 +1031,7 @@
       </div>
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">Meeting Attendance by SDR <span class="goal-info" id="info-chartMeetingAttendance" title="Bar height = resolved meetings (Meeting Done + Meeting Not Atended + Meeting Rejected) for that SDR, bucketed by when the LEAD was created (not when the meeting was booked/held — that date isn't available in the export), over the selected date range — Meeting Scheduled is excluded since it hasn't happened yet. The dark segment is the portion that was Meeting Not Atended or Meeting Rejected — the % shown is that segment's share of the SDR's resolved meetings. Always shows all 4 SDRs regardless of the view-tab selection above. Average = one bar per SDR totaling the whole selected range; Week over week = one grouped bar per SDR per week, so you can see the trend instead of just the period total.">ⓘ</span></span>
+          <span class="chart-title">Meeting Attendance by SDR <span class="goal-info" id="info-chartMeetingAttendance" title="Bar height = resolved meetings (Meeting Done + Meeting Not Atended + Meeting Rejected) for that SDR, bucketed by when the LEAD was created (not when the meeting was booked/held — that date isn't available in the export), over the selected date range — Meeting Scheduled is excluded since it hasn't happened yet. The dark segment is Meeting Not Atended only (Meeting Rejected is excluded — that's an AE call, tracked separately) — the % shown is that segment's share of the SDR's resolved meetings. Always shows all 4 SDRs regardless of the view-tab selection above. Average = one bar per SDR totaling the whole selected range; Week over week = one grouped bar per SDR per week, so you can see the trend instead of just the period total. 100% view normalizes every bar to the same height so you can compare the not-attended share directly, instead of eyeballing it against varying bar heights.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetingAttendance"></div>
             <select class="chart-granularity" id="teamsComparison-chartMeetingAttendance" onchange="renderCharts(getFilteredDays())">
@@ -1047,6 +1047,11 @@
               <option value="business">B2B only</option>
               <option value="b2c">B2C only</option>
             </select>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="pctToggle-chartMeetingAttendance" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">100% view</span>
+            </label>
           </div>
         </div>
         <canvas id="chartMeetingAttendance"></canvas>
@@ -3834,6 +3839,8 @@ function renderMeetingAttendanceChart(days) {
   const leadTypeEl = document.getElementById('leadType-chartMeetingAttendance');
   const leadType = leadTypeEl ? leadTypeEl.value : 'all';
   const dataSource = leadType === 'business' ? allDataB2B : leadType === 'b2c' ? allDataB2C : allDataAll;
+  const pctEl = document.getElementById('pctToggle-chartMeetingAttendance');
+  const pct100 = !!(pctEl && pctEl.checked);
   // Teams comparison collapses the normal 4-SDR breakdown into US Team/OUS
   // Team groups instead — each "group" below is either a single SDR (key: a
   // string) or a team (key: an array of member keys); sumMetric() already
@@ -3842,24 +3849,34 @@ function renderMeetingAttendanceChart(days) {
   const buckets = weekly ? bucketize(days, 'weekly') : [{ label: null, days }];
   const labels = weekly ? buckets.map(b => b.label) : groups.map(g => g.label);
 
+  // Not Attended only — Meeting Rejected is excluded from this ratio (a
+  // rejection is the AE's call, tracked separately as Handoff quality; this
+  // chart is specifically about the lead not showing up).
   const datasets = weekly
     ? groups.flatMap(g => {
-        const naData = buckets.map(b => sumMetricFrom(dataSource, b.days, g.key, 'meetings_not_attended'));
+        const naData = buckets.map(b => sumMetricFrom(dataSource, b.days, g.key, 'meetings_no_show'));
         const doneData = buckets.map((b, i) => sumMetricFrom(dataSource, b.days, g.key, 'meetings_resolved') - naData[i]);
+        const totals = naData.map((na, i) => na + doneData[i]);
+        const naOut = pct100 ? naData.map((na, i) => totals[i] ? na / totals[i] * 100 : 0) : naData;
+        const doneOut = pct100 ? doneData.map((done, i) => totals[i] ? done / totals[i] * 100 : 0) : doneData;
         return [
-          { label: `${g.label} — Not Attended/Rejected`, data: naData, backgroundColor: '#8a1f1f', stack: g.label, _pairId: g.label, _isNA: true },
-          { label: `${g.label} — Meeting Done`, data: doneData, backgroundColor: g.color, stack: g.label, _pairId: g.label, _isNA: false }
+          { label: `${g.label} — Not Attended`, data: naOut, _rawNA: naData, _rawDone: doneData, backgroundColor: '#8a1f1f', stack: g.label, _pairId: g.label, _isNA: true },
+          { label: `${g.label} — Meeting Done`, data: doneOut, _rawNA: naData, _rawDone: doneData, backgroundColor: g.color, stack: g.label, _pairId: g.label, _isNA: false }
         ];
       })
     : (() => {
         const rows = groups.map(g => {
           const total = sumMetricFrom(dataSource, days, g.key, 'meetings_resolved');
-          const notAttended = sumMetricFrom(dataSource, days, g.key, 'meetings_not_attended');
+          const notAttended = sumMetricFrom(dataSource, days, g.key, 'meetings_no_show');
           return { ...g, total, notAttended, completed: total - notAttended };
         });
+        const naRaw = rows.map(r => r.notAttended);
+        const doneRaw = rows.map(r => r.completed);
+        const naOut = pct100 ? rows.map(r => r.total ? r.notAttended / r.total * 100 : 0) : naRaw;
+        const doneOut = pct100 ? rows.map(r => r.total ? r.completed / r.total * 100 : 0) : doneRaw;
         return [
-          { label: 'Not Attended / Rejected', data: rows.map(r => r.notAttended), backgroundColor: '#8a1f1f', stack: 's', _pairId: 'all', _isNA: true },
-          { label: 'Meeting Done', data: rows.map(r => r.completed), backgroundColor: rows.map(r => r.color), stack: 's', _pairId: 'all', _isNA: false }
+          { label: 'Not Attended', data: naOut, _rawNA: naRaw, _rawDone: doneRaw, backgroundColor: '#8a1f1f', stack: 's', _pairId: 'all', _isNA: true },
+          { label: 'Meeting Done', data: doneOut, _rawNA: naRaw, _rawDone: doneRaw, backgroundColor: rows.map(r => r.color), stack: 's', _pairId: 'all', _isNA: false }
         ];
       })();
 
@@ -3879,22 +3896,20 @@ function renderMeetingAttendanceChart(days) {
           callbacks: {
             label: ctx => {
               const ds = ctx.dataset;
-              const pairDs = ctx.chart.data.datasets.find(d => d._pairId === ds._pairId && d._isNA !== ds._isNA);
               const i = ctx.dataIndex;
-              const na = (ds._isNA ? ds : pairDs).data[i] || 0;
-              const done = (ds._isNA ? pairDs : ds).data[i] || 0;
+              const na = ds._rawNA[i] || 0;
+              const done = ds._rawDone[i] || 0;
               if (ds._isNA) {
                 const total = na + done;
                 const pct = total ? (na / total * 100).toFixed(1) : '0.0';
-                return ` ${weekly ? 'Not Attended/Rejected' : ds.label}: ${na} (${pct}%)`;
+                return ` ${weekly ? 'Not Attended' : ds.label}: ${na} (${pct}%)`;
               }
               return ` ${weekly ? 'Meeting Done' : ds.label}: ${done}`;
             },
             footer: items => {
               const ds = items[0].dataset;
-              const pairDs = items[0].chart.data.datasets.find(d => d._pairId === ds._pairId && d._isNA !== ds._isNA);
               const i = items[0].dataIndex;
-              const total = (ds.data[i] || 0) + (pairDs.data[i] || 0);
+              const total = (ds._rawNA[i] || 0) + (ds._rawDone[i] || 0);
               return weekly ? ` ${ds._pairId} total resolved: ${total}` : ` Total resolved: ${total}`;
             }
           }
@@ -3902,7 +3917,9 @@ function renderMeetingAttendanceChart(days) {
       },
       scales: {
         x: { stacked: true, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { display: false } },
-        y: { stacked: true, beginAtZero: true, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' } }
+        y: { stacked: true, beginAtZero: true, max: pct100 ? 100 : undefined,
+          ticks: { color: '#5b5f78', font: { size: 11 }, callback: v => pct100 ? `${v}%` : v },
+          grid: { color: '#e4e6ef' } }
       }
     },
     plugins: [meetingAttendancePctPlugin]
@@ -3910,8 +3927,8 @@ function renderMeetingAttendanceChart(days) {
   const legendEl = document.getElementById('legend-chartMeetingAttendance');
   if (legendEl) {
     const items = weekly
-      ? [{ label: 'Not Attended / Rejected', color: '#8a1f1f' }, ...groups.map(g => ({ label: g.label, color: g.color }))]
-      : [{ label: 'Not Attended / Rejected (%)', color: '#8a1f1f' }, { label: 'Meeting Done', color: '#4285f4' }];
+      ? [{ label: 'Not Attended', color: '#8a1f1f' }, ...groups.map(g => ({ label: g.label, color: g.color }))]
+      : [{ label: 'Not Attended (%)', color: '#8a1f1f' }, { label: 'Meeting Done', color: '#4285f4' }];
     legendEl.innerHTML = items.map(it =>
       `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
     ).join('');
