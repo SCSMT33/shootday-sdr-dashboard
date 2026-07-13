@@ -4126,7 +4126,7 @@ function commissionPayout(key, qGross, mGross) {
   };
 }
 function multiplierRowHtml(p) {
-  return `<div class="commission-incentive-row"><span>Meeting Quality Multiplier</span><span>&times;${p.tier.multiplier.toFixed(2)} (${p.rate.toFixed(1)}% rejection — ${p.tier.minPct}${p.tier.maxPct === Infinity ? '%+' : '–' + p.tier.maxPct + '%'} tier)</span></div>`;
+  return `<div class="commission-incentive-row"><span>Meeting Quality Multiplier</span><span>&times;${p.tier.multiplier.toFixed(2)} (${p.rate.toFixed(1)}% B2B rejection, all-time — ${p.tier.minPct}${p.tier.maxPct === Infinity ? '%+' : '–' + p.tier.maxPct + '%'} tier)</span></div>`;
 }
 function calculateCommission(key) {
   const baseInput = document.getElementById('commissionBase-' + key);
@@ -4207,7 +4207,7 @@ function commissionCard(sdr, days) {
     <div class="commission-bracket-label">Meeting Set Incentive</div>
     ${bracketTable(MEETING_BRACKETS, mIdx, { paid: payout.mPaid, mult: payout.tier.multiplier })}
     <div class="commission-incentive-row"><span>Bracket bonus (gross)</span><span id="commissionMIncentive-${sdr.key}" data-amount="${mAmount}">$${mAmount.toLocaleString()}</span></div>
-    <div class="commission-bracket-label">Meeting Quality Multiplier (all-time rejection rate)</div>
+    <div class="commission-bracket-label">Meeting Quality Multiplier (all-time B2B rejection rate)</div>
     ${multiplierTierTable(payout.tierIdx)}
     ${multiplierRowHtml(payout)}
     <div class="commission-base-row">
