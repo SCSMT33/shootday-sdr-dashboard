@@ -4417,7 +4417,7 @@ function commissionCard(sdr, days, monthKey) {
         <div class="commission-stat-sub">${m.qualifiedRate.toFixed(1)}% of B2B leads</div>
       </div>
       <div class="commission-stat">
-        <div class="commission-stat-label">Meetings <span class="goal-info" title="Counted from ALL of this SDR's leads in the period — B2B and B2C combined, not B2B-only. Meeting Status = Scheduled, Done, Rejected, or Not Attended, plus any Closed deal (which implies a meeting happened even if status was left blank). The rate shown below is that count divided by B2B leads only, so B2C meetings can push the rate above 100% of B2B leads in an unusual month.">ⓘ</span></div>
+        <div class="commission-stat-label">Meetings <span class="goal-info" title="Counted from ALL of this SDR's leads in the period — B2B and B2C combined, not B2B-only. Meeting Status = Scheduled, Done, Rejected, or Not Attended, plus any Closed deal (which implies a meeting happened even if status was left blank) — EXCEPT a Closed deal that closed within 2 hours of the lead being created: that's treated as an automatic/instant close (e.g. an auto-deposit trigger), not a real SDR-run meeting, and is excluded here regardless of what Meeting Status says. The rate shown below is that count divided by B2B leads only, so B2C meetings can push the rate above 100% of B2B leads in an unusual month.">ⓘ</span></div>
         <div class="commission-stat-value">${m.meetings}</div>
         <div class="commission-stat-sub">${m.meetingRate.toFixed(1)}% of B2B leads</div>
       </div>
