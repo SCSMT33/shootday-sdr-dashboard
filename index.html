@@ -231,6 +231,14 @@
   }
   .card-avg-row span:last-child { font-weight: 600; color: var(--text); }
 
+  /* "vs previous period" delta line on the summary cards */
+  .card-delta { font-size: 11.5px; font-weight: 700; margin-top: 6px; }
+  .card-delta span { color: var(--muted); font-weight: 500; }
+  .card-delta.good { color: var(--green); }
+  .card-delta.bad { color: var(--red); }
+  .card-delta.flat { color: var(--muted); }
+  .card.expanded .card-delta { font-size: 16px; }
+
   .card-projected {
     margin-top: 10px;
     font-size: 12px;
@@ -281,6 +289,41 @@
   .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
   .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
   .chart-card canvas { max-height: 220px; width: 100% !important; }
+
+  /* Chart expand button + expanded state — doubles canvas height (vertical
+     only, grid-column is untouched) and scales up every text element that
+     sits alongside it, so nothing reads as disproportionately tiny next to
+     the enlarged bars when screen-sharing/presenting. Chart.js draws axis
+     ticks and tooltip text directly on the canvas, so that text is scaled
+     separately in JS (chartFontSizes) — CSS alone can't reach it. */
+  .chart-expand-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 4px 6px;
+    border-radius: 5px;
+    flex-shrink: 0;
+  }
+  .chart-expand-btn:hover { background: var(--surface2); color: var(--text); }
+  .chart-card.expanded canvas { max-height: 460px; }
+  .chart-card.expanded .chart-title { font-size: 19px; }
+  .chart-card.expanded .goal-info { font-size: 15px; }
+  .chart-card.expanded .chart-header-right { gap: 20px; }
+  .chart-card.expanded .legend-item { font-size: 15px; gap: 7px; }
+  .chart-card.expanded .legend-dot { width: 11px; height: 11px; }
+  .chart-card.expanded .chart-granularity { font-size: 13px; padding: 6px 11px; }
+  .chart-card.expanded .chart-cumulative-toggle { font-size: 14px; }
+  /* Chart.js (responsive + maintainAspectRatio:false) sizes a canvas off its
+     PARENT container's height, not the canvas's own inline style — so this
+     chart needs a dedicated wrapper div to control height, overriding the
+     shared max-height:220px canvas rule above. JS (updateDQReasonsCanvasHeight)
+     toggles the wrapper's height between the tall per-reason-bars size and a
+     short single-bar size for the 100% view. */
+  .dq-reasons-canvas-wrap { position: relative; height: 320px; }
+  #chartDQReasons { max-height: none !important; }
 
   .speed-to-lead-drilldown {
     margin-top: 14px;
@@ -351,6 +394,13 @@
   .chart-cumulative-toggle input:checked + .toggle-track::after { transform: translateX(13px); }
   .chart-cumulative-toggle:hover .toggle-text { color: var(--text); }
   .activity-metric-checks { display: flex; align-items: center; gap: 12px; }
+  .ae-row-toggle { display: inline-flex; align-items: center; cursor: pointer; user-select: none; }
+  .ae-row-toggle input { display: none; }
+  .ae-row-toggle input:checked + .toggle-track { background: var(--accent); border-color: var(--accent); }
+  .ae-row-toggle input:checked + .toggle-track::after { transform: translateX(13px); }
+  .ae-row-toggle .toggle-track { opacity: 0.55; }
+  .ae-row-toggle input:checked + .toggle-track { opacity: 1; }
+  tr.ae-row-excluded td { opacity: 0.45; }
 
   /* GOALS SECTION */
   .goals-section {
@@ -809,7 +859,7 @@
 
     <!-- CHARTS -->
     <div class="charts-grid">
-      <div class="chart-card full">
+      <div class="chart-card full" data-chart-id="chartActivity">
         <div class="chart-header">
           <span class="chart-title"><span id="chartActivityTitle">Meetings Booked</span> <span class="goal-info" id="info-chartActivity" title="Count of leads counted as a booked meeting (Meeting Status Scheduled/Done/Rejected/Not Atended, or Sales status Closed) — excluding deals that closed within 2 hours of the lead being created (an instant/self-serve close, not a real SDR-run meeting), regardless of Meeting Status, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
@@ -851,11 +901,12 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">Cumulative</span>
             </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartActivity')" title="Expand">&#10530;</button>
           </div>
         </div>
         <canvas id="chartActivity"></canvas>
       </div>
-      <div class="chart-card full">
+      <div class="chart-card full" data-chart-id="chartMeetingRate">
         <div class="chart-header">
           <span class="chart-title">Meeting Booked Rate % <span class="goal-info" id="info-chartMeetingRate" title="Meetings Booked ÷ Lead Volume for each bucket — numerator and denominator are summed across the whole bucket first, then divided (never an average of daily rates, which would over-weight thin days). Dashed Target line = your Meeting Booked Rate target goal; dashed Pace line = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
@@ -879,11 +930,12 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">Exclude current week</span>
             </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartMeetingRate')" title="Expand">&#10530;</button>
           </div>
         </div>
         <canvas id="chartMeetingRate"></canvas>
       </div>
-      <div class="chart-card full">
+      <div class="chart-card full" data-chart-id="chartQualPct">
         <div class="chart-header">
           <span class="chart-title">% Leads Qualified <span class="goal-info" id="info-chartQualPct" title="Qualified leads ÷ Lead Volume per bucket, summed then divided (not an average of daily rates). Qualified = Sales status on the explicit qualified list (Hot, Warm, Pending, Closed, Lost, refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need a scheduled follow-up, Qualified SDR, Disqualified AE); blank/Disqualified/Cold/Non respondant are non-qualified. Blank-status legacy rows with SQL status = Qualified still count. Dashed Target = your % Qualified target goal; dashed Pace = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
@@ -907,11 +959,12 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">Exclude current week</span>
             </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartQualPct')" title="Expand">&#10530;</button>
           </div>
         </div>
         <canvas id="chartQualPct"></canvas>
       </div>
-      <div class="chart-card full">
+      <div class="chart-card full" data-chart-id="chartNR">
         <div class="chart-header">
           <span class="chart-title">Non-Responsive Rate % <span class="goal-info" id="info-chartNR" title="Leads marked Sales status = Non respondant or Disqualified reason = Not responsive, ÷ Lead Volume per bucket, summed then divided. Lower is better. Dashed Target only appears if you've set a Non-Responsive Rate max goal; dashed Pace = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
@@ -935,67 +988,88 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">Exclude current week</span>
             </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartNR')" title="Expand">&#10530;</button>
           </div>
         </div>
         <canvas id="chartNR"></canvas>
       </div>
-      <div class="chart-card full">
+      <div class="chart-card full" data-chart-id="chartDQ">
         <div class="chart-header">
-          <span class="chart-title">AE Disqualified Rate % <span class="goal-info" id="info-chartAEDQ" title="Leads the AE bounced back as wrongly qualified (Disqualified AE status) ÷ that SDR's qualified leads — measures hand-off quality. Summed then divided per bucket, not averaged day to day. No monthly goal for this one, so no Target line, but Pace shows a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
+          <span class="chart-title">Disqualified Rate % <span class="goal-info" id="info-chartDQ" title="All disqualifications in one chart, measured against the lead volume of this chart's own leads dropdown (All/B2B/B2C — independent of the global Leads: filter). SDR DQ = leads the SDR themselves marked plain Disqualified ÷ lead volume. AE DQ = leads the AE bounced back as wrongly qualified (Sales status contains 'Disqualified AE') ÷ lead volume. With both toggles on, the bars stack — the full bar height is the Total Disqualified rate (SDR + AE combined); in Lines mode each series is its own line (AE DQ dashed) and the tooltip footer still shows the total. Note: AE DQ is judged against lead volume here so it can stack with SDR DQ into one meaningful total; the handoff-quality version of that metric (AE DQ ÷ qualified leads) still lives in the Mandate Scoreboard. Summed then divided per bucket, never an average of daily rates. No Target line; Pace (with Trend lines on) shows a trailing 3-bucket rolling total-DQ rate of whichever segments are toggled on.">ⓘ</span></span>
           <div class="chart-header-right">
-            <div class="chart-legend" id="legend-chartAEDQ"></div>
-            <select class="chart-granularity" id="teamsComparison-chartAEDQ" onchange="renderCharts(getFilteredDays())">
+            <div class="chart-legend" id="legend-chartDQ"></div>
+            <span class="activity-metric-checks">
+              <label class="chart-cumulative-toggle" style="margin-right:0">
+                <input type="checkbox" class="metric-check-chartDQ" value="sdr" checked onchange="onDQMetricChange(event)">
+                <span class="toggle-track"></span>
+                <span class="toggle-text">SDR DQ</span>
+              </label>
+              <label class="chart-cumulative-toggle">
+                <input type="checkbox" class="metric-check-chartDQ" value="ae" checked onchange="onDQMetricChange(event)">
+                <span class="toggle-track"></span>
+                <span class="toggle-text">AE DQ</span>
+              </label>
+            </span>
+            <select class="chart-granularity" id="teamsComparison-chartDQ" onchange="renderCharts(getFilteredDays())">
               <option value="off">Teams comparison: Off</option>
               <option value="on">Teams comparison: On</option>
             </select>
-            <select class="chart-granularity" id="granularity-chartAEDQ" onchange="renderCharts(getFilteredDays())">
+            <select class="chart-granularity" id="leadType-chartDQ" onchange="renderCharts(getFilteredDays())">
+              <option value="all">All leads</option>
+              <option value="business">B2B only</option>
+              <option value="b2c">B2C only</option>
+            </select>
+            <select class="chart-granularity" id="granularity-chartDQ" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
               <option value="weekly" selected>Weekly</option>
               <option value="monthly">Monthly</option>
             </select>
             <label class="chart-cumulative-toggle">
-              <input type="checkbox" id="modeToggle-chartAEDQ" onchange="renderCharts(getFilteredDays())">
+              <input type="checkbox" id="modeToggle-chartDQ" onchange="renderCharts(getFilteredDays())">
               <span class="toggle-track"></span>
               <span class="toggle-text">Combined</span>
             </label>
             <label class="chart-cumulative-toggle">
-              <input type="checkbox" id="excludeCurrentWeek-chartAEDQ" onchange="renderCharts(getFilteredDays())">
+              <input type="checkbox" id="excludeCurrentWeek-chartDQ" onchange="renderCharts(getFilteredDays())">
               <span class="toggle-track"></span>
               <span class="toggle-text">Exclude current week</span>
             </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartDQ')" title="Expand">&#10530;</button>
           </div>
         </div>
-        <canvas id="chartAEDQ"></canvas>
+        <canvas id="chartDQ"></canvas>
       </div>
-      <div class="chart-card full">
+      <div class="chart-card full" data-chart-id="chartDQReasons">
         <div class="chart-header">
-          <span class="chart-title">SDR Disqualified Rate % <span class="goal-info" id="info-chartSDRDQ" title="Leads the SDR themselves disqualified (plain Disqualified status) ÷ lead volume — the SDR's own screening-out rate. Summed then divided per bucket, not averaged day to day. No monthly goal for this one, so no Target line, but Pace shows a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
+          <span class="chart-title">Disqualification Reasons <span class="goal-info" id="info-chartDQReasons" title="The Disqualified reason field behind every disqualification in the selected date range and SDR-tab selection, with its own source filter (SDR + AE, SDR only, or AE only) and its own B2B/B2C/All leads dropdown (independent of the global Leads: filter). Blank reasons show as '(no reason given)' — the Data Hygiene section flags those for cleanup. Team totals = one bar per reason, stacked SDR-DQ vs AE-DQ when both sources are on; By SDR = the same reason bars split by which SDR owns the lead; Weekly trend = the top 5 reasons (by total count in the range) tracked week by week, so you can see which reasons are growing or shrinking. Beyond the top 10, reasons fold into 'Other reasons'. 100% view (Team totals only) collapses the whole range into a single bar spanning the full width, segmented by reason — each segment's width is that reason's share of every disqualification in range, largest first; beyond the top 7 (kept legible/colorblind-safe), the rest fold into one gray 'Other' segment.">ⓘ</span></span>
           <div class="chart-header-right">
-            <div class="chart-legend" id="legend-chartSDRDQ"></div>
-            <select class="chart-granularity" id="teamsComparison-chartSDRDQ" onchange="renderCharts(getFilteredDays())">
-              <option value="off">Teams comparison: Off</option>
-              <option value="on">Teams comparison: On</option>
+            <div class="chart-legend" id="legend-chartDQReasons"></div>
+            <select class="chart-granularity" id="source-chartDQReasons" onchange="renderCharts(getFilteredDays())">
+              <option value="both">SDR + AE disqualified</option>
+              <option value="sdr">SDR disqualified only</option>
+              <option value="ae">AE disqualified only</option>
             </select>
-            <select class="chart-granularity" id="granularity-chartSDRDQ" onchange="renderCharts(getFilteredDays())">
-              <option value="daily">Daily</option>
-              <option value="weekly" selected>Weekly</option>
-              <option value="monthly">Monthly</option>
+            <select class="chart-granularity" id="viewMode-chartDQReasons" onchange="renderCharts(getFilteredDays())">
+              <option value="team">Team totals</option>
+              <option value="sdr">By SDR</option>
+              <option value="trend">Weekly trend</option>
             </select>
-            <label class="chart-cumulative-toggle">
-              <input type="checkbox" id="modeToggle-chartSDRDQ" onchange="renderCharts(getFilteredDays())">
+            <select class="chart-granularity" id="leadType-chartDQReasons" onchange="renderCharts(getFilteredDays())">
+              <option value="all">All leads</option>
+              <option value="business">B2B only</option>
+              <option value="b2c">B2C only</option>
+            </select>
+            <label class="chart-cumulative-toggle" id="pctToggleWrap-chartDQReasons">
+              <input type="checkbox" id="pctToggle-chartDQReasons" onchange="renderCharts(getFilteredDays())">
               <span class="toggle-track"></span>
-              <span class="toggle-text">Combined</span>
+              <span class="toggle-text">100% view</span>
             </label>
-            <label class="chart-cumulative-toggle">
-              <input type="checkbox" id="excludeCurrentWeek-chartSDRDQ" onchange="renderCharts(getFilteredDays())">
-              <span class="toggle-track"></span>
-              <span class="toggle-text">Exclude current week</span>
-            </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartDQReasons')" title="Expand">&#10530;</button>
           </div>
         </div>
-        <canvas id="chartSDRDQ"></canvas>
+        <div class="dq-reasons-canvas-wrap" id="chartDQReasonsWrap"><canvas id="chartDQReasons"></canvas></div>
       </div>
-      <div class="chart-card full" id="chartCardSpeedToLead">
+      <div class="chart-card full" id="chartCardSpeedToLead" data-chart-id="chartSpeedToLead">
         <div class="chart-header">
           <span class="chart-title">Speed-to-Lead (median minutes) <span class="goal-info" id="info-chartSpeedToLead" title="Median minutes from lead creation to first outbound call, matched by phone number from the Aircall call-history export. Median (not mean) so a few stale/unreliable matches can't skew it. Leads created before the Call History export's own earliest call — or matched to a call over 48h later — are excluded entirely. Requires a Call History CSV to be loaded. Dashed Target = your Speed-to-Lead goal; dashed Pace = a trailing 3-bucket rolling median (3 weeks/days/months, matching whatever granularity is selected), and can be limited to On-hours-only or Off-hours-only leads with the dropdown next to the legend. On-hours uses each SDR's own local time (EST for MJ/Gospel, CET for Mark/Levi) and only counts Monday–Friday during their shift — a lead created on a Saturday or Sunday is always off-hours, even if the clock time would otherwise fall inside that SDR's weekday shift, since nobody works weekends. Click any bar/point to drill down into every lead over 20 minutes in that period — Name, created time, called time (shown in that SDR's own local time: EST for MJ, PST for Gospel, CET for Mark/Levi), and total wait. "Exclude current week" drops the still-in-progress trailing week (and its Pace contribution) — that bucket usually has very few matched leads so far, so one slow or fast one can look like a defining trend before the week is even over.">ⓘ</span></span>
           <div class="chart-header-right">
@@ -1024,14 +1098,15 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">Exclude current week</span>
             </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartSpeedToLead')" title="Expand">&#10530;</button>
           </div>
         </div>
         <canvas id="chartSpeedToLead"></canvas>
         <div id="speedToLeadDrilldown" class="speed-to-lead-drilldown" style="display:none"></div>
       </div>
-      <div class="chart-card full">
+      <div class="chart-card full" data-chart-id="chartMeetingAttendance">
         <div class="chart-header">
-          <span class="chart-title">Meeting Attendance by SDR <span class="goal-info" id="info-chartMeetingAttendance" title="Bar height = resolved meetings (Meeting Done + Meeting Not Atended + Meeting Rejected) for that SDR, bucketed by when the LEAD was created (not when the meeting was booked/held — that date isn't available in the export), over the selected date range — Meeting Scheduled is excluded since it hasn't happened yet. The dark segment is Meeting Not Atended only (Meeting Rejected is excluded — that's an AE call, tracked separately) — the % shown is that segment's share of the SDR's resolved meetings. Always shows all 4 SDRs regardless of the view-tab selection above. Average = one bar per SDR totaling the whole selected range; Week over week = one grouped bar per SDR per week, so you can see the trend instead of just the period total. 100% view normalizes every bar to the same height so you can compare the not-attended share directly, instead of eyeballing it against varying bar heights.">ⓘ</span></span>
+          <span class="chart-title">No-Show Rate by SDR (Meetings Not Attended) <span class="goal-info" id="info-chartMeetingAttendance" title="Bar height = resolved meetings (Meeting Done + Meeting Not Atended + Meeting Rejected) for that SDR, bucketed by when the LEAD was created (not when the meeting was booked/held — that date isn't available in the export), over the selected date range — Meeting Scheduled is excluded since it hasn't happened yet. The dark segment is Meeting Not Atended only (Meeting Rejected is excluded — that's an AE call, tracked separately) — the % shown is that segment's share of the SDR's resolved meetings. Always shows all 4 SDRs regardless of the view-tab selection above. Average = one bar per SDR totaling the whole selected range; Week over week = one grouped bar per SDR per week, so you can see the trend instead of just the period total. 100% view normalizes every bar to the same height so you can compare the not-attended share directly, instead of eyeballing it against varying bar heights.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetingAttendance"></div>
             <select class="chart-granularity" id="teamsComparison-chartMeetingAttendance" onchange="renderCharts(getFilteredDays())">
@@ -1052,6 +1127,7 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">100% view</span>
             </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartMeetingAttendance')" title="Expand">&#10530;</button>
           </div>
         </div>
         <canvas id="chartMeetingAttendance"></canvas>
@@ -1737,6 +1813,27 @@ function toggleCommissionSection() {
 function toggleCommissionExplainer() {
   document.getElementById('commissionExplainer').classList.toggle('expanded');
 }
+// Per-AE mute toggles for the AE Baseline section — an AE switched off here
+// is dropped from the "AE Averages" overall totals (and thus the chart
+// overlay, which reads the same overall bucket), but still listed in its own
+// row so you can flip it back on.
+let excludedAEBaselineOwners = new Set();
+function loadExcludedAEBaselineOwners() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('sdr_ae_baseline_excluded') || '[]');
+    excludedAEBaselineOwners = new Set(Array.isArray(saved) ? saved : []);
+  } catch (e) { excludedAEBaselineOwners = new Set(); }
+}
+function saveExcludedAEBaselineOwners() {
+  try { localStorage.setItem('sdr_ae_baseline_excluded', JSON.stringify(Array.from(excludedAEBaselineOwners))); } catch (e) {}
+}
+function toggleAEBaselineOwnerExcluded(owner) {
+  if (excludedAEBaselineOwners.has(owner)) excludedAEBaselineOwners.delete(owner);
+  else excludedAEBaselineOwners.add(owner);
+  saveExcludedAEBaselineOwners();
+  renderAEBaselineSection();
+  renderDashboard();
+}
 function isAEBaselineOn() {
   const el = document.getElementById('aeBaselineToggle');
   return !!rawAEBaseline && !!el && el.value === 'on';
@@ -1774,7 +1871,8 @@ function loadTrendLinesToggle() {
 function computeAEBaselineMetrics() {
   if (!rawAEBaseline || !rawAEBaseline.length) return null;
   const filtered = applyLeadTypeFilter(rawAEBaseline);
-  const overall = computeMetrics(filtered);
+  const includedForOverall = filtered.filter(r => !excludedAEBaselineOwners.has(r['Owner']));
+  const overall = computeMetrics(includedForOverall);
   const dayKeys = Array.from(new Set(rawAEBaseline.map(r => toDubaiDayKey(r['Creation Date'])).filter(Boolean))).sort();
   const spanDays = calendarSpanDays(dayKeys) || 1;
   const byOwner = {};
@@ -1783,7 +1881,7 @@ function computeAEBaselineMetrics() {
     if (!byOwner[owner]) byOwner[owner] = [];
     byOwner[owner].push(r);
   });
-  const perAE = Object.keys(byOwner).sort().map(owner => ({ owner, metrics: computeMetrics(byOwner[owner]) }));
+  const perAE = Object.keys(byOwner).sort().map(owner => ({ owner, metrics: computeMetrics(byOwner[owner]), excluded: excludedAEBaselineOwners.has(owner) }));
   return {
     overall,
     perAE,
@@ -2036,7 +2134,7 @@ function isMeetingBooked(r) {
   return MEETING_BOOKED_STATUSES.includes(r['Meeting Status']) || r['Sales status'] === 'Closed';
 }
 // Of all booked meetings, the subset that didn't actually happen — used by the
-// Meeting Attendance chart to show what fraction of each SDR's booked meetings
+// No-Show Rate by SDR chart to show what fraction of each SDR's booked meetings
 // were a no-show or rejected rather than completed/still scheduled.
 const MEETING_NOT_ATTENDED_STATUSES = ['Meeting Not Atended', 'Meeting Rejected'];
 function isMeetingNotAttended(r) {
@@ -2045,7 +2143,7 @@ function isMeetingNotAttended(r) {
 // Meetings that have actually resolved one way or another (Done, Not Atended,
 // or Rejected) — excludes Meeting Scheduled, since a still-upcoming meeting
 // hasn't happened yet and shouldn't count toward an attendance rate. Used by
-// the Meeting Attendance chart as the bar total.
+// the No-Show Rate by SDR chart as the bar total.
 const MEETING_RESOLVED_STATUSES = ['Meeting Done', 'Meeting Not Atended', 'Meeting Rejected'];
 function isMeetingResolved(r) {
   return MEETING_RESOLVED_STATUSES.includes(r['Meeting Status']);
@@ -2367,6 +2465,78 @@ function daysInCurrentMonth() {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
 }
 
+// ─── PREVIOUS-PERIOD COMPARISON (summary-card deltas) ─────────────────────────
+function dayKeyOffsetFrom(dayKey, offset) {
+  const [y, m, d] = dayKey.split('-').map(Number);
+  return dayKeyFromUTCDate(new Date(Date.UTC(y, m - 1, d + offset)));
+}
+function dayKeySpan(startKey, count) {
+  return Array.from({ length: count }, (_, i) => dayKeyOffsetFrom(startKey, i));
+}
+// The comparison window behind each summary card's "vs previous period" delta.
+// Matched-length by design: a month-to-date view compares against the SAME
+// number of elapsed days of the previous month (not the whole month), so a
+// half-finished month is never judged against a complete one. Day keys that
+// fall before the loaded data simply sum to zero, in which case the delta
+// renders as "no prior data" rather than a misleading ±100%.
+function previousPeriodInfo(days, rangeVal) {
+  if (!days.length) return null;
+  const today = dubaiTodayKey();
+  if (rangeVal === 'today') return { days: [dubaiOffsetDayKey(-1)], label: 'vs yesterday' };
+  if (rangeVal === 'yesterday') return { days: [dubaiOffsetDayKey(-2)], label: 'vs prior day' };
+  if (rangeVal === 'thisWeek') {
+    const weekStart = dubaiWeekStart(today);
+    const elapsed = dayKeyAgeDays(weekStart, today) + 1;
+    return { days: dayKeySpan(dayKeyOffsetFrom(weekStart, -7), elapsed), label: 'vs same days last week' };
+  }
+  if (rangeVal === 'thisMonth') {
+    const prevPrefix = dubaiYearMonth(-1);
+    const [py, pm] = prevPrefix.split('-').map(Number);
+    const dimPrev = new Date(Date.UTC(py, pm, 0)).getUTCDate();
+    const count = Math.min(nowInDubai().getUTCDate(), dimPrev);
+    return { days: dayKeySpan(prevPrefix + '-01', count), label: 'vs same days last month' };
+  }
+  if (rangeVal === 'lastMonth') {
+    const prefix = dubaiYearMonth(-2);
+    const [y, m] = prefix.split('-').map(Number);
+    const dim = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return { days: dayKeySpan(prefix + '-01', dim), label: 'vs the month before' };
+  }
+  if (rangeVal === 'custom') {
+    const len = calendarSpanDays(days) || days.length;
+    return { days: dayKeySpan(dayKeyOffsetFrom(days[0], -len), len), label: `vs preceding ${len} days` };
+  }
+  const n = parseInt(rangeVal);
+  if (!isNaN(n)) return { days: dayKeySpan(dayKeyOffsetFrom(days[0], -n), n), label: `vs previous ${n} days` };
+  return null; // 'all' — no previous period exists
+}
+// One compact "vs previous period" line for a summary card. Counts show the
+// change as a percentage of the previous total; rates show the raw
+// percentage-point difference. Green/red respects lowerIsBetter (NR rate,
+// no-show rate, and speed-to-lead go green when they DROP).
+function deltaChip(current, prev, opts) {
+  if (!opts || current == null) return '';
+  const { isPct, lowerIsBetter, label, prevText } = opts;
+  const ref = prevText != null ? ` (prev ${prevText})` : '';
+  if (prev == null || (!isPct && !prev)) {
+    return `<div class="card-delta flat">— no prior data <span>${label}</span></div>`;
+  }
+  let up, diffText;
+  if (isPct) {
+    const diff = current - prev;
+    if (Math.abs(diff) < 0.05) return `<div class="card-delta flat">— unchanged <span>${label}${ref}</span></div>`;
+    up = diff > 0;
+    diffText = `${Math.abs(diff).toFixed(1)}pp`;
+  } else {
+    const diff = (current - prev) / prev * 100;
+    if (Math.abs(diff) < 0.05) return `<div class="card-delta flat">— unchanged <span>${label}${ref}</span></div>`;
+    up = diff > 0;
+    diffText = `${Math.abs(diff).toFixed(1)}%`;
+  }
+  const good = lowerIsBetter ? !up : up;
+  return `<div class="card-delta ${good ? 'good' : 'bad'}">${up ? '▲' : '▼'} ${diffText} <span>${label}${ref}</span></div>`;
+}
+
 // ─── RENDER DASHBOARD ─────────────────────────────────────────────────────────
 function renderDashboard() {
   if (!allData) return;
@@ -2406,6 +2576,9 @@ function renderSummaryCards(days) {
   const stlOffMedian = median(speedToLeadMinutesValues(days, v, false));
   const lastDayBucket = lastDay ? metricsForSelection(allData, lastDay, v) : null;
   const activePipeline = lastDayBucket ? lastDayBucket.active_pipeline : 0;
+  const totalNoShow = sumMetric(days, v, 'meetings_no_show');
+  const totalResolved = sumMetric(days, v, 'meetings_resolved');
+  const noShowRate = totalResolved ? (totalNoShow / totalResolved * 100) : 0;
 
   // Commission View: every rate/percentage card (Meeting Booked Rate, % Qualified,
   // NR Rate) keeps the combined B2B+B2C numerator but is judged against the
@@ -2418,6 +2591,37 @@ function renderSummaryCards(days) {
   const pctQual = leadVolTotal ? (totalQualified / leadVolTotal * 100) : 0;
   const nrRate = leadVolTotal ? (totalNR / leadVolTotal * 100) : 0;
   const meetingRate = leadVolTotal ? (totalMeetings / leadVolTotal * 100) : 0;
+
+  // "vs previous period" deltas — same metrics recomputed over the matched-
+  // length window immediately before the selected range (see
+  // previousPeriodInfo). Rate deltas are only shown when the previous window
+  // actually had leads; a zero denominator would make every rate a
+  // meaningless 0%.
+  const prevPeriod = previousPeriodInfo(days, rangeVal);
+  const deltas = {};
+  if (prevPeriod) {
+    const pd = prevPeriod.days;
+    const pl = prevPeriod.label;
+    const prevLeadVol = isCommission ? sumMetricFrom(allDataB2B, pd, v, 'leads') : sumMetric(pd, v, 'leads');
+    const prevMeetings = sumMetric(pd, v, 'meetings');
+    const prevQualified = sumMetric(pd, v, 'qualified');
+    const prevNR = sumMetric(pd, v, 'non_responsive');
+    const prevNoShow = sumMetric(pd, v, 'meetings_no_show');
+    const prevResolved = sumMetric(pd, v, 'meetings_resolved');
+    const prevMeetingRate = prevLeadVol ? (prevMeetings / prevLeadVol * 100) : null;
+    const prevPctQual = prevLeadVol ? (prevQualified / prevLeadVol * 100) : null;
+    const prevNrRate = prevLeadVol ? (prevNR / prevLeadVol * 100) : null;
+    const prevNoShowRate = prevResolved ? (prevNoShow / prevResolved * 100) : null;
+    const prevStl = rawCalls ? median(speedToLeadMinutesValues(pd, v)) : null;
+    deltas.leadVol = deltaChip(leadVolTotal, prevLeadVol, { isPct: false, lowerIsBetter: false, label: pl, prevText: prevLeadVol });
+    deltas.meetings = deltaChip(totalMeetings, prevMeetings, { isPct: false, lowerIsBetter: false, label: pl, prevText: prevMeetings });
+    deltas.qualified = deltaChip(totalQualified, prevQualified, { isPct: false, lowerIsBetter: false, label: pl, prevText: prevQualified });
+    deltas.meetingRate = deltaChip(meetingRate, prevMeetingRate, { isPct: true, lowerIsBetter: false, label: pl, prevText: prevMeetingRate != null ? prevMeetingRate.toFixed(1) + '%' : null });
+    deltas.pctQual = deltaChip(pctQual, prevPctQual, { isPct: true, lowerIsBetter: false, label: pl, prevText: prevPctQual != null ? prevPctQual.toFixed(1) + '%' : null });
+    deltas.nrRate = deltaChip(nrRate, prevNrRate, { isPct: true, lowerIsBetter: true, label: pl, prevText: prevNrRate != null ? prevNrRate.toFixed(1) + '%' : null });
+    deltas.noShowRate = deltaChip(totalResolved ? noShowRate : null, prevNoShowRate, { isPct: true, lowerIsBetter: true, label: pl, prevText: prevNoShowRate != null ? prevNoShowRate.toFixed(1) + '%' : null });
+    deltas.stl = deltaChip(stlMedian, prevStl, { isPct: false, lowerIsBetter: true, label: pl, prevText: prevStl != null ? fmtMinutes(prevStl) : null });
+  }
 
   // Lead Volume / month auto-syncs to whatever the Lead Volume card is
   // currently showing (any filter/SDR/range combo), unless the user has
@@ -2441,8 +2645,12 @@ function renderSummaryCards(days) {
     const pipeline = sPipelineBucket ? sPipelineBucket.active_pipeline : 0;
     const leadVol = isCommission ? sumMetricFrom(allDataB2B, days, s.key, 'leads') : leads;
     const leadsProjected = elapsed ? (leadVol / elapsed * daysInMo) : 0;
+    const noShow = sumMetric(days, s.key, 'meetings_no_show');
+    const resolved = sumMetric(days, s.key, 'meetings_resolved');
     return {
       ...s, leads, meetings, qualified, nr, aedq, pipeline, leadVol, leadsProjected, medianMinutes, matched,
+      noShow, resolved,
+      noShowRate: resolved ? (noShow / resolved * 100) : 0,
       pctQual: leadVol ? (qualified / leadVol * 100) : 0,
       nrRate: leadVol ? (nr / leadVol * 100) : 0,
       meetingRate: leadVol ? (meetings / leadVol * 100) : 0,
@@ -2473,16 +2681,18 @@ function renderSummaryCards(days) {
     : `Leads marked Sales status = Non respondant or Disqualified reason = Not responsive, ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Lower is better.${aeNote}`;
   const infoAEDQ = `Count of leads the AE bounced back as wrongly qualified (Sales status contains "Disqualified AE") — measures SDR hand-off quality, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
   const infoPipeline = `Snapshot as of the last day in range: leads whose Sales status is NOT Closed, Disqualified, Lost, Deposit refund, or blank — i.e. still open/in-progress, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
+  const infoNoShow = `Meetings the lead didn't show up for (Meeting Status = Meeting Not Atended) ÷ resolved meetings (Done + Not Atended + Rejected) in the selected range. Still-upcoming Scheduled meetings are excluded (they haven't happened yet), and Meeting Rejected counts toward the denominator but not the numerator — a rejection is the AE's call on qualification, not a client no-show. Lower is better. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Full breakdown in the "No-Show Rate by SDR" chart below.`;
   document.getElementById('summaryCards').innerHTML = `
-    ${countCard('Lead Volume', leadVolTotal, perSDR.map(s => ({ ...s, value: s.leadVol, goal: s.leadsGoal })), elapsed, daysInMo, showProjection, isCommission ? 'B2B leads only' : undefined, d.goalLeads, ae ? ae.leadsPerDay : null, infoLeadVolume)}
-    ${countCard('Meetings Booked', totalMeetings, perSDR.map(s => ({ ...s, value: s.meetings, goal: s.meetingsGoal })), elapsed, daysInMo, showProjection, undefined, d.goalMeetings, ae ? ae.meetingsPerDay : null, infoMeetingsBooked)}
-    ${rateCard('Meeting Booked Rate', meetingRate, perSDR.map(s => ({ ...s, value: s.meetingRate })), isCommission ? meanRateCommission(days, v, 'meetings') : meanMetric(days, v, 'meeting_rate'), isCommission ? 'meetings (B2B+B2C) ÷ B2B leads' : 'meetings ÷ total leads', d.goalMeetingRate, false, ae ? ae.overall.meeting_rate : null, infoMeetingRate)}
-    ${countCard('Leads Qualified', totalQualified, perSDR.map(s => ({ ...s, value: s.qualified, goal: s.qualifiedGoal })), elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified, ae ? ae.qualifiedPerDay : null, infoQualified)}
-    ${rateCard('% Leads Qualified', pctQual, perSDR.map(s => ({ ...s, value: s.pctQual })), isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'status-based: blank/DQ/cold/non-respondant excluded', d.goalPctQual, false, ae ? ae.overall.pct_qualified : null, infoPctQualified)}
-    ${rateCard('Non-Responsive Rate', nrRate, perSDR.map(s => ({ ...s, value: s.nrRate })), isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true, ae ? ae.overall.nr_rate : null, infoNR)}
+    ${countCard('Lead Volume', leadVolTotal, perSDR.map(s => ({ ...s, value: s.leadVol, goal: s.leadsGoal })), elapsed, daysInMo, showProjection, isCommission ? 'B2B leads only' : undefined, d.goalLeads, ae ? ae.leadsPerDay : null, infoLeadVolume, deltas.leadVol)}
+    ${countCard('Meetings Booked', totalMeetings, perSDR.map(s => ({ ...s, value: s.meetings, goal: s.meetingsGoal })), elapsed, daysInMo, showProjection, undefined, d.goalMeetings, ae ? ae.meetingsPerDay : null, infoMeetingsBooked, deltas.meetings)}
+    ${rateCard('Meeting Booked Rate', meetingRate, perSDR.map(s => ({ ...s, value: s.meetingRate })), isCommission ? meanRateCommission(days, v, 'meetings') : meanMetric(days, v, 'meeting_rate'), isCommission ? 'meetings (B2B+B2C) ÷ B2B leads' : 'meetings ÷ total leads', d.goalMeetingRate, false, ae ? ae.overall.meeting_rate : null, infoMeetingRate, deltas.meetingRate)}
+    ${countCard('Leads Qualified', totalQualified, perSDR.map(s => ({ ...s, value: s.qualified, goal: s.qualifiedGoal })), elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified, ae ? ae.qualifiedPerDay : null, infoQualified, deltas.qualified)}
+    ${rateCard('% Leads Qualified', pctQual, perSDR.map(s => ({ ...s, value: s.pctQual })), isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'status-based: blank/DQ/cold/non-respondant excluded', d.goalPctQual, false, ae ? ae.overall.pct_qualified : null, infoPctQualified, deltas.pctQual)}
+    ${rateCard('Non-Responsive Rate', nrRate, perSDR.map(s => ({ ...s, value: s.nrRate })), isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true, ae ? ae.overall.nr_rate : null, infoNR, deltas.nrRate)}
+    ${rateCard('No-Show Rate', noShowRate, perSDR.map(s => ({ ...s, value: s.noShowRate })), null, `${totalNoShow} no-show${totalNoShow === 1 ? '' : 's'} of ${totalResolved} resolved meetings`, null, true, null, infoNoShow, deltas.noShowRate)}
     ${rawCalls ? speedToLeadCard('Speed-to-Lead', stlMedian, totalSTLMatched, totalSTLEligible, totalSTLMismatch, perSDR, d.goalSpeedToLead,
         { median: stlOnMedian, matched: totalSTLOnMatched, eligible: totalSTLOnEligible },
-        { median: stlOffMedian, matched: totalSTLOffMatched, eligible: totalSTLOffEligible }) : pendingCard('Speed-to-Lead', 'Load a Call History CSV to enable')}
+        { median: stlOffMedian, matched: totalSTLOffMatched, eligible: totalSTLOffEligible }, deltas.stl) : pendingCard('Speed-to-Lead', 'Load a Call History CSV to enable')}
     ${pendingCard('Cadence Adherence', 'Pending (manual score)')}
   `;
   applyExpandedState();
@@ -2503,6 +2713,31 @@ function applyExpandedState() {
   document.querySelectorAll('.card').forEach(c => {
     c.classList.toggle('expanded', expandedCards.has(c.dataset.label));
   });
+}
+
+// ─── CHART EXPAND (presenting/screen-share mode, per chart) ───────────────────
+// Same idea as the summary-card expand above, but for the trend charts in
+// .charts-grid: doubles the canvas height (vertical only — these are already
+// full-width, so grid-column is untouched) and scales up the surrounding HTML
+// text via the .chart-card.expanded CSS rules. The chart-card markup itself
+// is static (unlike the summary cards, which are rebuilt from a template
+// every render), so the expand button is written directly into the HTML —
+// only the 'expanded' class and the canvas redraw need to react to a toggle.
+let expandedCharts = new Set();
+function isChartExpanded(id) { return expandedCharts.has(id); }
+function toggleChartExpand(id) {
+  if (expandedCharts.has(id)) expandedCharts.delete(id); else expandedCharts.add(id);
+  document.querySelectorAll('.chart-card[data-chart-id]').forEach(c => {
+    c.classList.toggle('expanded', expandedCharts.has(c.dataset.chartId));
+  });
+  renderCharts(getFilteredDays());
+}
+// Chart.js draws axis-tick and tooltip text directly onto the canvas — that
+// text doesn't grow just because the surrounding card gets taller via CSS, so
+// every chart's own render options need these baked in when expanded.
+function chartFontSizes(id) {
+  const big = isChartExpanded(id);
+  return { tick: big ? 15 : 11, tooltipTitle: big ? 15 : 12, tooltipBody: big ? 14 : 12, tooltipFooter: big ? 13 : 11 };
 }
 
 function goalStatusRow(actual, goalVal, isPct, lowerIsBetter, rowLabel) {
@@ -2538,7 +2773,7 @@ function splitRow(sdrList, isPct, lowerIsBetter) {
 
 // aeBaselinePerDay: pre-SDR AE-era avg/day for this metric, shown only when
 // the AE Baseline toggle is on and the data is loaded.
-function countCard(label, total, sdrList, elapsed, daysInMo, showProjection, extraSub, goalMonthly, aeBaselinePerDay, infoText) {
+function countCard(label, total, sdrList, elapsed, daysInMo, showProjection, extraSub, goalMonthly, aeBaselinePerDay, infoText, deltaHtml) {
   const avg = elapsed ? (total / elapsed) : 0;
   const enriched = sdrList.map(s => {
     const sAvg = elapsed ? (s.value / elapsed) : 0;
@@ -2553,6 +2788,7 @@ function countCard(label, total, sdrList, elapsed, daysInMo, showProjection, ext
     <div class="card-label">${label} ${cardInfo(infoText)}</div>
     <div class="card-value">${total}</div>
     <div class="card-sub">${extraSub || ''}</div>
+    ${deltaHtml || ''}
     ${splitRow(enriched, false, false)}
     <div class="card-avg-row"><span>Avg / day</span><span>${avg.toFixed(1)}</span></div>
     ${aeRow}
@@ -2561,7 +2797,7 @@ function countCard(label, total, sdrList, elapsed, daysInMo, showProjection, ext
   </div>`;
 }
 
-function rateCard(label, pct, sdrList, avgDaily, extraSub, goalVal, lowerIsBetter, aeBaselinePct, infoText) {
+function rateCard(label, pct, sdrList, avgDaily, extraSub, goalVal, lowerIsBetter, aeBaselinePct, infoText, deltaHtml) {
   const goalRow = goalStatusRow(pct, goalVal, true, lowerIsBetter, 'Target (team)');
   const enriched = sdrList.map(s => ({ ...s, goalVal }));
   const aeRow = (isAEBaselineOn() && aeBaselinePct != null) ? `<div class="card-avg-row"><span>AE Baseline</span><span style="color:${COLORS.AEBaseline}">${aeBaselinePct.toFixed(1)}%</span></div>` : '';
@@ -2570,8 +2806,9 @@ function rateCard(label, pct, sdrList, avgDaily, extraSub, goalVal, lowerIsBette
     <div class="card-label">${label} ${cardInfo(infoText)}</div>
     <div class="card-value">${pct.toFixed(1)}%</div>
     <div class="card-sub">${extraSub || ''}</div>
+    ${deltaHtml || ''}
     ${splitRow(enriched, true, lowerIsBetter)}
-    <div class="card-avg-row"><span>Avg / day</span><span>${avgDaily.toFixed(1)}%</span></div>
+    ${avgDaily != null ? `<div class="card-avg-row"><span>Avg / day</span><span>${avgDaily.toFixed(1)}%</span></div>` : ''}
     ${aeRow}
     ${goalRow}
   </div>`;
@@ -2610,7 +2847,7 @@ function speedToLeadHoursRow(rowLabel, split) {
 }
 // sdrList: array of { key, label, color, medianMinutes, matched }
 // onSplit/offSplit: { median, matched, eligible } for the current SDR selection
-function speedToLeadCard(label, medianMinutes, matched, eligible, mismatch, sdrList, goalVal, onSplit, offSplit) {
+function speedToLeadCard(label, medianMinutes, matched, eligible, mismatch, sdrList, goalVal, onSplit, offSplit, deltaHtml) {
   const matchedPct = eligible ? (matched / eligible * 100).toFixed(0) : '0';
   const goalRow = (medianMinutes != null) ? goalStatusRow(medianMinutes, goalVal, false, true, 'Target (team)') : '';
   const enriched = sdrList.map(s => ({ ...s, value: s.medianMinutes != null ? s.medianMinutes : 0, goalVal }));
@@ -2619,6 +2856,7 @@ function speedToLeadCard(label, medianMinutes, matched, eligible, mismatch, sdrL
     <div class="card-label">${label} <span class="goal-info" title="Median minutes from a lead's creation to that SDR's first outbound call to it, matched by phone number from the Aircall call-history export (median, not mean, so a few stale/unreliable matches can't skew the number). Leads created before your Call History export's own earliest call are excluded entirely — there's no reliable way to know when those were first called — as are matches over 48h (almost certainly a missed early call, not a real gap). On-hours/Off-hours split per the SDR Lead Routing Logic doc, using each SDR's own local time (fixed EST for MJ/Gospel, CET for Mark/Levi) — on-hours is that SDR's solo shift plus their overlap window, Monday–Friday only; off-hours is everything else, including the overnight round-robin and all day Saturday/Sunday (nobody works weekends, so a weekend lead is always off-hours regardless of what time it came in, even if the clock time would normally fall inside that SDR's weekday shift).">ⓘ</span></div>
     <div class="card-value">${medianMinutes != null ? fmtMinutes(medianMinutes) : '—'}</div>
     <div class="card-sub">${matched}/${eligible} eligible leads called (${matchedPct}%)${mismatch ? ` · ${mismatch} flagged: different SDR than lead owner` : ''}</div>
+    ${deltaHtml || ''}
     ${splitRow(enriched, false, true)}
     ${speedToLeadHoursRow('On-hours median', onSplit)}
     ${speedToLeadHoursRow('Off-hours median', offSplit)}
@@ -2782,6 +3020,7 @@ function makeChart(id, days, spec) {
 
   if (charts[id]) { charts[id].destroy(); }
   const ctx = document.getElementById(id).getContext('2d');
+  const f = chartFontSizes(id);
   charts[id] = new Chart(ctx, {
     type: barMode ? 'bar' : 'line',
     data: { labels, datasets },
@@ -2797,14 +3036,16 @@ function makeChart(id, days, spec) {
           borderWidth: 1,
           titleColor: '#ffffff',
           bodyColor: '#cfd2e3',
+          titleFont: { size: f.tooltipTitle },
+          bodyFont: { size: f.tooltipBody },
           callbacks: {
             label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}${isRate ? '%' : ''}`
           }
         }
       },
       scales: {
-        x: { ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' } },
-        y: { ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' }, beginAtZero: true }
+        x: { ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' } },
+        y: { ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' }, beginAtZero: true }
       }
     }
   });
@@ -2888,7 +3129,7 @@ function renderActivityChart(chartDays, d, ae) {
   if (titleEl) titleEl.textContent = metrics.map(k => ACTIVITY_METRICS[k].label).join(' + ');
   const infoEl = document.getElementById('info-chartActivity');
   const infoText = metrics.length > 1
-    ? `Overlaid, not stacked: ${metrics.map(k => ACTIVITY_METRICS[k].label).join(', ')} — same-width bars sharing one x slot, layered back-to-front (Lead Volume back/lightest, Meetings Booked middle, Meetings Held front/darkest, all shaded from whichever group's own color is showing) so you can see at a glance what share of that bucket made it from one stage to the next. These numbers don't sum to anything meaningful, so they're deliberately not stacked. Uncheck a metric above to drop it. The Group dropdown splits this into Combined (one bar), US vs OUS Teams, or Per SDR — Per SDR and Teams cap out at Weekly/Monthly (Daily gets too cramped with this many layers).`
+    ? `Overlaid, not stacked: ${metrics.map(k => ACTIVITY_METRICS[k].label).join(', ')} — same-width bars sharing one x slot, layered back-to-front (Lead Volume back/lightest, Meetings Booked middle, Meetings Held front/darkest, all shaded from whichever group's own color is showing) so you can see at a glance what share of that bucket made it from one stage to the next. These numbers don't sum to anything meaningful, so they're deliberately not stacked. Hover any bar to see the conversion percentages behind it — Meetings Booked as a % of that bucket's Lead Volume (the baseline it was generated from), Meetings Held as a % of both Lead Volume and Booked. Uncheck a metric above to drop it. The Group dropdown splits this into Combined (one bar), US vs OUS Teams, or Per SDR — Per SDR and Teams cap out at Weekly/Monthly (Daily gets too cramped with this many layers).`
     : ACTIVITY_METRICS[metrics[0]].info;
   if (infoEl) infoEl.dataset.base = infoText;
   const cumWrap = document.getElementById('cumulativeToggleWrap-chartActivity');
@@ -2967,6 +3208,7 @@ function renderLayeredActivityChart(chartDays, metrics) {
       return {
         label: `${group.label} — ${m.label}`,
         data: seriesForGroup(m.field, group),
+        _metricKey: key, _groupLabel: group.label,
         backgroundColor: shadeHex(group.color, ACTIVITY_SHADE_PCT[key]),
         borderRadius: 3, borderWidth: 0,
         categoryPercentage: 0.72, barPercentage: 0.82,
@@ -2977,6 +3219,7 @@ function renderLayeredActivityChart(chartDays, metrics) {
 
   if (charts[id]) charts[id].destroy();
   const ctx = document.getElementById(id).getContext('2d');
+  const f = chartFontSizes(id);
   charts[id] = new Chart(ctx, {
     type: 'bar',
     data: { labels, datasets },
@@ -2988,12 +3231,36 @@ function renderLayeredActivityChart(chartDays, metrics) {
         tooltip: {
           backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
           titleColor: '#ffffff', bodyColor: '#cfd2e3',
-          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y ?? '—'}` }
+          titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody },
+          callbacks: {
+            // Conversion rates inline on hover: Meetings Booked as a % of the
+            // same bar-slot's Lead Volume (the baseline it was generated
+            // from), Meetings Held as a % of both Lead Volume and Booked —
+            // read from sibling datasets of the same group at the same index,
+            // so the percentages always describe exactly the bar under the
+            // cursor, whatever Group/granularity split is active.
+            label: ctx => {
+              const ds = ctx.dataset, i = ctx.dataIndex, val = ctx.parsed.y;
+              if (val == null) return ` ${ds.label}: —`;
+              const sibling = mk => {
+                const d2 = ctx.chart.data.datasets.find(x => x._groupLabel === ds._groupLabel && x._metricKey === mk);
+                return d2 && d2.data[i] != null ? d2.data[i] : null;
+              };
+              const lv = sibling('leadVol'), booked = sibling('meetings');
+              const parts = [];
+              if (ds._metricKey === 'meetings' && lv) parts.push(`${(val / lv * 100).toFixed(1)}% of lead volume`);
+              if (ds._metricKey === 'meetingsHeld') {
+                if (lv) parts.push(`${(val / lv * 100).toFixed(1)}% of lead volume`);
+                if (booked) parts.push(`${(val / booked * 100).toFixed(1)}% of booked`);
+              }
+              return ` ${ds.label}: ${val}${parts.length ? ' — ' + parts.join(' · ') : ''}`;
+            }
+          }
         }
       },
       scales: {
-        x: { stacked: false, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { display: false } },
-        y: { stacked: false, beginAtZero: true, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' } }
+        x: { stacked: false, ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { display: false } },
+        y: { stacked: false, beginAtZero: true, ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' } }
       }
     }
   });
@@ -3029,21 +3296,23 @@ function renderCharts(days) {
   const chartDays = isCurrentMonthToDate(rangeVal) ? monthDayKeys() : days;
   // AE Baseline is a single frozen historical average (not date-bucketed),
   // computed once here and handed to each chart as spec.aeBaseline — a flat
-  // % for rate charts, an avg-per-day count for count charts. No equivalent
-  // exists for AE-Disqualified-Rate (no SDR-to-AE handoff existed pre-SDR),
-  // so chartAEDQ intentionally gets no aeBaseline.
+  // % for rate charts, an avg-per-day count for count charts. The combined
+  // Disqualified chart computes its own baseline (aeBaselineDQRateLocal)
+  // because it filters by its chart-local lead-type dropdown, not the
+  // global Leads: filter this `ae` object was computed under.
   const ae = isAEBaselineOn() ? computeAEBaselineMetrics() : null;
   makeChart('chartMeetingRate', chartDays, { type: 'rate', num: 'meetings', denom: 'leadVol', goal: d.goalMeetingRate, pace: true, aeBaseline: ae ? ae.overall.meeting_rate : null });
   makeChart('chartQualPct', chartDays, { type: 'rate', num: 'qualified', denom: 'leadVol', goal: d.goalPctQual, pace: true, aeBaseline: ae ? ae.overall.pct_qualified : null });
   makeChart('chartNR', chartDays, { type: 'rate', num: 'non_responsive', denom: 'leadVol', goal: d.goalNRRate, pace: true, aeBaseline: ae ? ae.overall.nr_rate : null });
-  makeChart('chartAEDQ', chartDays, { type: 'rate', num: 'ae_dq', denom: 'qualified', pace: true });
-  makeChart('chartSDRDQ', chartDays, { type: 'rate', num: 'sdr_dq', denom: 'leadVol', pace: true, aeBaseline: ae ? ae.sdrDqRate : null });
+  renderDQChart(chartDays);
+  renderDQReasonsChart(days);
   renderActivityChart(chartDays, d, ae);
   renderSpeedToLeadChart(chartDays);
   renderMeetingAttendanceChart(days);
-  ['chartMeetingRate', 'chartQualPct', 'chartNR', 'chartAEDQ', 'chartSDRDQ', 'chartSpeedToLead']
+  ['chartMeetingRate', 'chartQualPct', 'chartNR', 'chartDQ', 'chartSpeedToLead']
     .forEach(id => updateChartInfoTooltip(id));
   updateChartInfoTooltip('chartMeetingAttendance', true);
+  updateChartInfoTooltip('chartDQReasons', true);
 }
 
 // Appends a live "Currently showing: ..." summary to a chart's ⓘ tooltip,
@@ -3053,8 +3322,12 @@ function renderCharts(days) {
 // meetingAttendance ignores granularity/style/SDR-selection by design, so its
 // context is limited to the Leads filter (simpleMode = true).
 function chartViewContext(id, simpleMode) {
-  const filter = leadTypeFilter();
-  const filterLabel = { business: 'B2B leads only', b2c: 'B2C leads only', all: 'All leads', commission: 'Commission View' }[filter] || filter;
+  // A chart with its own leadType-<id> dropdown filters locally, independent
+  // of the global Leads: filter — describe the one it actually uses.
+  const localLeadEl = document.getElementById('leadType-' + id);
+  const filter = localLeadEl ? localLeadEl.value : leadTypeFilter();
+  let filterLabel = { business: 'B2B leads only', b2c: 'B2C leads only', all: 'All leads', commission: 'Commission View' }[filter] || filter;
+  if (localLeadEl) filterLabel += ' (chart-local filter)';
   const teamsEl = document.getElementById('teamsComparison-' + id);
   const teamsNote = (teamsEl && teamsEl.value === 'on') ? ', US Team vs OUS Team comparison on' : '';
   if (simpleMode) return ` Currently showing: ${filterLabel}${teamsNote}.`;
@@ -3160,6 +3433,7 @@ function renderSpeedToLeadChart(days) {
 
   if (charts[id]) charts[id].destroy();
   const ctx = document.getElementById(id).getContext('2d');
+  const f = chartFontSizes(id);
   charts[id] = new Chart(ctx, {
     type: barMode ? 'bar' : 'line',
     data: { labels, datasets },
@@ -3189,12 +3463,14 @@ function renderSpeedToLeadChart(days) {
           borderWidth: 1,
           titleColor: '#ffffff',
           bodyColor: '#cfd2e3',
+          titleFont: { size: f.tooltipTitle },
+          bodyFont: { size: f.tooltipBody },
           callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y} min` }
         }
       },
       scales: {
-        x: { ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' } },
-        y: { ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' }, beginAtZero: true }
+        x: { ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' } },
+        y: { ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' }, beginAtZero: true }
       }
     }
   });
@@ -3838,7 +4114,7 @@ const meetingAttendancePctPlugin = {
     const { ctx } = chart;
     ctx.save();
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 11px sans-serif';
+    ctx.font = `bold ${isChartExpanded('chartMeetingAttendance') ? 15 : 11}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const datasets = chart.data.datasets;
@@ -3914,6 +4190,7 @@ function renderMeetingAttendanceChart(days) {
 
   if (charts.chartMeetingAttendance) charts.chartMeetingAttendance.destroy();
   const ctx = document.getElementById('chartMeetingAttendance').getContext('2d');
+  const f = chartFontSizes('chartMeetingAttendance');
   charts.chartMeetingAttendance = new Chart(ctx, {
     type: 'bar',
     data: { labels, datasets },
@@ -3925,6 +4202,7 @@ function renderMeetingAttendanceChart(days) {
         tooltip: {
           backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
           titleColor: '#ffffff', bodyColor: '#cfd2e3',
+          titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody }, footerFont: { size: f.tooltipFooter },
           callbacks: {
             label: ctx => {
               const ds = ctx.dataset;
@@ -3948,9 +4226,9 @@ function renderMeetingAttendanceChart(days) {
         }
       },
       scales: {
-        x: { stacked: true, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { display: false } },
+        x: { stacked: true, ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { display: false } },
         y: { stacked: true, beginAtZero: true, max: pct100 ? 100 : undefined,
-          ticks: { color: '#5b5f78', font: { size: 11 }, callback: v => pct100 ? `${v}%` : v },
+          ticks: { color: '#5b5f78', font: { size: f.tick }, callback: v => pct100 ? `${v}%` : v },
           grid: { color: '#e4e6ef' } }
       }
     },
@@ -3965,6 +4243,444 @@ function renderMeetingAttendanceChart(days) {
       `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
     ).join('');
   }
+}
+
+// ─── DISQUALIFICATION OVERSIGHT ───────────────────────────────────────────────
+// The AE Disqualified Rate and SDR Disqualified Rate charts used to be two
+// separate charts with different denominators (AE ÷ qualified, SDR ÷ leads).
+// Merged into ONE chart where both are judged against lead volume, so the two
+// segments stack into a meaningful Total Disqualified rate — the AE-handoff
+// version of the metric (÷ qualified leads) still lives in the Mandate
+// Scoreboard's "Handoff quality" row, unchanged. Colors validated for CVD
+// separation and lightness (dataviz palette checks): amber = the SDR's own
+// screening-out, red = the AE overruling a qualification.
+const DQ_METRIC_ORDER = ['sdr', 'ae'];
+const DQ_COLORS = { sdr: '#d98e00', ae: '#c0392b' };
+const DQ_METRIC_LABELS = { sdr: 'SDR DQ', ae: 'AE DQ' };
+const DQ_FIELDS = { sdr: 'sdr_dq', ae: 'ae_dq' };
+
+function checkedDQMetrics() {
+  return DQ_METRIC_ORDER.filter(key => {
+    const el = document.querySelector(`.metric-check-chartDQ[value="${key}"]`);
+    return el && el.checked;
+  });
+}
+// Can't uncheck the last remaining segment — there'd be nothing to plot.
+function onDQMetricChange(event) {
+  if (checkedDQMetrics().length === 0 && event && event.target) {
+    event.target.checked = true;
+    return;
+  }
+  renderCharts(getFilteredDays());
+}
+// Chart-local B2B/B2C/All dataset lookup (a leadType-<id> dropdown in the
+// chart's own header, independent of the global Leads: filter) — same pattern
+// the No-Show chart established.
+function localLeadTypeDataset(id) {
+  const el = document.getElementById('leadType-' + id);
+  const v = el ? el.value : 'all';
+  return v === 'business' ? allDataB2B : v === 'b2c' ? allDataB2C : allDataAll;
+}
+function localLeadTypeValue(id) {
+  const el = document.getElementById('leadType-' + id);
+  return el ? el.value : 'all';
+}
+// AE-era benchmark for the combined DQ chart: in the pre-SDR data every
+// disqualification is a plain "Disqualified" (no SDR→AE handoff existed, so
+// no Disqualified-AE rows) — one flat rate over the whole frozen export,
+// honoring this chart's local lead filter rather than the global one.
+function aeBaselineDQRateLocal(id) {
+  if (!rawAEBaseline || !rawAEBaseline.length) return null;
+  const v = localLeadTypeValue(id);
+  const rows = v === 'business' ? rawAEBaseline.filter(isBusinessLead)
+    : v === 'b2c' ? rawAEBaseline.filter(isB2CLead) : rawAEBaseline;
+  if (!rows.length) return null;
+  const dq = rows.filter(r => normalizeSalesStatus(r['Sales status']) === 'disqualified').length;
+  return parseFloat((dq / rows.length * 100).toFixed(1));
+}
+function renderDQChart(days) {
+  const id = 'chartDQ';
+  if (!allDataAll) return;
+  const dataSource = localLeadTypeDataset(id);
+  const metrics = checkedDQMetrics();
+  const granularity = chartGranularity(id);
+  const combined = isCombinedMode(id);
+  const barMode = isBarMode();
+  const excludeEl = document.getElementById('excludeCurrentWeek-' + id);
+  if (excludeEl && excludeEl.checked) {
+    const weekStart = dubaiWeekStart(dubaiTodayKey());
+    days = days.filter(d => d < weekStart);
+  }
+  const buckets = bucketize(days, granularity);
+  const labels = buckets.map(b => b.label);
+
+  const keys = Array.from(selectedSDRs);
+  const views = teamsComparisonViews(id) || ((!combined && keys.length > 1)
+    ? SDRS.filter(s => selectedSDRs.has(s.key)).map(s => ({ key: s.key, label: s.label, color: s.color }))
+    : [{ key: keys, label: keys.length === SDRS.length ? 'Team' : keys.map(k => SDR_BY_KEY[k].label).join('+'), color: COLORS.Team }]);
+  const multiView = views.length > 1;
+
+  // One dataset per view × checked segment. Bar mode: segments stack per view
+  // (stack height = total DQ rate); line mode: one line per segment, AE DQ
+  // dashed, with the total in the tooltip footer instead.
+  const datasets = views.flatMap(v => metrics.map(mk => {
+    const counts = [];
+    const data = buckets.map(b => {
+      const present = b.days.filter(d => allData[d]);
+      if (!present.length) { counts.push(null); return null; }
+      const den = sumMetricFrom(dataSource, present, v.key, 'leads');
+      const num = sumMetricFrom(dataSource, present, v.key, DQ_FIELDS[mk]);
+      counts.push(num);
+      return den ? parseFloat((num / den * 100).toFixed(1)) : 0;
+    });
+    // Single view: the fixed amber/red pair. Multiple views: the view's own
+    // color for SDR DQ and a darkened step of it for AE DQ — the same
+    // shade-of-the-group's-color language the layered activity chart uses.
+    const color = multiView ? (mk === 'sdr' ? v.color : shadeHex(v.color, -35)) : DQ_COLORS[mk];
+    const label = `${v.label} — ${DQ_METRIC_LABELS[mk]}`;
+    return barMode
+      ? { label, data, _counts: counts, _viewLabel: v.label, backgroundColor: color, borderRadius: 3, borderWidth: 0, stack: v.label }
+      : { label, data, _counts: counts, _viewLabel: v.label, borderColor: color, backgroundColor: color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false, borderDash: mk === 'ae' ? [5, 3] : undefined };
+  }));
+
+  // Pace: trailing 3-bucket rolling TOTAL rate of whichever segments are
+  // toggled on, for the overall SDR selection — same shape as makeChart's.
+  let paceDataset = null;
+  if (trendLinesOn()) {
+    const paceData = buckets.map((b, i) => {
+      const windowBuckets = buckets.slice(Math.max(0, i - 2), i + 1);
+      const windowDays = windowBuckets.reduce((acc, wb) => acc.concat(wb.days), []).filter(d => d <= dubaiTodayKey() && allData[d]);
+      if (!windowDays.length) return null;
+      const den = sumMetricFrom(dataSource, windowDays, keys, 'leads');
+      if (!den) return null;
+      const num = metrics.reduce((a, mk) => a + sumMetricFrom(dataSource, windowDays, keys, DQ_FIELDS[mk]), 0);
+      return parseFloat((num / den * 100).toFixed(1));
+    });
+    if (paceData.some(x => x != null)) {
+      paceDataset = { label: 'Pace', data: paceData, type: 'line', borderColor: COLORS.Pace, borderWidth: 2.5, pointRadius: 0, fill: false, tension: 0, spanGaps: true, stack: '_pace' };
+    }
+  }
+  let aeBaselineDrawn = false;
+  const aeDQRate = isAEBaselineOn() ? aeBaselineDQRateLocal(id) : null;
+  if (aeDQRate != null) {
+    datasets.push({ label: 'AE Baseline', data: buckets.map(() => aeDQRate), type: 'line', borderColor: COLORS.AEBaseline, borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0, stack: '_ae' });
+    aeBaselineDrawn = true;
+  }
+  if (paceDataset) datasets.push(paceDataset);
+
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id).getContext('2d');
+  const f = chartFontSizes(id);
+  charts[id] = new Chart(ctx, {
+    type: barMode ? 'bar' : 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
+          titleColor: '#ffffff', bodyColor: '#cfd2e3',
+          footerColor: '#ffffff',
+          titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody }, footerFont: { size: f.tooltipFooter },
+          callbacks: {
+            label: ctx2 => {
+              const ds = ctx2.dataset;
+              const count = ds._counts ? ds._counts[ctx2.dataIndex] : null;
+              return ` ${ds.label}: ${ctx2.parsed.y}%${count != null ? ` (${count} lead${count === 1 ? 's' : ''})` : ''}`;
+            },
+            // Total Disqualified per view at the hovered bucket — the point of
+            // combining the two charts. Only shown when both segments are on
+            // (with one segment, the segment IS the total).
+            footer: items => {
+              if (metrics.length < 2) return '';
+              const seen = new Set();
+              const lines = [];
+              items.forEach(it => {
+                const vl = it.dataset._viewLabel;
+                if (!vl || seen.has(vl)) return;
+                seen.add(vl);
+                const total = it.chart.data.datasets
+                  .filter(d => d._viewLabel === vl)
+                  .reduce((a, d) => a + (d.data[it.dataIndex] || 0), 0);
+                lines.push(` ${vl} total DQ: ${total.toFixed(1)}%`);
+              });
+              return lines;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { stacked: barMode, ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' } },
+        y: { stacked: barMode, ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' }, beginAtZero: true }
+      }
+    }
+  });
+
+  const legendEl = document.getElementById('legend-' + id);
+  if (legendEl) {
+    const items = multiView
+      ? views.map(vw => ({ label: vw.label, color: vw.color }))
+      : metrics.map(mk => ({ label: DQ_METRIC_LABELS[mk], color: DQ_COLORS[mk] }));
+    if (aeBaselineDrawn) items.push({ label: 'AE Baseline', color: COLORS.AEBaseline });
+    if (paceDataset) items.push({ label: 'Pace', color: COLORS.Pace });
+    legendEl.innerHTML = items.map(it =>
+      `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
+    ).join('') + ((multiView && metrics.length > 1) ? `<span class="legend-item" style="opacity:.7">(darker segment = AE DQ)</span>` : '');
+  }
+}
+
+// ─── DISQUALIFICATION REASONS ─────────────────────────────────────────────────
+// What's actually behind the disqualifications: the "Disqualified reason"
+// field on every SDR-disqualified (plain Disqualified) and AE-disqualified
+// (Disqualified AE ...) lead. Blank reasons are shown as their own bucket
+// rather than dropped — a missing reason is itself a finding (and a Data
+// Hygiene violation for SDR DQs).
+const DQ_NO_REASON_LABEL = '(no reason given)';
+const DQ_REASON_TOP_N = 10;
+const DQ_TREND_TOP_N = 5;
+// Categorical palette for reason series (trend mode, 100% view) — validated
+// for lightness/chroma/CVD separation; gray is reserved for the "Other" fold.
+const REASON_COLORS = ['#4a7fd4', '#d98e00', '#1a9e94', '#c0392b', '#8a63d2', '#5f8a2a', '#b93a5e'];
+const REASON_OTHER_COLOR = '#8c8f9f';
+// The 100%-view single bar caps at exactly as many reason segments as the
+// validated categorical palette has colors — more than that and slivers
+// become unreadable/indistinguishable anyway, so the rest fold into one gray
+// "Other" segment rather than cycling or generating extra hues.
+const DQ_PCT_TOP_N = REASON_COLORS.length;
+function dqSourceOf(r) {
+  const s = normalizeSalesStatus(r['Sales status']);
+  if (s === 'disqualified') return 'sdr';
+  if (s.startsWith('disqualified ae')) return 'ae';
+  return null;
+}
+function dqReasonOf(r) {
+  return (r['Disqualified reason'] || '').trim() || DQ_NO_REASON_LABEL;
+}
+// Every disqualified lead in the given days/SDRs, honoring the chart's own
+// source (sdr/ae/both) and lead-type filters. Reads raw rows — reasons only
+// exist there, not in the aggregated metrics.
+function collectDQRows(days, sdrKeys, sourceFilter, leadTypeVal) {
+  const out = [];
+  if (!rawByDay) return out;
+  days.forEach(d => {
+    sdrKeys.forEach(k => {
+      (((rawByDay[d] || {})[k]) || []).forEach(r => {
+        if (leadTypeVal === 'business' && !isBusinessLead(r)) return;
+        if (leadTypeVal === 'b2c' && !isB2CLead(r)) return;
+        const src = dqSourceOf(r);
+        if (!src) return;
+        if (sourceFilter !== 'both' && src !== sourceFilter) return;
+        out.push({ day: d, sdrKey: k, source: src, reason: dqReasonOf(r) });
+      });
+    });
+  });
+  return out;
+}
+function renderDQReasonsChart(days) {
+  const id = 'chartDQReasons';
+  if (!rawByDay) return;
+  const sourceFilter = (document.getElementById('source-' + id) || {}).value || 'both';
+  const viewMode = (document.getElementById('viewMode-' + id) || {}).value || 'team';
+  const leadTypeVal = localLeadTypeValue(id);
+  const sdrKeys = SDRS.filter(s => selectedSDRs.has(s.key)).map(s => s.key);
+  const rows = collectDQRows(days, sdrKeys, sourceFilter, leadTypeVal);
+  const legendEl = document.getElementById('legend-' + id);
+
+  // 100% view only means something for Team totals (a single reason-
+  // segmented bar) — hide the toggle for By SDR / Weekly trend rather than
+  // leave a control on screen that does nothing.
+  const pctWrap = document.getElementById('pctToggleWrap-' + id);
+  if (pctWrap) pctWrap.style.display = viewMode === 'team' ? '' : 'none';
+  const pct100 = viewMode === 'team' && !!document.getElementById('pctToggle-' + id) && document.getElementById('pctToggle-' + id).checked;
+  const expanded = isChartExpanded(id);
+  updateDQReasonsCanvasHeight(pct100, expanded);
+  const f = chartFontSizes(id);
+
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+  if (!rows.length) {
+    if (legendEl) legendEl.innerHTML = `<span class="legend-item">No disqualifications in the selected range</span>`;
+    return;
+  }
+
+  // Rank reasons by total count; past the top N they fold into one "Other
+  // reasons" bucket (never a generated 11th color).
+  const countByReason = new Map();
+  rows.forEach(r => countByReason.set(r.reason, (countByReason.get(r.reason) || 0) + 1));
+  const ranked = Array.from(countByReason.entries()).sort((a, b) => b[1] - a[1]).map(e => e[0]);
+  const topReasons = ranked.slice(0, DQ_REASON_TOP_N);
+  const folded = ranked.length > DQ_REASON_TOP_N;
+  const otherLabel = folded ? `Other reasons (${ranked.length - DQ_REASON_TOP_N})` : null;
+  const displayReasonOf = reason => topReasons.includes(reason) ? reason : otherLabel;
+  const reasonLabels = folded ? [...topReasons, otherLabel] : topReasons;
+  const totalRows = rows.length;
+  const pctOfTotal = n => totalRows ? (n / totalRows * 100).toFixed(1) : '0.0';
+
+  const ctx = document.getElementById(id).getContext('2d');
+  let config;
+  let legendItems = [];
+
+  if (pct100) {
+    // Single 100%-stacked horizontal bar: one bar, one segment per reason,
+    // segment width = that reason's share of every disqualification in
+    // range (not of a per-row count like the other views) — colored
+    // categorically by reason instead of by source/SDR, since the whole
+    // point is comparing reasons against each other at a glance.
+    const pctTop = ranked.slice(0, DQ_PCT_TOP_N);
+    const pctTopCounts = pctTop.map(r => countByReason.get(r));
+    const pctOtherCount = totalRows - pctTopCounts.reduce((a, n) => a + n, 0);
+    const pctLabels = pctOtherCount > 0 ? [...pctTop, `Other reasons (${ranked.length - pctTop.length})`] : pctTop;
+    const pctCounts = pctOtherCount > 0 ? [...pctTopCounts, pctOtherCount] : pctTopCounts;
+    const pctColorFor = i => i < pctTop.length ? REASON_COLORS[i] : REASON_OTHER_COLOR;
+    const datasets = pctLabels.map((lbl, i) => ({
+      label: lbl,
+      data: [parseFloat((pctCounts[i] / totalRows * 100).toFixed(1))],
+      _count: pctCounts[i],
+      backgroundColor: pctColorFor(i), stack: 'pct', borderWidth: 0
+    }));
+    legendItems = pctLabels.map((lbl, i) => ({ label: lbl, color: pctColorFor(i) }));
+    config = {
+      type: 'bar',
+      data: { labels: [''], datasets },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
+            titleColor: '#ffffff', bodyColor: '#cfd2e3',
+            titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody },
+            callbacks: { label: c => ` ${c.dataset.label}: ${c.dataset._count} (${c.parsed.x}%)` }
+          }
+        },
+        scales: {
+          x: { stacked: true, min: 0, max: 100, ticks: { color: '#5b5f78', font: { size: f.tick }, callback: v => v + '%' }, grid: { color: '#e4e6ef' } },
+          y: { stacked: true, ticks: { display: false }, grid: { display: false } }
+        }
+      }
+    };
+  } else if (viewMode === 'trend') {
+    // Leading reasons over time: the top 5 reasons (by total count in the
+    // range), one series each, weekly buckets — shows which reasons are
+    // growing/shrinking rather than just the period total.
+    const trendReasons = ranked.slice(0, DQ_TREND_TOP_N);
+    const buckets = bucketize(days, 'weekly');
+    const barMode = isBarMode();
+    const datasets = trendReasons.map((reason, i) => {
+      const color = REASON_COLORS[i % REASON_COLORS.length];
+      const data = buckets.map(b => {
+        const daySet = new Set(b.days);
+        return rows.reduce((a, r) => a + (r.reason === reason && daySet.has(r.day) ? 1 : 0), 0);
+      });
+      return barMode
+        ? { label: reason, data, backgroundColor: color, borderRadius: 3, borderWidth: 0 }
+        : { label: reason, data, borderColor: color, backgroundColor: color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2 };
+    });
+    legendItems = trendReasons.map((reason, i) => ({ label: reason, color: REASON_COLORS[i % REASON_COLORS.length] }));
+    config = {
+      type: barMode ? 'bar' : 'line',
+      data: { labels: buckets.map(b => b.label), datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
+            titleColor: '#ffffff', bodyColor: '#cfd2e3',
+            titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody },
+            callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y}` }
+          }
+        },
+        scales: {
+          x: { ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { display: false } },
+          y: { beginAtZero: true, ticks: { color: '#5b5f78', font: { size: f.tick }, precision: 0 }, grid: { color: '#e4e6ef' } }
+        }
+      }
+    };
+  } else {
+    // Horizontal reason bars, largest first. Team totals: stacked SDR-DQ vs
+    // AE-DQ segments (when both sources are shown); By SDR: stacked by which
+    // SDR owns the lead.
+    let datasets;
+    const countsFor = pred => reasonLabels.map(lbl =>
+      rows.reduce((a, r) => a + (displayReasonOf(r.reason) === lbl && pred(r) ? 1 : 0), 0));
+    if (viewMode === 'sdr') {
+      const shown = SDRS.filter(s => selectedSDRs.has(s.key));
+      datasets = shown.map(s => ({
+        label: s.label, data: countsFor(r => r.sdrKey === s.key),
+        backgroundColor: s.color, stack: 'dq', borderRadius: 2, borderWidth: 0
+      }));
+      legendItems = shown.map(s => ({ label: s.label, color: s.color }));
+    } else if (sourceFilter === 'both') {
+      datasets = DQ_METRIC_ORDER.map(mk => ({
+        label: DQ_METRIC_LABELS[mk], data: countsFor(r => r.source === mk),
+        backgroundColor: DQ_COLORS[mk], stack: 'dq', borderRadius: 2, borderWidth: 0
+      }));
+      legendItems = DQ_METRIC_ORDER.map(mk => ({ label: DQ_METRIC_LABELS[mk], color: DQ_COLORS[mk] }));
+    } else {
+      datasets = [{
+        label: DQ_METRIC_LABELS[sourceFilter], data: countsFor(() => true),
+        backgroundColor: DQ_COLORS[sourceFilter], stack: 'dq', borderRadius: 2, borderWidth: 0
+      }];
+      legendItems = [{ label: DQ_METRIC_LABELS[sourceFilter], color: DQ_COLORS[sourceFilter] }];
+    }
+    config = {
+      type: 'bar',
+      data: { labels: reasonLabels, datasets },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
+            titleColor: '#ffffff', bodyColor: '#cfd2e3',
+            footerColor: '#ffffff',
+            titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody }, footerFont: { size: f.tooltipFooter },
+            callbacks: {
+              label: c => ` ${c.dataset.label}: ${c.parsed.x}`,
+              footer: items => {
+                if (!items.length) return '';
+                const i = items[0].dataIndex;
+                const total = items[0].chart.data.datasets.reduce((a, d) => a + (d.data[i] || 0), 0);
+                return ` Total: ${total} (${pctOfTotal(total)}% of all disqualified)`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: { stacked: true, beginAtZero: true, ticks: { color: '#5b5f78', font: { size: f.tick }, precision: 0 }, grid: { color: '#e4e6ef' } },
+          y: { stacked: true, ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { display: false } }
+        }
+      }
+    };
+  }
+
+  charts[id] = new Chart(ctx, config);
+  charts[id].resize();
+  if (legendEl) {
+    legendEl.innerHTML = legendItems.map(it =>
+      `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${escapeHtml(it.label)}</span>`
+    ).join('') + `<span class="legend-item" style="opacity:.7">${totalRows} disqualified lead${totalRows === 1 ? '' : 's'} in range</span>`;
+  }
+}
+// The 100%-view single bar only needs enough height for one thick bar, not
+// the full multi-row canvas the per-reason breakdown uses. Sets the WRAPPER
+// div's height, not the canvas's own — Chart.js's responsive resize measures
+// the canvas's parent element, so sizing the canvas directly gets overwritten
+// on the next resize pass.
+function updateDQReasonsCanvasHeight(pct100, expanded) {
+  const wrap = document.getElementById('chartDQReasonsWrap');
+  const base = pct100 ? 90 : 320;
+  if (wrap) wrap.style.height = (expanded ? base * 2 : base) + 'px';
 }
 
 // ─── GOALS ────────────────────────────────────────────────────────────────────
@@ -4556,8 +5272,10 @@ function aeBaselineFactTile(label, value, sub) {
 }
 // One row of the comparison tables — same column shape for both the per-AE
 // and per-SDR breakdowns, so the two are directly comparable at a glance.
-function benchmarkRow(label, m) {
-  return `<tr>
+function benchmarkRow(label, m, opts) {
+  const excluded = opts && opts.excluded;
+  const toggleCell = opts && opts.owner != null ? `<td><label class="ae-row-toggle" title="Include/exclude ${escapeHtml(label)} from the AE Averages totals above"><input type="checkbox" ${excluded ? '' : 'checked'} onchange="toggleAEBaselineOwnerExcluded('${escapeHtml(opts.owner).replace(/'/g, "\\'")}')"><span class="toggle-track"></span></label></td>` : '';
+  return `<tr${excluded ? ' class="ae-row-excluded"' : ''}>
     <td>${escapeHtml(label)}</td>
     <td>${m.leads}</td>
     <td>${m.meetings}</td>
@@ -4566,10 +5284,11 @@ function benchmarkRow(label, m) {
     <td>${m.pct_qualified.toFixed(1)}%</td>
     <td>${m.nr_rate.toFixed(1)}%</td>
     <td>${m.leads ? (m.sdr_dq / m.leads * 100).toFixed(1) : '0.0'}%</td>
+    ${toggleCell}
   </tr>`;
 }
-function benchmarkTableHeader(firstColLabel) {
-  return `<thead><tr><th>${firstColLabel}</th><th>Leads</th><th>Meetings</th><th>Meeting Rate</th><th>Qualified</th><th>% Qualified</th><th>NR Rate</th><th>Disqualified Rate</th></tr></thead>`;
+function benchmarkTableHeader(firstColLabel, withToggle) {
+  return `<thead><tr><th>${firstColLabel}</th><th>Leads</th><th>Meetings</th><th>Meeting Rate</th><th>Qualified</th><th>% Qualified</th><th>NR Rate</th><th>Disqualified Rate</th>${withToggle ? '<th></th>' : ''}</tr></thead>`;
 }
 function renderAEBaselineSection() {
   const uploadRow = document.getElementById('aeBaselineUploadRow');
@@ -4614,8 +5333,8 @@ function renderAEBaselineSection() {
   const aeTableHtml = `
     <div class="ae-baseline-subheading">AE Averages <span class="goal-info" title="${escapeHtml(ae.firstDay)} – ${escapeHtml(ae.lastDay)} (${ae.spanDays} days), the entire loaded AE Baseline export.">ⓘ</span></div>
     <table class="report-table">
-      ${benchmarkTableHeader('AE')}
-      <tbody>${ae.perAE.map(({ owner, metrics: m }) => benchmarkRow(owner, m)).join('')}</tbody>
+      ${benchmarkTableHeader('AE', true)}
+      <tbody>${ae.perAE.map(({ owner, metrics: m, excluded }) => benchmarkRow(owner, m, { owner, excluded })).join('')}</tbody>
     </table>`;
 
   contentEl.innerHTML = factsHtml + aeTableHtml + sdrTableHtml;
@@ -4783,6 +5502,7 @@ loadGoals();
 loadChartStyle();
 loadAEBaselineToggle();
 loadTrendLinesToggle();
+loadExcludedAEBaselineOwners();
 restoreAEBaselineData();
 renderAEBaselineSection();
 if (restoreLoadedData()) {
