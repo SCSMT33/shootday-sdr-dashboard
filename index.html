@@ -1106,7 +1106,7 @@
       </div>
       <div class="chart-card full" data-chart-id="chartMeetingAttendance">
         <div class="chart-header">
-          <span class="chart-title">No-Show Rate by SDR (Meetings Not Attended) <span class="goal-info" id="info-chartMeetingAttendance" title="Bar height = resolved meetings (Meeting Done + Meeting Not Atended + Meeting Rejected) for that SDR, bucketed by when the LEAD was created (not when the meeting was booked/held — that date isn't available in the export), over the selected date range — Meeting Scheduled is excluded since it hasn't happened yet. The dark segment is Meeting Not Atended only (Meeting Rejected is excluded — that's an AE call, tracked separately) — the % shown is that segment's share of the SDR's resolved meetings. Always shows all 4 SDRs regardless of the view-tab selection above. Average = one bar per SDR totaling the whole selected range; Week over week = one grouped bar per SDR per week, so you can see the trend instead of just the period total. 100% view normalizes every bar to the same height so you can compare the not-attended share directly, instead of eyeballing it against varying bar heights.">ⓘ</span></span>
+          <span class="chart-title">No-Show Rate by SDR (Meetings Not Attended) <span class="goal-info" id="info-chartMeetingAttendance" title="Bar height = booked meetings (Meeting Scheduled + Meeting Done + Meeting Rejected + Meeting Not Atended, minus instant closes) for that SDR, bucketed by when the LEAD was created (not when the meeting was booked/held — that date isn't available in the export), over the selected date range — matches how commission counts a booked meeting. Meeting Scheduled is included on purpose: a lead whose deal already went Lost/Disqualified/Closed but whose Meeting Status never got updated off Scheduled shouldn't just vanish from the math. The dark segment is Meeting Not Atended only (Meeting Rejected is excluded — that's an AE call, tracked separately) — the % shown is that segment's share of the SDR's booked meetings. Always shows all 4 SDRs regardless of the view-tab selection above. Average = one bar per SDR totaling the whole selected range; Week over week = one grouped bar per SDR per week, so you can see the trend instead of just the period total. 100% view normalizes every bar to the same height so you can compare the not-attended share directly, instead of eyeballing it against varying bar heights.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetingAttendance"></div>
             <select class="chart-granularity" id="teamsComparison-chartMeetingAttendance" onchange="renderCharts(getFilteredDays())">
@@ -2201,13 +2201,26 @@ function isQualifiedLead(r) {
 // Meeting Status, so this flag is never needed (or used) for SDR numbers.
 function computeMetrics(leads, opts) {
   opts = opts || {};
-  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, non_responsive_terminal: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, meetings_held: 0, meetings_no_show: 0, speed_to_lead_matched: 0, speed_to_lead_eligible: 0, speed_to_lead_mismatch: 0,
+  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, non_responsive_terminal: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, meetings_no_show_denom: 0, meetings_held: 0, meetings_no_show: 0, speed_to_lead_matched: 0, speed_to_lead_eligible: 0, speed_to_lead_mismatch: 0,
     speed_to_lead_on_matched: 0, speed_to_lead_on_eligible: 0,
     speed_to_lead_off_matched: 0, speed_to_lead_off_eligible: 0 };
   const isAEImpliedMeeting = r => opts.closedImpliesMeeting && r['Sales status'] === 'Closed' && !(r['Meeting Status'] || '').trim();
   const meetings = leads.filter(r => isMeetingBooked(r) || isAEImpliedMeeting(r)).length;
   const meetings_not_attended = leads.filter(isMeetingNotAttended).length;
   const meetings_resolved = leads.filter(r => isMeetingResolved(r) || isAEImpliedMeeting(r)).length;
+  // No-Show Rate's denominator: matches how commission counts a booked
+  // meeting (Scheduled/Done/Rejected/Not Atended, minus instant closes) —
+  // deliberately NOT the same as meetings_resolved above, which excludes
+  // Scheduled entirely. Excluding Scheduled outright hides a real gap: a
+  // lead whose deal has already gone Lost/Disqualified/Closed but whose
+  // Meeting Status was simply never updated off "Scheduled" still reads as
+  // "hasn't happened yet" forever, silently keeping it out of the no-show
+  // math. Counting it as booked (not as a no-show — we don't know what
+  // actually happened at a meeting nobody updated) at least keeps it in the
+  // denominator instead of disappearing. The real fix for those specific
+  // stale rows is going back and correcting Meeting Status, which the
+  // Hygiene Report should flag separately.
+  const meetings_no_show_denom = leads.filter(isMeetingBookedCommission).length;
   const meetings_no_show = leads.filter(r => r['Meeting Status'] === 'Meeting Not Atended').length;
   // Meetings that actually took place — Meeting Status = Meeting Done, an
   // instant close, or (AE Baseline only) a blank-status Closed deal — distinct
@@ -2257,6 +2270,7 @@ function computeMetrics(leads, opts) {
     active_pipeline,
     meetings_not_attended,
     meetings_resolved,
+    meetings_no_show_denom,
     meetings_held,
     meetings_no_show,
     speed_to_lead_matched,
@@ -2449,13 +2463,13 @@ function metricsForSelection(dataset, day, view) {
   const sum = f => parts.reduce((a, p) => a + (p[f] || 0), 0);
   const leads = sum('leads'), meetings = sum('meetings'), qualified = sum('qualified'),
         non_responsive = sum('non_responsive'), non_responsive_terminal = sum('non_responsive_terminal'), ae_dq = sum('ae_dq'), sdr_dq = sum('sdr_dq'), active_pipeline = sum('active_pipeline'),
-        meetings_not_attended = sum('meetings_not_attended'), meetings_resolved = sum('meetings_resolved'), meetings_held = sum('meetings_held'), meetings_no_show = sum('meetings_no_show'),
+        meetings_not_attended = sum('meetings_not_attended'), meetings_resolved = sum('meetings_resolved'), meetings_no_show_denom = sum('meetings_no_show_denom'), meetings_held = sum('meetings_held'), meetings_no_show = sum('meetings_no_show'),
         speed_to_lead_matched = sum('speed_to_lead_matched'), speed_to_lead_eligible = sum('speed_to_lead_eligible'), speed_to_lead_mismatch = sum('speed_to_lead_mismatch'),
         speed_to_lead_on_matched = sum('speed_to_lead_on_matched'), speed_to_lead_on_eligible = sum('speed_to_lead_on_eligible'),
         speed_to_lead_off_matched = sum('speed_to_lead_off_matched'), speed_to_lead_off_eligible = sum('speed_to_lead_off_eligible');
   return {
     leads, meetings, qualified, non_responsive, non_responsive_terminal, ae_dq, sdr_dq, active_pipeline,
-    meetings_not_attended, meetings_resolved, meetings_held, meetings_no_show,
+    meetings_not_attended, meetings_resolved, meetings_no_show_denom, meetings_held, meetings_no_show,
     speed_to_lead_matched, speed_to_lead_eligible, speed_to_lead_mismatch,
     speed_to_lead_on_matched, speed_to_lead_on_eligible,
     speed_to_lead_off_matched, speed_to_lead_off_eligible,
@@ -2624,7 +2638,7 @@ function renderSummaryCards(days) {
   const lastDayBucket = lastDay ? metricsForSelection(allData, lastDay, v) : null;
   const activePipeline = lastDayBucket ? lastDayBucket.active_pipeline : 0;
   const totalNoShow = sumMetric(days, v, 'meetings_no_show');
-  const totalResolved = sumMetric(days, v, 'meetings_resolved');
+  const totalResolved = sumMetric(days, v, 'meetings_no_show_denom');
   const noShowRate = totalResolved ? (totalNoShow / totalResolved * 100) : 0;
 
   // Commission View: every rate/percentage card (Meeting Booked Rate, % Qualified,
@@ -2654,7 +2668,7 @@ function renderSummaryCards(days) {
     const prevQualified = sumMetric(pd, v, 'qualified');
     const prevNR = sumMetric(pd, v, 'non_responsive');
     const prevNoShow = sumMetric(pd, v, 'meetings_no_show');
-    const prevResolved = sumMetric(pd, v, 'meetings_resolved');
+    const prevResolved = sumMetric(pd, v, 'meetings_no_show_denom');
     const prevMeetingRate = prevLeadVol ? (prevMeetings / prevLeadVol * 100) : null;
     const prevPctQual = prevLeadVol ? (prevQualified / prevLeadVol * 100) : null;
     const prevNrRate = prevLeadVol ? (prevNR / prevLeadVol * 100) : null;
@@ -2693,7 +2707,7 @@ function renderSummaryCards(days) {
     const leadVol = isCommission ? sumMetricFrom(allDataB2B, days, s.key, 'leads') : leads;
     const leadsProjected = elapsed ? (leadVol / elapsed * daysInMo) : 0;
     const noShow = sumMetric(days, s.key, 'meetings_no_show');
-    const resolved = sumMetric(days, s.key, 'meetings_resolved');
+    const resolved = sumMetric(days, s.key, 'meetings_no_show_denom');
     return {
       ...s, leads, meetings, qualified, nr, aedq, pipeline, leadVol, leadsProjected, medianMinutes, matched,
       noShow, resolved,
@@ -2728,7 +2742,7 @@ function renderSummaryCards(days) {
     : `Leads marked Sales status = Non respondant or Disqualified reason = Not responsive (includes leads still mid-cadence, not yet given up on), ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Lower is better. The Mandate Scoreboard's non-responsive rate is narrower — terminal Not-responsive only, to match the strategic briefing's baseline.${aeNote}`;
   const infoAEDQ = `Count of leads the AE bounced back as wrongly qualified (Sales status contains "Disqualified AE") — measures SDR hand-off quality, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
   const infoPipeline = `Snapshot as of the last day in range: leads whose Sales status is NOT Closed, Disqualified, Lost, Deposit refund, or blank — i.e. still open/in-progress, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
-  const infoNoShow = `Meetings the lead didn't show up for (Meeting Status = Meeting Not Atended) ÷ resolved meetings (Done + Not Atended + Rejected + instant closes) in the selected range. Still-upcoming Scheduled meetings are excluded (they haven't happened yet), and Meeting Rejected counts toward the denominator but not the numerator — a rejection is the AE's call on qualification, not a client no-show. Lower is better. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Full breakdown in the "No-Show Rate by SDR" chart below.`;
+  const infoNoShow = `Meetings the lead didn't show up for (Meeting Status = Meeting Not Atended) ÷ booked meetings (Scheduled + Done + Not Atended + Rejected, minus instant closes) in the selected range — the same booked definition commission uses. Meeting Scheduled is included in the denominator (not excluded as "hasn't happened yet") so a lead whose deal already went Lost/Disqualified/Closed without its Meeting Status ever being updated off Scheduled doesn't just disappear from the math; note this means genuinely brand-new upcoming meetings also count here, so expect this rate to read a bit higher in the most recent week or two before those meetings resolve. Meeting Rejected counts toward the denominator but not the numerator — a rejection is the AE's call on qualification, not a client no-show. Lower is better. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Full breakdown in the "No-Show Rate by SDR" chart below.`;
   document.getElementById('summaryCards').innerHTML = `
     ${countCard('Lead Volume', leadVolTotal, perSDR.map(s => ({ ...s, value: s.leadVol, goal: s.leadsGoal })), elapsed, daysInMo, showProjection, isCommission ? 'B2B leads only' : undefined, d.goalLeads, ae ? ae.leadsPerDay : null, infoLeadVolume, deltas.leadVol)}
     ${countCard('Meetings Booked', totalMeetings, perSDR.map(s => ({ ...s, value: s.meetings, goal: s.meetingsGoal })), elapsed, daysInMo, showProjection, undefined, d.goalMeetings, ae ? ae.meetingsPerDay : null, infoMeetingsBooked, deltas.meetings)}
@@ -4013,7 +4027,7 @@ function renderMandateSection() {
     const mLeads = mandateSum(days, 'leads');
     const mMeetings = mandateSum(days, 'meetings');
     const mQualified = mandateSum(days, 'qualified');
-    const mResolved = mandateSum(days, 'meetings_resolved');
+    const mResolved = mandateSum(days, 'meetings_no_show_denom');
     const mNoShow = mandateSum(days, 'meetings_no_show');
     const mAeDq = mandateSum(days, 'ae_dq');
     const mNr = mandateSum(days, 'non_responsive_terminal');
@@ -4088,7 +4102,7 @@ function renderMandateSection() {
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.aeDqPct != null ? r.aeDqPct.toFixed(1) + '%' : null, r.aeDqOk))
     },
     {
-      label: 'Meeting no-show rate', info: 'Meeting Status = Meeting Not Attended ÷ that month\'s resolved meetings (Done + Not Attended + Rejected + instant closes). A lead simply not showing up — distinct from Handoff quality above, which is the AE\'s judgment on qualification.',
+      label: 'Meeting no-show rate', info: 'Meeting Status = Meeting Not Attended ÷ that month\'s booked meetings (Scheduled + Done + Not Attended + Rejected, minus instant closes — the same booked definition commission uses). Scheduled is included so a lead whose deal already resolved Lost/Disqualified/Closed without Meeting Status ever being corrected off Scheduled still counts. A lead simply not showing up — distinct from Handoff quality above, which is the AE\'s judgment on qualification.',
       target: `≤ ${s.noShowMax}%`,
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.noShowPct != null ? r.noShowPct.toFixed(1) + '%' : null, r.noShowOk))
     },
@@ -4209,22 +4223,29 @@ function renderMeetingAttendanceChart(days) {
 
   // Not Attended only — Meeting Rejected is excluded from this ratio (a
   // rejection is the AE's call, tracked separately as Handoff quality; this
-  // chart is specifically about the lead not showing up).
+  // chart is specifically about the lead not showing up). Denominator is
+  // meetings_no_show_denom (matches commission's booked definition — see its
+  // comment in computeMetrics), not meetings_resolved, so a lead whose deal
+  // already went Lost/Disqualified/Closed while Meeting Status is still
+  // stuck on "Scheduled" stays in the math instead of silently excluded.
+  // That means the non-red segment below isn't purely "Meeting Done"
+  // anymore — it includes those still-Scheduled rows too, hence the more
+  // honest "Not Flagged as No-Show" label.
   const datasets = weekly
     ? groups.flatMap(g => {
         const naData = buckets.map(b => sumMetricFrom(dataSource, b.days, g.key, 'meetings_no_show'));
-        const doneData = buckets.map((b, i) => sumMetricFrom(dataSource, b.days, g.key, 'meetings_resolved') - naData[i]);
+        const doneData = buckets.map((b, i) => sumMetricFrom(dataSource, b.days, g.key, 'meetings_no_show_denom') - naData[i]);
         const totals = naData.map((na, i) => na + doneData[i]);
         const naOut = pct100 ? naData.map((na, i) => totals[i] ? na / totals[i] * 100 : 0) : naData;
         const doneOut = pct100 ? doneData.map((done, i) => totals[i] ? done / totals[i] * 100 : 0) : doneData;
         return [
           { label: `${g.label} — Not Attended`, data: naOut, _rawNA: naData, _rawDone: doneData, backgroundColor: '#8a1f1f', stack: g.label, _pairId: g.label, _isNA: true },
-          { label: `${g.label} — Meeting Done`, data: doneOut, _rawNA: naData, _rawDone: doneData, backgroundColor: g.color, stack: g.label, _pairId: g.label, _isNA: false }
+          { label: `${g.label} — Not Flagged as No-Show`, data: doneOut, _rawNA: naData, _rawDone: doneData, backgroundColor: g.color, stack: g.label, _pairId: g.label, _isNA: false }
         ];
       })
     : (() => {
         const rows = groups.map(g => {
-          const total = sumMetricFrom(dataSource, days, g.key, 'meetings_resolved');
+          const total = sumMetricFrom(dataSource, days, g.key, 'meetings_no_show_denom');
           const notAttended = sumMetricFrom(dataSource, days, g.key, 'meetings_no_show');
           return { ...g, total, notAttended, completed: total - notAttended };
         });
@@ -4234,7 +4255,7 @@ function renderMeetingAttendanceChart(days) {
         const doneOut = pct100 ? rows.map(r => r.total ? r.completed / r.total * 100 : 0) : doneRaw;
         return [
           { label: 'Not Attended', data: naOut, _rawNA: naRaw, _rawDone: doneRaw, backgroundColor: '#8a1f1f', stack: 's', _pairId: 'all', _isNA: true },
-          { label: 'Meeting Done', data: doneOut, _rawNA: naRaw, _rawDone: doneRaw, backgroundColor: rows.map(r => r.color), stack: 's', _pairId: 'all', _isNA: false }
+          { label: 'Not Flagged as No-Show', data: doneOut, _rawNA: naRaw, _rawDone: doneRaw, backgroundColor: rows.map(r => r.color), stack: 's', _pairId: 'all', _isNA: false }
         ];
       })();
 
@@ -4264,13 +4285,13 @@ function renderMeetingAttendanceChart(days) {
                 const pct = total ? (na / total * 100).toFixed(1) : '0.0';
                 return ` ${weekly ? 'Not Attended' : ds.label}: ${na} (${pct}%)`;
               }
-              return ` ${weekly ? 'Meeting Done' : ds.label}: ${done}`;
+              return ` ${weekly ? 'Not Flagged as No-Show' : ds.label}: ${done}`;
             },
             footer: items => {
               const ds = items[0].dataset;
               const i = items[0].dataIndex;
               const total = (ds._rawNA[i] || 0) + (ds._rawDone[i] || 0);
-              return weekly ? ` ${ds._pairId} total resolved: ${total}` : ` Total resolved: ${total}`;
+              return weekly ? ` ${ds._pairId} total booked: ${total}` : ` Total booked: ${total}`;
             }
           }
         }
@@ -4288,7 +4309,7 @@ function renderMeetingAttendanceChart(days) {
   if (legendEl) {
     const items = weekly
       ? [{ label: 'Not Attended', color: '#8a1f1f' }, ...groups.map(g => ({ label: g.label, color: g.color }))]
-      : [{ label: 'Not Attended (%)', color: '#8a1f1f' }, { label: 'Meeting Done', color: '#4285f4' }];
+      : [{ label: 'Not Attended (%)', color: '#8a1f1f' }, { label: 'Not Flagged as No-Show', color: '#4285f4' }];
     legendEl.innerHTML = items.map(it =>
       `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
     ).join('');
