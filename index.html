@@ -1132,6 +1132,31 @@
         </div>
         <canvas id="chartMeetingAttendance"></canvas>
       </div>
+      <div class="chart-card full" data-chart-id="chartNoShowCount">
+        <div class="chart-header">
+          <span class="chart-title">Meetings Not Attended — Raw Count <span class="goal-info" id="info-chartNoShowCount" title="Whole-number count of leads with Meeting Status = Meeting Not Atended, bucketed by when the LEAD was created — no percentages, no denominator, just how many. Group dropdown splits into Combined (one bar/line for the whole team), US vs OUS Teams, or Per SDR. Independent B2B/B2C/All dropdown, separate from the global Leads: filter above.">ⓘ</span></span>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartNoShowCount"></div>
+            <select class="chart-granularity" id="teamsComparison-chartNoShowCount" onchange="renderCharts(getFilteredDays())">
+              <option value="off" selected>Group: Combined</option>
+              <option value="on">Group: US vs OUS Teams</option>
+              <option value="sdr">Group: Per SDR</option>
+            </select>
+            <select class="chart-granularity" id="granularity-chartNoShowCount" onchange="renderCharts(getFilteredDays())">
+              <option value="daily">Daily</option>
+              <option value="weekly" selected>Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <select class="chart-granularity" id="leadType-chartNoShowCount" onchange="renderCharts(getFilteredDays())">
+              <option value="all">All leads</option>
+              <option value="business">B2B only</option>
+              <option value="b2c">B2C only</option>
+            </select>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartNoShowCount')" title="Expand">&#10530;</button>
+          </div>
+        </div>
+        <canvas id="chartNoShowCount"></canvas>
+      </div>
     </div>
 
     <!-- DATA HYGIENE -->
@@ -3370,9 +3395,11 @@ function renderCharts(days) {
   renderActivityChart(chartDays, d, ae);
   renderSpeedToLeadChart(chartDays);
   renderMeetingAttendanceChart(days);
+  renderNoShowCountChart(days);
   ['chartMeetingRate', 'chartQualPct', 'chartNR', 'chartDQ', 'chartSpeedToLead']
     .forEach(id => updateChartInfoTooltip(id));
   updateChartInfoTooltip('chartMeetingAttendance', true);
+  updateChartInfoTooltip('chartNoShowCount', true);
   updateChartInfoTooltip('chartDQReasons', true);
 }
 
@@ -4312,6 +4339,76 @@ function renderMeetingAttendanceChart(days) {
       : [{ label: 'Not Attended (%)', color: '#8a1f1f' }, { label: 'Not Flagged as No-Show', color: '#4285f4' }];
     legendEl.innerHTML = items.map(it =>
       `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
+    ).join('');
+  }
+}
+
+// Whole-number companion to the No-Show Rate by SDR chart above — same
+// underlying field (meetings_no_show, i.e. Meeting Status = Meeting Not
+// Atended) but as a raw count instead of a percentage, so a spike that's
+// invisible in a rate (small denominator making the % look normal) is easy
+// to spot as a count. Its own B2B/B2C/All dropdown and Group (Combined/US
+// vs OUS/Per SDR) selector, independent of both the global Leads: filter and
+// the rate chart's own controls.
+function noShowCountGroups() {
+  const groupEl = document.getElementById('teamsComparison-chartNoShowCount');
+  const val = groupEl ? groupEl.value : 'off';
+  if (val === 'on') return TEAM_GROUPS.map(g => ({ key: g.members, label: g.label, color: g.color }));
+  if (val === 'sdr') return SDRS.filter(s => selectedSDRs.has(s.key)).map(s => ({ key: s.key, label: s.label, color: s.color }));
+  return [{ key: Array.from(selectedSDRs), label: 'Team', color: COLORS.Team }];
+}
+function renderNoShowCountChart(days) {
+  const id = 'chartNoShowCount';
+  const leadTypeEl = document.getElementById('leadType-' + id);
+  const leadType = leadTypeEl ? leadTypeEl.value : 'all';
+  const dataSource = leadType === 'business' ? allDataB2B : leadType === 'b2c' ? allDataB2C : allDataAll;
+  const granularity = chartGranularity(id);
+  const buckets = bucketize(days, granularity);
+  const labels = buckets.map(b => b.label);
+  const groups = noShowCountGroups();
+  const barMode = isBarMode();
+
+  const datasets = groups.map(g => {
+    const data = buckets.map(b => {
+      const present = b.days.filter(d => dataSource[d]);
+      if (!present.length) return null;
+      return sumMetricFrom(dataSource, present, g.key, 'meetings_no_show');
+    });
+    return barMode
+      ? { label: g.label, data, backgroundColor: g.color, borderRadius: 3, borderWidth: 0 }
+      : { label: g.label, data, borderColor: g.color, backgroundColor: g.color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false };
+  });
+
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id).getContext('2d');
+  const f = chartFontSizes(id);
+  charts[id] = new Chart(ctx, {
+    type: barMode ? 'bar' : 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
+          titleColor: '#ffffff', bodyColor: '#cfd2e3',
+          titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody },
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}` }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' } },
+        y: { ticks: { color: '#5b5f78', font: { size: f.tick }, precision: 0 }, grid: { color: '#e4e6ef' }, beginAtZero: true }
+      }
+    }
+  });
+
+  const legendEl = document.getElementById('legend-' + id);
+  if (legendEl) {
+    legendEl.innerHTML = groups.map(g =>
+      `<span class="legend-item"><span class="legend-dot" style="background:${g.color}"></span>${g.label}</span>`
     ).join('');
   }
 }
