@@ -289,6 +289,33 @@
   .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
   .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
   .chart-card canvas { max-height: 220px; width: 100% !important; }
+
+  /* Chart expand button + expanded state — doubles canvas height (vertical
+     only, grid-column is untouched) and scales up every text element that
+     sits alongside it, so nothing reads as disproportionately tiny next to
+     the enlarged bars when screen-sharing/presenting. Chart.js draws axis
+     ticks and tooltip text directly on the canvas, so that text is scaled
+     separately in JS (chartFontSizes) — CSS alone can't reach it. */
+  .chart-expand-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 4px 6px;
+    border-radius: 5px;
+    flex-shrink: 0;
+  }
+  .chart-expand-btn:hover { background: var(--surface2); color: var(--text); }
+  .chart-card.expanded canvas { max-height: 460px; }
+  .chart-card.expanded .chart-title { font-size: 19px; }
+  .chart-card.expanded .goal-info { font-size: 15px; }
+  .chart-card.expanded .chart-header-right { gap: 20px; }
+  .chart-card.expanded .legend-item { font-size: 15px; gap: 7px; }
+  .chart-card.expanded .legend-dot { width: 11px; height: 11px; }
+  .chart-card.expanded .chart-granularity { font-size: 13px; padding: 6px 11px; }
+  .chart-card.expanded .chart-cumulative-toggle { font-size: 14px; }
   /* Chart.js (responsive + maintainAspectRatio:false) sizes a canvas off its
      PARENT container's height, not the canvas's own inline style — so this
      chart needs a dedicated wrapper div to control height, overriding the
@@ -825,7 +852,7 @@
 
     <!-- CHARTS -->
     <div class="charts-grid">
-      <div class="chart-card full">
+      <div class="chart-card full" data-chart-id="chartActivity">
         <div class="chart-header">
           <span class="chart-title"><span id="chartActivityTitle">Meetings Booked</span> <span class="goal-info" id="info-chartActivity" title="Count of leads counted as a booked meeting (Meeting Status Scheduled/Done/Rejected/Not Atended, or Sales status Closed) — excluding deals that closed within 2 hours of the lead being created (an instant/self-serve close, not a real SDR-run meeting), regardless of Meeting Status, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
@@ -867,11 +894,12 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">Cumulative</span>
             </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartActivity')" title="Expand">&#10530;</button>
           </div>
         </div>
         <canvas id="chartActivity"></canvas>
       </div>
-      <div class="chart-card full">
+      <div class="chart-card full" data-chart-id="chartMeetingRate">
         <div class="chart-header">
           <span class="chart-title">Meeting Booked Rate % <span class="goal-info" id="info-chartMeetingRate" title="Meetings Booked ÷ Lead Volume for each bucket — numerator and denominator are summed across the whole bucket first, then divided (never an average of daily rates, which would over-weight thin days). Dashed Target line = your Meeting Booked Rate target goal; dashed Pace line = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
@@ -895,11 +923,12 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">Exclude current week</span>
             </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartMeetingRate')" title="Expand">&#10530;</button>
           </div>
         </div>
         <canvas id="chartMeetingRate"></canvas>
       </div>
-      <div class="chart-card full">
+      <div class="chart-card full" data-chart-id="chartQualPct">
         <div class="chart-header">
           <span class="chart-title">% Leads Qualified <span class="goal-info" id="info-chartQualPct" title="Qualified leads ÷ Lead Volume per bucket, summed then divided (not an average of daily rates). Qualified = Sales status on the explicit qualified list (Hot, Warm, Pending, Closed, Lost, refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need a scheduled follow-up, Qualified SDR, Disqualified AE); blank/Disqualified/Cold/Non respondant are non-qualified. Blank-status legacy rows with SQL status = Qualified still count. Dashed Target = your % Qualified target goal; dashed Pace = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
@@ -923,11 +952,12 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">Exclude current week</span>
             </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartQualPct')" title="Expand">&#10530;</button>
           </div>
         </div>
         <canvas id="chartQualPct"></canvas>
       </div>
-      <div class="chart-card full">
+      <div class="chart-card full" data-chart-id="chartNR">
         <div class="chart-header">
           <span class="chart-title">Non-Responsive Rate % <span class="goal-info" id="info-chartNR" title="Leads marked Sales status = Non respondant or Disqualified reason = Not responsive, ÷ Lead Volume per bucket, summed then divided. Lower is better. Dashed Target only appears if you've set a Non-Responsive Rate max goal; dashed Pace = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
@@ -951,11 +981,12 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">Exclude current week</span>
             </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartNR')" title="Expand">&#10530;</button>
           </div>
         </div>
         <canvas id="chartNR"></canvas>
       </div>
-      <div class="chart-card full">
+      <div class="chart-card full" data-chart-id="chartDQ">
         <div class="chart-header">
           <span class="chart-title">Disqualified Rate % <span class="goal-info" id="info-chartDQ" title="All disqualifications in one chart, measured against the lead volume of this chart's own leads dropdown (All/B2B/B2C — independent of the global Leads: filter). SDR DQ = leads the SDR themselves marked plain Disqualified ÷ lead volume. AE DQ = leads the AE bounced back as wrongly qualified (Sales status contains 'Disqualified AE') ÷ lead volume. With both toggles on, the bars stack — the full bar height is the Total Disqualified rate (SDR + AE combined); in Lines mode each series is its own line (AE DQ dashed) and the tooltip footer still shows the total. Note: AE DQ is judged against lead volume here so it can stack with SDR DQ into one meaningful total; the handoff-quality version of that metric (AE DQ ÷ qualified leads) still lives in the Mandate Scoreboard. Summed then divided per bucket, never an average of daily rates. No Target line; Pace (with Trend lines on) shows a trailing 3-bucket rolling total-DQ rate of whichever segments are toggled on.">ⓘ</span></span>
           <div class="chart-header-right">
@@ -996,11 +1027,12 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">Exclude current week</span>
             </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartDQ')" title="Expand">&#10530;</button>
           </div>
         </div>
         <canvas id="chartDQ"></canvas>
       </div>
-      <div class="chart-card full">
+      <div class="chart-card full" data-chart-id="chartDQReasons">
         <div class="chart-header">
           <span class="chart-title">Disqualification Reasons <span class="goal-info" id="info-chartDQReasons" title="The Disqualified reason field behind every disqualification in the selected date range and SDR-tab selection, with its own source filter (SDR + AE, SDR only, or AE only) and its own B2B/B2C/All leads dropdown (independent of the global Leads: filter). Blank reasons show as '(no reason given)' — the Data Hygiene section flags those for cleanup. Team totals = one bar per reason, stacked SDR-DQ vs AE-DQ when both sources are on; By SDR = the same reason bars split by which SDR owns the lead; Weekly trend = the top 5 reasons (by total count in the range) tracked week by week, so you can see which reasons are growing or shrinking. Beyond the top 10, reasons fold into 'Other reasons'. 100% view (Team totals only) collapses the whole range into a single bar spanning the full width, segmented by reason — each segment's width is that reason's share of every disqualification in range, largest first; beyond the top 7 (kept legible/colorblind-safe), the rest fold into one gray 'Other' segment.">ⓘ</span></span>
           <div class="chart-header-right">
@@ -1025,11 +1057,12 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">100% view</span>
             </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartDQReasons')" title="Expand">&#10530;</button>
           </div>
         </div>
         <div class="dq-reasons-canvas-wrap" id="chartDQReasonsWrap"><canvas id="chartDQReasons"></canvas></div>
       </div>
-      <div class="chart-card full" id="chartCardSpeedToLead">
+      <div class="chart-card full" id="chartCardSpeedToLead" data-chart-id="chartSpeedToLead">
         <div class="chart-header">
           <span class="chart-title">Speed-to-Lead (median minutes) <span class="goal-info" id="info-chartSpeedToLead" title="Median minutes from lead creation to first outbound call, matched by phone number from the Aircall call-history export. Median (not mean) so a few stale/unreliable matches can't skew it. Leads created before the Call History export's own earliest call — or matched to a call over 48h later — are excluded entirely. Requires a Call History CSV to be loaded. Dashed Target = your Speed-to-Lead goal; dashed Pace = a trailing 3-bucket rolling median (3 weeks/days/months, matching whatever granularity is selected), and can be limited to On-hours-only or Off-hours-only leads with the dropdown next to the legend. On-hours uses each SDR's own local time (EST for MJ/Gospel, CET for Mark/Levi) and only counts Monday–Friday during their shift — a lead created on a Saturday or Sunday is always off-hours, even if the clock time would otherwise fall inside that SDR's weekday shift, since nobody works weekends. Click any bar/point to drill down into every lead over 20 minutes in that period — Name, created time, called time (shown in that SDR's own local time: EST for MJ, PST for Gospel, CET for Mark/Levi), and total wait. "Exclude current week" drops the still-in-progress trailing week (and its Pace contribution) — that bucket usually has very few matched leads so far, so one slow or fast one can look like a defining trend before the week is even over.">ⓘ</span></span>
           <div class="chart-header-right">
@@ -1058,12 +1091,13 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">Exclude current week</span>
             </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartSpeedToLead')" title="Expand">&#10530;</button>
           </div>
         </div>
         <canvas id="chartSpeedToLead"></canvas>
         <div id="speedToLeadDrilldown" class="speed-to-lead-drilldown" style="display:none"></div>
       </div>
-      <div class="chart-card full">
+      <div class="chart-card full" data-chart-id="chartMeetingAttendance">
         <div class="chart-header">
           <span class="chart-title">No-Show Rate by SDR (Meetings Not Attended) <span class="goal-info" id="info-chartMeetingAttendance" title="Bar height = resolved meetings (Meeting Done + Meeting Not Atended + Meeting Rejected) for that SDR, bucketed by when the LEAD was created (not when the meeting was booked/held — that date isn't available in the export), over the selected date range — Meeting Scheduled is excluded since it hasn't happened yet. The dark segment is Meeting Not Atended only (Meeting Rejected is excluded — that's an AE call, tracked separately) — the % shown is that segment's share of the SDR's resolved meetings. Always shows all 4 SDRs regardless of the view-tab selection above. Average = one bar per SDR totaling the whole selected range; Week over week = one grouped bar per SDR per week, so you can see the trend instead of just the period total. 100% view normalizes every bar to the same height so you can compare the not-attended share directly, instead of eyeballing it against varying bar heights.">ⓘ</span></span>
           <div class="chart-header-right">
@@ -1086,6 +1120,7 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">100% view</span>
             </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartMeetingAttendance')" title="Expand">&#10530;</button>
           </div>
         </div>
         <canvas id="chartMeetingAttendance"></canvas>
@@ -2651,6 +2686,31 @@ function applyExpandedState() {
   });
 }
 
+// ─── CHART EXPAND (presenting/screen-share mode, per chart) ───────────────────
+// Same idea as the summary-card expand above, but for the trend charts in
+// .charts-grid: doubles the canvas height (vertical only — these are already
+// full-width, so grid-column is untouched) and scales up the surrounding HTML
+// text via the .chart-card.expanded CSS rules. The chart-card markup itself
+// is static (unlike the summary cards, which are rebuilt from a template
+// every render), so the expand button is written directly into the HTML —
+// only the 'expanded' class and the canvas redraw need to react to a toggle.
+let expandedCharts = new Set();
+function isChartExpanded(id) { return expandedCharts.has(id); }
+function toggleChartExpand(id) {
+  if (expandedCharts.has(id)) expandedCharts.delete(id); else expandedCharts.add(id);
+  document.querySelectorAll('.chart-card[data-chart-id]').forEach(c => {
+    c.classList.toggle('expanded', expandedCharts.has(c.dataset.chartId));
+  });
+  renderCharts(getFilteredDays());
+}
+// Chart.js draws axis-tick and tooltip text directly onto the canvas — that
+// text doesn't grow just because the surrounding card gets taller via CSS, so
+// every chart's own render options need these baked in when expanded.
+function chartFontSizes(id) {
+  const big = isChartExpanded(id);
+  return { tick: big ? 15 : 11, tooltipTitle: big ? 15 : 12, tooltipBody: big ? 14 : 12, tooltipFooter: big ? 13 : 11 };
+}
+
 function goalStatusRow(actual, goalVal, isPct, lowerIsBetter, rowLabel) {
   if (!goalVal) return '';
   const onTrack = lowerIsBetter ? actual <= goalVal : actual >= goalVal;
@@ -2931,6 +2991,7 @@ function makeChart(id, days, spec) {
 
   if (charts[id]) { charts[id].destroy(); }
   const ctx = document.getElementById(id).getContext('2d');
+  const f = chartFontSizes(id);
   charts[id] = new Chart(ctx, {
     type: barMode ? 'bar' : 'line',
     data: { labels, datasets },
@@ -2946,14 +3007,16 @@ function makeChart(id, days, spec) {
           borderWidth: 1,
           titleColor: '#ffffff',
           bodyColor: '#cfd2e3',
+          titleFont: { size: f.tooltipTitle },
+          bodyFont: { size: f.tooltipBody },
           callbacks: {
             label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}${isRate ? '%' : ''}`
           }
         }
       },
       scales: {
-        x: { ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' } },
-        y: { ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' }, beginAtZero: true }
+        x: { ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' } },
+        y: { ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' }, beginAtZero: true }
       }
     }
   });
@@ -3127,6 +3190,7 @@ function renderLayeredActivityChart(chartDays, metrics) {
 
   if (charts[id]) charts[id].destroy();
   const ctx = document.getElementById(id).getContext('2d');
+  const f = chartFontSizes(id);
   charts[id] = new Chart(ctx, {
     type: 'bar',
     data: { labels, datasets },
@@ -3138,6 +3202,7 @@ function renderLayeredActivityChart(chartDays, metrics) {
         tooltip: {
           backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
           titleColor: '#ffffff', bodyColor: '#cfd2e3',
+          titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody },
           callbacks: {
             // Conversion rates inline on hover: Meetings Booked as a % of the
             // same bar-slot's Lead Volume (the baseline it was generated
@@ -3165,8 +3230,8 @@ function renderLayeredActivityChart(chartDays, metrics) {
         }
       },
       scales: {
-        x: { stacked: false, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { display: false } },
-        y: { stacked: false, beginAtZero: true, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' } }
+        x: { stacked: false, ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { display: false } },
+        y: { stacked: false, beginAtZero: true, ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' } }
       }
     }
   });
@@ -3339,6 +3404,7 @@ function renderSpeedToLeadChart(days) {
 
   if (charts[id]) charts[id].destroy();
   const ctx = document.getElementById(id).getContext('2d');
+  const f = chartFontSizes(id);
   charts[id] = new Chart(ctx, {
     type: barMode ? 'bar' : 'line',
     data: { labels, datasets },
@@ -3368,12 +3434,14 @@ function renderSpeedToLeadChart(days) {
           borderWidth: 1,
           titleColor: '#ffffff',
           bodyColor: '#cfd2e3',
+          titleFont: { size: f.tooltipTitle },
+          bodyFont: { size: f.tooltipBody },
           callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y} min` }
         }
       },
       scales: {
-        x: { ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' } },
-        y: { ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' }, beginAtZero: true }
+        x: { ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' } },
+        y: { ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' }, beginAtZero: true }
       }
     }
   });
@@ -4017,7 +4085,7 @@ const meetingAttendancePctPlugin = {
     const { ctx } = chart;
     ctx.save();
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 11px sans-serif';
+    ctx.font = `bold ${isChartExpanded('chartMeetingAttendance') ? 15 : 11}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const datasets = chart.data.datasets;
@@ -4093,6 +4161,7 @@ function renderMeetingAttendanceChart(days) {
 
   if (charts.chartMeetingAttendance) charts.chartMeetingAttendance.destroy();
   const ctx = document.getElementById('chartMeetingAttendance').getContext('2d');
+  const f = chartFontSizes('chartMeetingAttendance');
   charts.chartMeetingAttendance = new Chart(ctx, {
     type: 'bar',
     data: { labels, datasets },
@@ -4104,6 +4173,7 @@ function renderMeetingAttendanceChart(days) {
         tooltip: {
           backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
           titleColor: '#ffffff', bodyColor: '#cfd2e3',
+          titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody }, footerFont: { size: f.tooltipFooter },
           callbacks: {
             label: ctx => {
               const ds = ctx.dataset;
@@ -4127,9 +4197,9 @@ function renderMeetingAttendanceChart(days) {
         }
       },
       scales: {
-        x: { stacked: true, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { display: false } },
+        x: { stacked: true, ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { display: false } },
         y: { stacked: true, beginAtZero: true, max: pct100 ? 100 : undefined,
-          ticks: { color: '#5b5f78', font: { size: 11 }, callback: v => pct100 ? `${v}%` : v },
+          ticks: { color: '#5b5f78', font: { size: f.tick }, callback: v => pct100 ? `${v}%` : v },
           grid: { color: '#e4e6ef' } }
       }
     },
@@ -4271,6 +4341,7 @@ function renderDQChart(days) {
 
   if (charts[id]) charts[id].destroy();
   const ctx = document.getElementById(id).getContext('2d');
+  const f = chartFontSizes(id);
   charts[id] = new Chart(ctx, {
     type: barMode ? 'bar' : 'line',
     data: { labels, datasets },
@@ -4284,6 +4355,7 @@ function renderDQChart(days) {
           backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
           titleColor: '#ffffff', bodyColor: '#cfd2e3',
           footerColor: '#ffffff',
+          titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody }, footerFont: { size: f.tooltipFooter },
           callbacks: {
             label: ctx2 => {
               const ds = ctx2.dataset;
@@ -4312,8 +4384,8 @@ function renderDQChart(days) {
         }
       },
       scales: {
-        x: { stacked: barMode, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' } },
-        y: { stacked: barMode, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { color: '#e4e6ef' }, beginAtZero: true }
+        x: { stacked: barMode, ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' } },
+        y: { stacked: barMode, ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' }, beginAtZero: true }
       }
     }
   });
@@ -4394,7 +4466,9 @@ function renderDQReasonsChart(days) {
   const pctWrap = document.getElementById('pctToggleWrap-' + id);
   if (pctWrap) pctWrap.style.display = viewMode === 'team' ? '' : 'none';
   const pct100 = viewMode === 'team' && !!document.getElementById('pctToggle-' + id) && document.getElementById('pctToggle-' + id).checked;
-  updateDQReasonsCanvasHeight(pct100);
+  const expanded = isChartExpanded(id);
+  updateDQReasonsCanvasHeight(pct100, expanded);
+  const f = chartFontSizes(id);
 
   if (charts[id]) { charts[id].destroy(); delete charts[id]; }
   if (!rows.length) {
@@ -4450,11 +4524,12 @@ function renderDQReasonsChart(days) {
           tooltip: {
             backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
             titleColor: '#ffffff', bodyColor: '#cfd2e3',
+            titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody },
             callbacks: { label: c => ` ${c.dataset.label}: ${c.dataset._count} (${c.parsed.x}%)` }
           }
         },
         scales: {
-          x: { stacked: true, min: 0, max: 100, ticks: { color: '#5b5f78', font: { size: 11 }, callback: v => v + '%' }, grid: { color: '#e4e6ef' } },
+          x: { stacked: true, min: 0, max: 100, ticks: { color: '#5b5f78', font: { size: f.tick }, callback: v => v + '%' }, grid: { color: '#e4e6ef' } },
           y: { stacked: true, ticks: { display: false }, grid: { display: false } }
         }
       }
@@ -4489,12 +4564,13 @@ function renderDQReasonsChart(days) {
           tooltip: {
             backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
             titleColor: '#ffffff', bodyColor: '#cfd2e3',
+            titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody },
             callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y}` }
           }
         },
         scales: {
-          x: { ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { display: false } },
-          y: { beginAtZero: true, ticks: { color: '#5b5f78', font: { size: 11 }, precision: 0 }, grid: { color: '#e4e6ef' } }
+          x: { ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { display: false } },
+          y: { beginAtZero: true, ticks: { color: '#5b5f78', font: { size: f.tick }, precision: 0 }, grid: { color: '#e4e6ef' } }
         }
       }
     };
@@ -4539,6 +4615,7 @@ function renderDQReasonsChart(days) {
             backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
             titleColor: '#ffffff', bodyColor: '#cfd2e3',
             footerColor: '#ffffff',
+            titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody }, footerFont: { size: f.tooltipFooter },
             callbacks: {
               label: c => ` ${c.dataset.label}: ${c.parsed.x}`,
               footer: items => {
@@ -4551,8 +4628,8 @@ function renderDQReasonsChart(days) {
           }
         },
         scales: {
-          x: { stacked: true, beginAtZero: true, ticks: { color: '#5b5f78', font: { size: 11 }, precision: 0 }, grid: { color: '#e4e6ef' } },
-          y: { stacked: true, ticks: { color: '#5b5f78', font: { size: 11 } }, grid: { display: false } }
+          x: { stacked: true, beginAtZero: true, ticks: { color: '#5b5f78', font: { size: f.tick }, precision: 0 }, grid: { color: '#e4e6ef' } },
+          y: { stacked: true, ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { display: false } }
         }
       }
     };
@@ -4571,9 +4648,10 @@ function renderDQReasonsChart(days) {
 // div's height, not the canvas's own — Chart.js's responsive resize measures
 // the canvas's parent element, so sizing the canvas directly gets overwritten
 // on the next resize pass.
-function updateDQReasonsCanvasHeight(pct100) {
+function updateDQReasonsCanvasHeight(pct100, expanded) {
   const wrap = document.getElementById('chartDQReasonsWrap');
-  if (wrap) wrap.style.height = pct100 ? '90px' : '320px';
+  const base = pct100 ? 90 : 320;
+  if (wrap) wrap.style.height = (expanded ? base * 2 : base) + 'px';
 }
 
 // ─── GOALS ────────────────────────────────────────────────────────────────────
