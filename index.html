@@ -394,6 +394,13 @@
   .chart-cumulative-toggle input:checked + .toggle-track::after { transform: translateX(13px); }
   .chart-cumulative-toggle:hover .toggle-text { color: var(--text); }
   .activity-metric-checks { display: flex; align-items: center; gap: 12px; }
+  .ae-row-toggle { display: inline-flex; align-items: center; cursor: pointer; user-select: none; }
+  .ae-row-toggle input { display: none; }
+  .ae-row-toggle input:checked + .toggle-track { background: var(--accent); border-color: var(--accent); }
+  .ae-row-toggle input:checked + .toggle-track::after { transform: translateX(13px); }
+  .ae-row-toggle .toggle-track { opacity: 0.55; }
+  .ae-row-toggle input:checked + .toggle-track { opacity: 1; }
+  tr.ae-row-excluded td { opacity: 0.45; }
 
   /* GOALS SECTION */
   .goals-section {
@@ -1806,6 +1813,27 @@ function toggleCommissionSection() {
 function toggleCommissionExplainer() {
   document.getElementById('commissionExplainer').classList.toggle('expanded');
 }
+// Per-AE mute toggles for the AE Baseline section — an AE switched off here
+// is dropped from the "AE Averages" overall totals (and thus the chart
+// overlay, which reads the same overall bucket), but still listed in its own
+// row so you can flip it back on.
+let excludedAEBaselineOwners = new Set();
+function loadExcludedAEBaselineOwners() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('sdr_ae_baseline_excluded') || '[]');
+    excludedAEBaselineOwners = new Set(Array.isArray(saved) ? saved : []);
+  } catch (e) { excludedAEBaselineOwners = new Set(); }
+}
+function saveExcludedAEBaselineOwners() {
+  try { localStorage.setItem('sdr_ae_baseline_excluded', JSON.stringify(Array.from(excludedAEBaselineOwners))); } catch (e) {}
+}
+function toggleAEBaselineOwnerExcluded(owner) {
+  if (excludedAEBaselineOwners.has(owner)) excludedAEBaselineOwners.delete(owner);
+  else excludedAEBaselineOwners.add(owner);
+  saveExcludedAEBaselineOwners();
+  renderAEBaselineSection();
+  renderDashboard();
+}
 function isAEBaselineOn() {
   const el = document.getElementById('aeBaselineToggle');
   return !!rawAEBaseline && !!el && el.value === 'on';
@@ -1843,7 +1871,8 @@ function loadTrendLinesToggle() {
 function computeAEBaselineMetrics() {
   if (!rawAEBaseline || !rawAEBaseline.length) return null;
   const filtered = applyLeadTypeFilter(rawAEBaseline);
-  const overall = computeMetrics(filtered);
+  const includedForOverall = filtered.filter(r => !excludedAEBaselineOwners.has(r['Owner']));
+  const overall = computeMetrics(includedForOverall);
   const dayKeys = Array.from(new Set(rawAEBaseline.map(r => toDubaiDayKey(r['Creation Date'])).filter(Boolean))).sort();
   const spanDays = calendarSpanDays(dayKeys) || 1;
   const byOwner = {};
@@ -1852,7 +1881,7 @@ function computeAEBaselineMetrics() {
     if (!byOwner[owner]) byOwner[owner] = [];
     byOwner[owner].push(r);
   });
-  const perAE = Object.keys(byOwner).sort().map(owner => ({ owner, metrics: computeMetrics(byOwner[owner]) }));
+  const perAE = Object.keys(byOwner).sort().map(owner => ({ owner, metrics: computeMetrics(byOwner[owner]), excluded: excludedAEBaselineOwners.has(owner) }));
   return {
     overall,
     perAE,
@@ -5243,8 +5272,10 @@ function aeBaselineFactTile(label, value, sub) {
 }
 // One row of the comparison tables — same column shape for both the per-AE
 // and per-SDR breakdowns, so the two are directly comparable at a glance.
-function benchmarkRow(label, m) {
-  return `<tr>
+function benchmarkRow(label, m, opts) {
+  const excluded = opts && opts.excluded;
+  const toggleCell = opts && opts.owner != null ? `<td><label class="ae-row-toggle" title="Include/exclude ${escapeHtml(label)} from the AE Averages totals above"><input type="checkbox" ${excluded ? '' : 'checked'} onchange="toggleAEBaselineOwnerExcluded('${escapeHtml(opts.owner).replace(/'/g, "\\'")}')"><span class="toggle-track"></span></label></td>` : '';
+  return `<tr${excluded ? ' class="ae-row-excluded"' : ''}>
     <td>${escapeHtml(label)}</td>
     <td>${m.leads}</td>
     <td>${m.meetings}</td>
@@ -5253,10 +5284,11 @@ function benchmarkRow(label, m) {
     <td>${m.pct_qualified.toFixed(1)}%</td>
     <td>${m.nr_rate.toFixed(1)}%</td>
     <td>${m.leads ? (m.sdr_dq / m.leads * 100).toFixed(1) : '0.0'}%</td>
+    ${toggleCell}
   </tr>`;
 }
-function benchmarkTableHeader(firstColLabel) {
-  return `<thead><tr><th>${firstColLabel}</th><th>Leads</th><th>Meetings</th><th>Meeting Rate</th><th>Qualified</th><th>% Qualified</th><th>NR Rate</th><th>Disqualified Rate</th></tr></thead>`;
+function benchmarkTableHeader(firstColLabel, withToggle) {
+  return `<thead><tr><th>${firstColLabel}</th><th>Leads</th><th>Meetings</th><th>Meeting Rate</th><th>Qualified</th><th>% Qualified</th><th>NR Rate</th><th>Disqualified Rate</th>${withToggle ? '<th></th>' : ''}</tr></thead>`;
 }
 function renderAEBaselineSection() {
   const uploadRow = document.getElementById('aeBaselineUploadRow');
@@ -5301,8 +5333,8 @@ function renderAEBaselineSection() {
   const aeTableHtml = `
     <div class="ae-baseline-subheading">AE Averages <span class="goal-info" title="${escapeHtml(ae.firstDay)} – ${escapeHtml(ae.lastDay)} (${ae.spanDays} days), the entire loaded AE Baseline export.">ⓘ</span></div>
     <table class="report-table">
-      ${benchmarkTableHeader('AE')}
-      <tbody>${ae.perAE.map(({ owner, metrics: m }) => benchmarkRow(owner, m)).join('')}</tbody>
+      ${benchmarkTableHeader('AE', true)}
+      <tbody>${ae.perAE.map(({ owner, metrics: m, excluded }) => benchmarkRow(owner, m, { owner, excluded })).join('')}</tbody>
     </table>`;
 
   contentEl.innerHTML = factsHtml + aeTableHtml + sdrTableHtml;
@@ -5470,6 +5502,7 @@ loadGoals();
 loadChartStyle();
 loadAEBaselineToggle();
 loadTrendLinesToggle();
+loadExcludedAEBaselineOwners();
 restoreAEBaselineData();
 renderAEBaselineSection();
 if (restoreLoadedData()) {
