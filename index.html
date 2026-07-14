@@ -1868,15 +1868,20 @@ function loadTrendLinesToggle() {
   } catch (e) {}
 }
 // Computes the flat, whole-range AE benchmark: an overall bucket (all 7 AEs
-// combined) plus a per-AE breakdown, using the exact same computeMetrics()
-// logic as every SDR number, over whatever rows survive the current
-// B2B/B2C/All Leads: filter. Not date-bucketed like the SDR charts — this is
-// a single frozen historical average, not a trend.
+// combined) plus a per-AE breakdown, using computeMetrics() with
+// closedImpliesMeeting turned on (see that function's comment) so the AE
+// meeting numbers stay anchored to the strategic briefing's own figures for
+// that era, over whatever rows survive the current B2B/B2C/All Leads:
+// filter. This is a deliberate, documented divergence from the SDR meeting
+// rule, not an inconsistency — AEs never reliably filled in Meeting Status,
+// so holding them to the SDR-era rule would just manufacture a fake gap. Not
+// date-bucketed like the SDR charts — this is a single frozen historical
+// average, not a trend.
 function computeAEBaselineMetrics() {
   if (!rawAEBaseline || !rawAEBaseline.length) return null;
   const filtered = applyLeadTypeFilter(rawAEBaseline);
   const includedForOverall = filtered.filter(r => !excludedAEBaselineOwners.has(r['Owner']));
-  const overall = computeMetrics(includedForOverall);
+  const overall = computeMetrics(includedForOverall, { closedImpliesMeeting: true });
   const dayKeys = Array.from(new Set(rawAEBaseline.map(r => toDubaiDayKey(r['Creation Date'])).filter(Boolean))).sort();
   const spanDays = calendarSpanDays(dayKeys) || 1;
   const byOwner = {};
@@ -1885,7 +1890,7 @@ function computeAEBaselineMetrics() {
     if (!byOwner[owner]) byOwner[owner] = [];
     byOwner[owner].push(r);
   });
-  const perAE = Object.keys(byOwner).sort().map(owner => ({ owner, metrics: computeMetrics(byOwner[owner]), excluded: excludedAEBaselineOwners.has(owner) }));
+  const perAE = Object.keys(byOwner).sort().map(owner => ({ owner, metrics: computeMetrics(byOwner[owner], { closedImpliesMeeting: true }), excluded: excludedAEBaselineOwners.has(owner) }));
   return {
     overall,
     perAE,
@@ -2105,24 +2110,31 @@ const MEETING_BOOKED_STATUSES = ['Meeting Scheduled', 'Meeting Done', 'Meeting R
 // 76% of those rows end up Disqualified afterward, suggesting it means
 // "asked for," not "confirmed."
 // ─── THE "INSTANT CLOSE" RULE ──────────────────────────────────────────────────
-// What counts as a real booked meeting, for every chart, the Mandate
-// Scoreboard, and every commission number in this dashboard: a deal that
-// closed within 2 HOURS of the lead being created never had time for a real
-// SDR-run meeting to happen in between — it's an instant/self-serve-style
-// close (e.g. an auto-deposit trigger) the AE processed immediately, not a
-// meeting the SDR actually ran. These are excluded from "meeting booked"
-// entirely, even if Meeting Status says Scheduled/Done/Rejected/Not
-// Attended — the timestamps are treated as more reliable than that field for
-// this one judgment call. Anything that took longer than 2 hours to close
-// gets full credit as a real meeting, even if it closed the same calendar
-// day.
+// A deal that closed within 2 HOURS of the lead being created never had time
+// for a real SDR-run meeting to happen in between — it's an instant/self-
+// serve-style close (e.g. an auto-deposit trigger) the AE processed
+// immediately, not a meeting the SDR actually ran.
 //
-// This affects ONLY the meeting-booked count — a Closed deal (instant or
-// not) still counts toward Qualified Leads (isQualifiedLead doesn't call
-// this function at all) and toward the New Sales Incentive's closed revenue
-// (closedRevenueForSDR doesn't call it either), so nothing is
-// double-punished: she still gets credit for the qualified lead and the
-// revenue, just not meeting-credit unless a real Meeting Status backs it up.
+// Two different predicates use this, on purpose, for two different jobs:
+//   - EVERYWHERE that isn't commission (every chart, the Mandate Scoreboard,
+//     the AE Baseline, the general dashboard's Meeting Booked/Held/Resolved
+//     numbers): an instant close still counts as a booked-and-completed
+//     meeting. Reasoning: it's already counted in Lead Volume and Qualified
+//     Leads on every one of those same charts, so excluding it only from the
+//     meeting count would make the numbers disagree with each other for no
+//     benefit to anyone reading them. isMeetingBooked() below is this general,
+//     inclusive version.
+//   - COMMISSION ONLY (the Meeting Set Incentive bracket, the Meeting Quality
+//     Multiplier's rejection-rate denominator, and the printable report's
+//     commission figures): an instant close does NOT count as a real
+//     SDR-run meeting, so it earns no meeting-incentive credit — the SDR
+//     didn't run a meeting on it, whatever Meeting Status happens to say.
+//     isMeetingBookedCommission() below is this stricter, money-facing
+//     version. It still doesn't touch Qualified Leads or the New Sales
+//     Incentive's closed revenue (isQualifiedLead and closedRevenueForSDR
+//     never call either predicate) — she still gets credit for the
+//     qualified lead and the revenue, just not meeting-credit toward the
+//     commission bracket unless a real Meeting Status backs it up.
 const INSTANT_CLOSE_MINUTES = 120; // 2 hours
 function isInstantClose(r) {
   if (r['Sales status'] !== 'Closed') return false;
@@ -2132,23 +2144,37 @@ function isInstantClose(r) {
   const gap = closed - created;
   return gap >= 0 && gap <= INSTANT_CLOSE_MINUTES;
 }
+// General/chart-facing: an instant close still counts as a booked (and
+// completed) meeting, so Lead Volume, Meetings Booked, Meetings Held, and
+// Meetings Resolved all move together consistently across every chart,
+// the Mandate Scoreboard, and the AE Baseline.
 function isMeetingBooked(r) {
+  if (isInstantClose(r)) return true;
+  return MEETING_BOOKED_STATUSES.includes(r['Meeting Status']);
+}
+// Commission-only: an instant close earns no meeting-incentive credit,
+// regardless of what Meeting Status says. Used ONLY by
+// trailingRejectionCounts, commissionMetricsForSDR, and the printable
+// report's commission figures — nowhere else.
+function isMeetingBookedCommission(r) {
   if (isInstantClose(r)) return false;
   return MEETING_BOOKED_STATUSES.includes(r['Meeting Status']);
 }
 // Of all booked meetings, the subset that didn't actually happen — used by the
 // No-Show Rate by SDR chart to show what fraction of each SDR's booked meetings
-// were a no-show or rejected rather than completed/still scheduled.
+// were a no-show or rejected rather than completed/still scheduled. An instant
+// close is a completed meeting (see isMeetingBooked above), never a no-show.
 const MEETING_NOT_ATTENDED_STATUSES = ['Meeting Not Atended', 'Meeting Rejected'];
 function isMeetingNotAttended(r) {
   return MEETING_NOT_ATTENDED_STATUSES.includes(r['Meeting Status']);
 }
 // Meetings that have actually resolved one way or another (Done, Not Atended,
-// or Rejected) — excludes Meeting Scheduled, since a still-upcoming meeting
-// hasn't happened yet and shouldn't count toward an attendance rate. Used by
-// the No-Show Rate by SDR chart as the bar total.
+// Rejected, or an instant close) — excludes Meeting Scheduled, since a
+// still-upcoming meeting hasn't happened yet and shouldn't count toward an
+// attendance rate. Used by the No-Show Rate by SDR chart as the bar total.
 const MEETING_RESOLVED_STATUSES = ['Meeting Done', 'Meeting Not Atended', 'Meeting Rejected'];
 function isMeetingResolved(r) {
+  if (isInstantClose(r)) return true;
   return MEETING_RESOLVED_STATUSES.includes(r['Meeting Status']);
 }
 // Sales status is the single source of truth for qualification — a lead is
@@ -2165,20 +2191,37 @@ function isQualifiedLead(r) {
   if (status) return isQualifiedStatus(status);
   return (r['SQL status'] || '').trim().toLowerCase() === 'qualified';
 }
-function computeMetrics(leads) {
-  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, meetings_held: 0, meetings_no_show: 0, speed_to_lead_matched: 0, speed_to_lead_eligible: 0, speed_to_lead_mismatch: 0,
+// opts.closedImpliesMeeting: restores the pre-SDR-era rule where a Closed
+// deal with a blank Meeting Status still counts as a completed meeting. Used
+// ONLY by computeAEBaselineMetrics — the AE Baseline export mostly predates
+// the Meeting Status field being filled in consistently (roughly two-thirds
+// of its Closed rows have it blank), so without this the AE benchmark's
+// meeting numbers would read as structurally deflated next to the strategic
+// briefing's own frozen figures for that era. SDR-era data reliably fills in
+// Meeting Status, so this flag is never needed (or used) for SDR numbers.
+function computeMetrics(leads, opts) {
+  opts = opts || {};
+  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, non_responsive_terminal: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, meetings_held: 0, meetings_no_show: 0, speed_to_lead_matched: 0, speed_to_lead_eligible: 0, speed_to_lead_mismatch: 0,
     speed_to_lead_on_matched: 0, speed_to_lead_on_eligible: 0,
     speed_to_lead_off_matched: 0, speed_to_lead_off_eligible: 0 };
-  const meetings = leads.filter(isMeetingBooked).length;
+  const isAEImpliedMeeting = r => opts.closedImpliesMeeting && r['Sales status'] === 'Closed' && !(r['Meeting Status'] || '').trim();
+  const meetings = leads.filter(r => isMeetingBooked(r) || isAEImpliedMeeting(r)).length;
   const meetings_not_attended = leads.filter(isMeetingNotAttended).length;
-  const meetings_resolved = leads.filter(isMeetingResolved).length;
+  const meetings_resolved = leads.filter(r => isMeetingResolved(r) || isAEImpliedMeeting(r)).length;
   const meetings_no_show = leads.filter(r => r['Meeting Status'] === 'Meeting Not Atended').length;
-  // Meetings that actually took place — Meeting Status = Meeting Done exactly
-  // (distinct from "Booked", which also counts still-upcoming Scheduled
-  // meetings and the Closed-implies-a-meeting-happened inference).
-  const meetings_held = leads.filter(r => r['Meeting Status'] === 'Meeting Done').length;
+  // Meetings that actually took place — Meeting Status = Meeting Done, an
+  // instant close, or (AE Baseline only) a blank-status Closed deal — distinct
+  // from "Booked", which also counts still-upcoming Scheduled meetings.
+  const meetings_held = leads.filter(r => r['Meeting Status'] === 'Meeting Done' || isInstantClose(r) || isAEImpliedMeeting(r)).length;
   const qualified = leads.filter(isQualifiedLead).length;
   const non_responsive = leads.filter(r => r['Disqualified reason'] === 'Not responsive' || r['Sales status'] === 'Non respondant').length;
+  // Terminal-only: leads permanently disqualified as unreachable, excluding
+  // "Non respondant" (a transient Sales status set mid-cadence, per the Lead
+  // Flow doc — the lead is still being worked, not given up on). This is the
+  // metric that's comparable to the strategic briefing's 29% NR baseline,
+  // which was measured the same terminal way; the broader `non_responsive`
+  // above intentionally also counts leads currently unreachable mid-cadence.
+  const non_responsive_terminal = leads.filter(r => r['Disqualified reason'] === 'Not responsive').length;
   const ae_dq = leads.filter(r => (r['Sales status'] || '').includes('Disqualified AE')).length;
   // Plain "Disqualified" (the SDR's own call) — distinct from the AE-disqualified status above
   const sdr_dq = leads.filter(r => (r['Sales status'] || '').trim().toLowerCase() === 'disqualified').length;
@@ -2208,6 +2251,7 @@ function computeMetrics(leads) {
     pct_qualified: leads.length ? parseFloat((qualified / leads.length * 100).toFixed(1)) : 0,
     non_responsive,
     nr_rate: leads.length ? parseFloat((non_responsive / leads.length * 100).toFixed(1)) : 0,
+    non_responsive_terminal,
     ae_dq,
     sdr_dq,
     active_pipeline,
@@ -2404,13 +2448,13 @@ function metricsForSelection(dataset, day, view) {
   if (!parts.length) return null;
   const sum = f => parts.reduce((a, p) => a + (p[f] || 0), 0);
   const leads = sum('leads'), meetings = sum('meetings'), qualified = sum('qualified'),
-        non_responsive = sum('non_responsive'), ae_dq = sum('ae_dq'), sdr_dq = sum('sdr_dq'), active_pipeline = sum('active_pipeline'),
+        non_responsive = sum('non_responsive'), non_responsive_terminal = sum('non_responsive_terminal'), ae_dq = sum('ae_dq'), sdr_dq = sum('sdr_dq'), active_pipeline = sum('active_pipeline'),
         meetings_not_attended = sum('meetings_not_attended'), meetings_resolved = sum('meetings_resolved'), meetings_held = sum('meetings_held'), meetings_no_show = sum('meetings_no_show'),
         speed_to_lead_matched = sum('speed_to_lead_matched'), speed_to_lead_eligible = sum('speed_to_lead_eligible'), speed_to_lead_mismatch = sum('speed_to_lead_mismatch'),
         speed_to_lead_on_matched = sum('speed_to_lead_on_matched'), speed_to_lead_on_eligible = sum('speed_to_lead_on_eligible'),
         speed_to_lead_off_matched = sum('speed_to_lead_off_matched'), speed_to_lead_off_eligible = sum('speed_to_lead_off_eligible');
   return {
-    leads, meetings, qualified, non_responsive, ae_dq, sdr_dq, active_pipeline,
+    leads, meetings, qualified, non_responsive, non_responsive_terminal, ae_dq, sdr_dq, active_pipeline,
     meetings_not_attended, meetings_resolved, meetings_held, meetings_no_show,
     speed_to_lead_matched, speed_to_lead_eligible, speed_to_lead_mismatch,
     speed_to_lead_on_matched, speed_to_lead_on_eligible,
@@ -2671,7 +2715,7 @@ function renderSummaryCards(days) {
   const infoLeadVolume = isCommission
     ? `Count of leads created in the selected range, currently filtered to B2B leads only (Commission View always uses B2B as the denominator regardless of the Leads: dropdown).${aeNote}`
     : `Count of leads created in the selected range, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
-  const infoMeetingsBooked = `Count of leads counted as a booked meeting: Meeting Status is Scheduled, Done, Rejected, or Not Atended — a Closed deal with no Meeting Status no longer counts on its own — excluding deals that closed within 2 hours of the lead being created (an instant/self-serve close, not a real SDR-run meeting) — filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
+  const infoMeetingsBooked = `Count of leads counted as a booked meeting: Meeting Status is Scheduled, Done, Rejected, or Not Atended, or the deal closed within 2 hours of the lead being created (an instant/self-serve close, counted as a completed meeting so this stays consistent with Lead Volume and Qualified Leads) — a Closed deal that took longer than 2 hours with no Meeting Status doesn't count on its own — filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Note: the Commission tab's own Meetings figure excludes instant closes, since they're not a real SDR-run meeting for payout purposes.${aeNote}`;
   const infoMeetingRate = isCommission
     ? `Meetings Booked (B2B+B2C combined) ÷ B2B-only Lead Volume — Commission View judges the combined meeting count against the B2B lead denominator.${aeNote}`
     : `Meetings Booked ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
@@ -2680,11 +2724,11 @@ function renderSummaryCards(days) {
     ? `Leads Qualified (B2B+B2C combined) ÷ B2B-only Lead Volume.${aeNote}`
     : `Leads Qualified ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Qualified = Sales status on the explicit qualified list; blank/Disqualified/Cold/Non respondant are non-qualified regardless of meeting status.${aeNote}`;
   const infoNR = isCommission
-    ? `Non-Responsive leads (B2B+B2C combined) ÷ B2B-only Lead Volume. Non-responsive = Disqualified reason "Not responsive" or Sales status "Non respondant". Lower is better.${aeNote}`
-    : `Leads marked Sales status = Non respondant or Disqualified reason = Not responsive, ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Lower is better.${aeNote}`;
+    ? `Non-Responsive leads (B2B+B2C combined) ÷ B2B-only Lead Volume. Non-responsive = Disqualified reason "Not responsive" or Sales status "Non respondant" (includes leads still mid-cadence, not yet given up on). Lower is better. The Mandate Scoreboard's non-responsive rate is narrower — terminal Not-responsive only, to match the strategic briefing's baseline.${aeNote}`
+    : `Leads marked Sales status = Non respondant or Disqualified reason = Not responsive (includes leads still mid-cadence, not yet given up on), ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Lower is better. The Mandate Scoreboard's non-responsive rate is narrower — terminal Not-responsive only, to match the strategic briefing's baseline.${aeNote}`;
   const infoAEDQ = `Count of leads the AE bounced back as wrongly qualified (Sales status contains "Disqualified AE") — measures SDR hand-off quality, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
   const infoPipeline = `Snapshot as of the last day in range: leads whose Sales status is NOT Closed, Disqualified, Lost, Deposit refund, or blank — i.e. still open/in-progress, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
-  const infoNoShow = `Meetings the lead didn't show up for (Meeting Status = Meeting Not Atended) ÷ resolved meetings (Done + Not Atended + Rejected) in the selected range. Still-upcoming Scheduled meetings are excluded (they haven't happened yet), and Meeting Rejected counts toward the denominator but not the numerator — a rejection is the AE's call on qualification, not a client no-show. Lower is better. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Full breakdown in the "No-Show Rate by SDR" chart below.`;
+  const infoNoShow = `Meetings the lead didn't show up for (Meeting Status = Meeting Not Atended) ÷ resolved meetings (Done + Not Atended + Rejected + instant closes) in the selected range. Still-upcoming Scheduled meetings are excluded (they haven't happened yet), and Meeting Rejected counts toward the denominator but not the numerator — a rejection is the AE's call on qualification, not a client no-show. Lower is better. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Full breakdown in the "No-Show Rate by SDR" chart below.`;
   document.getElementById('summaryCards').innerHTML = `
     ${countCard('Lead Volume', leadVolTotal, perSDR.map(s => ({ ...s, value: s.leadVol, goal: s.leadsGoal })), elapsed, daysInMo, showProjection, isCommission ? 'B2B leads only' : undefined, d.goalLeads, ae ? ae.leadsPerDay : null, infoLeadVolume, deltas.leadVol)}
     ${countCard('Meetings Booked', totalMeetings, perSDR.map(s => ({ ...s, value: s.meetings, goal: s.meetingsGoal })), elapsed, daysInMo, showProjection, undefined, d.goalMeetings, ae ? ae.meetingsPerDay : null, infoMeetingsBooked, deltas.meetings)}
@@ -3087,7 +3131,7 @@ const ACTIVITY_METRICS = {
   meetingsHeld: {
     label: 'Meetings Held', field: 'meetings_held',
     singleSpec: () => ({ type: 'count', field: 'meetings_held', pace: true }),
-    info: 'Count of leads whose Meeting Status is exactly Meeting Done, per bucket — distinct from Meetings Booked (which also counts still-upcoming Scheduled meetings and includes Closed deals as an implied meeting). Dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected). No goal/Target line for this one.'
+    info: 'Count of leads whose Meeting Status is exactly Meeting Done, or an instant close (a deal closed within 2 hours of the lead being created, treated as a completed meeting), per bucket — distinct from Meetings Booked (which also counts still-upcoming Scheduled meetings). Dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected). No goal/Target line for this one.'
   }
 };
 
@@ -3884,10 +3928,13 @@ function mandateCoverage(days) {
   });
   return { total, worked, pct: total ? (worked / total * 100) : null };
 }
-// The briefing's re-engagement pool, scoped to the SDR team: leads qualified
-// by status but still open (not Closed/Lost/refunded, not AE-disqualified),
-// with no meeting ever set, created more than 21 days ago — statistically
-// dying per the "86% of wins close within 21 days" rule.
+// Count of B2B leads whose Sales status is Closed, scoped by CREATION date
+// (the same `days` cohort as every other Mandate row) — deliberately a
+// different "closed" definition than the New Sales Incentive's
+// closedRevenueForSDR, which scans by CLOSED date instead regardless of when
+// the lead was created. Mandate is asking "of the leads this cohort brought
+// in, how many became deals"; commission is asking "what closed and got paid
+// out this month," which can include deals created in an earlier cohort.
 function mandateClosedCount(days) {
   let count = 0;
   days.forEach(d => SDRS.forEach(s => (((rawByDay[d] || {})[s.key]) || []).forEach(r => {
@@ -3969,7 +4016,7 @@ function renderMandateSection() {
     const mResolved = mandateSum(days, 'meetings_resolved');
     const mNoShow = mandateSum(days, 'meetings_no_show');
     const mAeDq = mandateSum(days, 'ae_dq');
-    const mNr = mandateSum(days, 'non_responsive');
+    const mNr = mandateSum(days, 'non_responsive_terminal');
     const mClosed = mandateClosedCount(days);
     const mStl = rawCalls ? mandateStlMedian(days, hoursFilter) : null;
     const mCov = mandateCoverage(days);
@@ -4041,12 +4088,12 @@ function renderMandateSection() {
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.aeDqPct != null ? r.aeDqPct.toFixed(1) + '%' : null, r.aeDqOk))
     },
     {
-      label: 'Meeting no-show rate', info: 'Meeting Status = Meeting Not Attended ÷ that month\'s resolved meetings (Done + Not Attended + Rejected). A lead simply not showing up — distinct from Handoff quality above, which is the AE\'s judgment on qualification.',
+      label: 'Meeting no-show rate', info: 'Meeting Status = Meeting Not Attended ÷ that month\'s resolved meetings (Done + Not Attended + Rejected + instant closes). A lead simply not showing up — distinct from Handoff quality above, which is the AE\'s judgment on qualification.',
       target: `≤ ${s.noShowMax}%`,
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.noShowPct != null ? r.noShowPct.toFixed(1) + '%' : null, r.noShowOk))
     },
     {
-      label: 'Non-responsive rate', info: 'Leads marked Sales status = Non respondant or Disqualified reason = Not responsive, ÷ that month\'s B2B leads. The briefing calls this the single largest leak in the company funnel. Company baseline is 29% (all business leads, Jan–May YTD) — your team works the low-value/incomplete tier, so expect to run above that; the founders watch the direction, not the absolute number. Target editable below.',
+      label: 'Non-responsive rate', info: 'Leads permanently disqualified as unreachable (Disqualified reason = Not responsive) ÷ that month\'s B2B leads. Deliberately excludes the transient "Non respondant" Sales status a lead carries mid-cadence while still being worked — this row only counts leads given up on for good, to match how the briefing\'s 29% baseline was measured. (The Non-Responsive Rate card up top is broader and also counts mid-cadence leads — see its ⓘ.) The briefing calls this the single largest leak in the company funnel. Company baseline is 29% (all business leads, Jan–May YTD) — your team works the low-value/incomplete tier, so expect to run above that; the founders watch the direction, not the absolute number. Target editable below.',
       target: `< ${s.nrMax}%`,
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.nrPct != null ? r.nrPct.toFixed(1) + '%' : null, r.nrOk))
     },
@@ -4974,7 +5021,7 @@ function trailingRejectionCounts(sdrKey) {
     const rows = rawByDay[d] && rawByDay[d][sdrKey];
     if (!rows) return;
     rows.filter(isBusinessLead).forEach(r => {
-      if (isMeetingBooked(r)) booked++;
+      if (isMeetingBookedCommission(r)) booked++;
       if (isMeetingNotAttended(r)) bad++;
     });
   });
@@ -5018,7 +5065,7 @@ function commissionMetricsForSDR(days, sdrKey, monthKey) {
   const b2bLeads = rows.filter(isBusinessLead).length;
   const b2cLeads = rows.filter(isB2CLead).length;
   const qualified = rows.filter(isQualifiedLead).length;
-  const meetings = rows.filter(isMeetingBooked).length;
+  const meetings = rows.filter(isMeetingBookedCommission).length;
   const closed = closedRevenueForSDR(sdrKey, monthKey);
   return {
     totalLeads: rows.length,
@@ -5422,8 +5469,8 @@ function buildQualifiedReportHtml(selected) {
       if (dayRows) rows.push(...dayRows);
     });
     const qualified = rows.filter(isQualifiedLead);
-    const qualifiedBooked = qualified.filter(isMeetingBooked);
-    const qualifiedNotBooked = qualified.filter(r => !isMeetingBooked(r));
+    const qualifiedBooked = qualified.filter(isMeetingBookedCommission);
+    const qualifiedNotBooked = qualified.filter(r => !isMeetingBookedCommission(r));
     return `
       ${reportCommissionSummaryHtml(sdr, monthKey, commissionDays)}
       <div class="report-section-heading">Qualified &amp; Meeting Booked (${qualifiedBooked.length})</div>
