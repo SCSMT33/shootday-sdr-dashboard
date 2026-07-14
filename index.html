@@ -1270,6 +1270,10 @@
           <div class="commission-sub">Recalculates for whichever SDR(s) you've selected above. Commission always looks at <strong>last calendar month's performance</strong> regardless of the Range: picker (see "How compensation works" below for why). Qualified Leads and Meetings are counted from all leads (B2B + B2C); both are judged as a percentage of that person's B2B leads only, matching Commission View. New Sales Incentive is a flat 0.25% of actual closed-deal revenue (not multiplier-scaled). Lead Factor is not included here.</div>
         </div>
         <div class="commission-report-btn-group">
+          <select class="chart-granularity" id="reportScopeSelect" onclick="event.stopPropagation()" onchange="saveReportScope()">
+            <option value="all">Report: Whole team</option>
+            <option value="active">Report: Active tab only</option>
+          </select>
           <button class="commission-report-btn" onclick="event.stopPropagation(); previewQualifiedReport()">Preview Report</button>
           <button class="commission-report-btn" onclick="event.stopPropagation(); exportQualifiedReport()">Export Report (PDF)</button>
         </div>
@@ -5189,17 +5193,6 @@ function commissionCard(sdr, days, monthKey) {
 function commissionPeriodLabel(monthKey) {
   return `Payout based on ${monthLabelFromKey(monthKey)} performance (commission always looks at last calendar month, not the Range: picker above)`;
 }
-// Describes a plain range-picker-driven day list — used only for the
-// Qualified Leads Review report's lead-listing section, which (unlike
-// commission) still reflects whatever range/SDR selection is active.
-function commissionPeriodLabelForDays(days) {
-  if (!days.length) return 'No data in this range';
-  const rangeVal = document.getElementById('rangeSelect').value;
-  const rangeLabelEl = document.querySelector('#rangeSelect option[value="' + rangeVal + '"]');
-  const rangeLabel = rangeLabelEl ? rangeLabelEl.textContent : 'Selected range';
-  const first = days[0], last = days[days.length - 1];
-  return `${rangeLabel} · ${first === last ? first : first + ' – ' + last}`;
-}
 // One-SDR-at-a-time tabbed view: a manager screen-shares a single SDR's card
 // during a 1:1 review without exposing teammates' compensation. All selected
 // SDRs' cards are rendered but only the active tab's card is visible —
@@ -5411,19 +5404,20 @@ function reportCommissionSummaryHtml(sdr, monthKey, commissionDays) {
     </div>
   `;
 }
-function buildQualifiedReportHtml(days, selected) {
-  // The qualified-lead listing below still reflects whatever range was
-  // selected for review (that's this report's original purpose). The
-  // commission summary is different: it must match the on-screen card
-  // exactly, and the card always uses last calendar month regardless of the
-  // range picker — so it's computed from priorMonthKey()/priorMonthDayKeys(),
-  // independent of the `days` used for the lead listing.
+// The report is always for the SAME commission month as the on-screen card
+// (last calendar month) — the lead listing used to follow the top Range:
+// picker instead, which let it silently show a different period (e.g. "All
+// time") than the commission numbers sitting right above it in the same
+// report. Both now come from the identical monthKey/commissionDays, so
+// "Qualified & Meeting Booked" in the listing always matches the Meetings
+// stat in the summary card above it.
+function buildQualifiedReportHtml(selected) {
   const monthKey = priorMonthKey();
   const commissionDays = priorMonthDayKeys();
-  const periodLabel = `Leads reviewed: ${commissionPeriodLabelForDays(days)} · Commission summary: ${monthLabelFromKey(monthKey)}`;
+  const periodLabel = `${monthLabelFromKey(monthKey)} performance`;
   const sections = selected.map(sdr => {
     const rows = [];
-    days.forEach(d => {
+    commissionDays.forEach(d => {
       const dayRows = rawByDay[d] && rawByDay[d][sdr.key];
       if (dayRows) rows.push(...dayRows);
     });
@@ -5453,17 +5447,36 @@ function buildQualifiedReportHtml(days, selected) {
     </div>
   `;
 }
+function saveReportScope() {
+  try { localStorage.setItem('sdr_report_scope', document.getElementById('reportScopeSelect').value); } catch(e) {}
+}
+function loadReportScope() {
+  try {
+    const saved = localStorage.getItem('sdr_report_scope');
+    if (saved) document.getElementById('reportScopeSelect').value = saved;
+  } catch (e) {}
+}
+// "Whole team" reports every SDR in the current top-of-dashboard selection
+// (pick "All" up there for the full team, or a subset); "Active tab only"
+// narrows to whichever SDR's commission card tab is currently open, so you
+// can hand a single person their own report without generating everyone's.
 function getReportSelection() {
-  const days = getFilteredDays();
-  const selected = SDRS.filter(s => selectedSDRs.has(s.key));
-  if (!rawByDay || !selected.length || !days.length) return null;
-  return { days, selected };
+  if (!rawByDay) return null;
+  const scopeEl = document.getElementById('reportScopeSelect');
+  const scope = scopeEl ? scopeEl.value : 'all';
+  let selected = SDRS.filter(s => selectedSDRs.has(s.key));
+  if (scope === 'active' && commissionActiveTab) {
+    selected = selected.filter(s => s.key === commissionActiveTab);
+    if (!selected.length) selected = SDRS.filter(s => s.key === commissionActiveTab);
+  }
+  if (!selected.length) return null;
+  return { selected };
 }
 function previewQualifiedReport() {
   const sel = getReportSelection();
   const previewArea = document.getElementById('reportPreviewArea');
   if (!sel) {
-    alert('No data to preview for the current SDR/range selection.');
+    alert('No data to preview — load a CSV and select at least one SDR.');
     return;
   }
   previewArea.innerHTML = `
@@ -5474,7 +5487,7 @@ function previewQualifiedReport() {
         <button class="commission-report-btn" onclick="closeReportPreview()">Close Preview</button>
       </div>
     </div>
-    <div class="report-preview-body">${buildQualifiedReportHtml(sel.days, sel.selected)}</div>
+    <div class="report-preview-body">${buildQualifiedReportHtml(sel.selected)}</div>
   `;
   previewArea.style.display = 'block';
   previewArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -5488,10 +5501,10 @@ function exportQualifiedReport() {
   const sel = getReportSelection();
   const printArea = document.getElementById('reportPrintArea');
   if (!sel || !printArea) {
-    alert('No data to export for the current SDR/range selection.');
+    alert('No data to export — load a CSV and select at least one SDR.');
     return;
   }
-  printArea.innerHTML = buildQualifiedReportHtml(sel.days, sel.selected);
+  printArea.innerHTML = buildQualifiedReportHtml(sel.selected);
   window.print();
 }
 
@@ -5501,6 +5514,7 @@ loadGoals();
 loadChartStyle();
 loadAEBaselineToggle();
 loadTrendLinesToggle();
+loadReportScope();
 loadExcludedAEBaselineOwners();
 restoreAEBaselineData();
 renderAEBaselineSection();
