@@ -289,8 +289,14 @@
   .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
   .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
   .chart-card canvas { max-height: 220px; width: 100% !important; }
-  /* Horizontal reason bars need more vertical room than the trend charts */
-  #chartDQReasons { height: 320px !important; max-height: 320px; }
+  /* Chart.js (responsive + maintainAspectRatio:false) sizes a canvas off its
+     PARENT container's height, not the canvas's own inline style — so this
+     chart needs a dedicated wrapper div to control height, overriding the
+     shared max-height:220px canvas rule above. JS (updateDQReasonsCanvasHeight)
+     toggles the wrapper's height between the tall per-reason-bars size and a
+     short single-bar size for the 100% view. */
+  .dq-reasons-canvas-wrap { position: relative; height: 320px; }
+  #chartDQReasons { max-height: none !important; }
 
   .speed-to-lead-drilldown {
     margin-top: 14px;
@@ -996,7 +1002,7 @@
       </div>
       <div class="chart-card full">
         <div class="chart-header">
-          <span class="chart-title">Disqualification Reasons <span class="goal-info" id="info-chartDQReasons" title="The Disqualified reason field behind every disqualification in the selected date range and SDR-tab selection, with its own source filter (SDR + AE, SDR only, or AE only) and its own B2B/B2C/All leads dropdown (independent of the global Leads: filter). Blank reasons show as '(no reason given)' — the Data Hygiene section flags those for cleanup. Team totals = one bar per reason, stacked SDR-DQ vs AE-DQ when both sources are on; By SDR = the same reason bars split by which SDR owns the lead; Weekly trend = the top 5 reasons (by total count in the range) tracked week by week, so you can see which reasons are growing or shrinking. Beyond the top 10, reasons fold into 'Other reasons'.">ⓘ</span></span>
+          <span class="chart-title">Disqualification Reasons <span class="goal-info" id="info-chartDQReasons" title="The Disqualified reason field behind every disqualification in the selected date range and SDR-tab selection, with its own source filter (SDR + AE, SDR only, or AE only) and its own B2B/B2C/All leads dropdown (independent of the global Leads: filter). Blank reasons show as '(no reason given)' — the Data Hygiene section flags those for cleanup. Team totals = one bar per reason, stacked SDR-DQ vs AE-DQ when both sources are on; By SDR = the same reason bars split by which SDR owns the lead; Weekly trend = the top 5 reasons (by total count in the range) tracked week by week, so you can see which reasons are growing or shrinking. Beyond the top 10, reasons fold into 'Other reasons'. 100% view (Team totals only) collapses the whole range into a single bar spanning the full width, segmented by reason — each segment's width is that reason's share of every disqualification in range, largest first; beyond the top 7 (kept legible/colorblind-safe), the rest fold into one gray 'Other' segment.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartDQReasons"></div>
             <select class="chart-granularity" id="source-chartDQReasons" onchange="renderCharts(getFilteredDays())">
@@ -1014,9 +1020,14 @@
               <option value="business">B2B only</option>
               <option value="b2c">B2C only</option>
             </select>
+            <label class="chart-cumulative-toggle" id="pctToggleWrap-chartDQReasons">
+              <input type="checkbox" id="pctToggle-chartDQReasons" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">100% view</span>
+            </label>
           </div>
         </div>
-        <canvas id="chartDQReasons"></canvas>
+        <div class="dq-reasons-canvas-wrap" id="chartDQReasonsWrap"><canvas id="chartDQReasons"></canvas></div>
       </div>
       <div class="chart-card full" id="chartCardSpeedToLead">
         <div class="chart-header">
@@ -4329,9 +4340,15 @@ function renderDQChart(days) {
 const DQ_NO_REASON_LABEL = '(no reason given)';
 const DQ_REASON_TOP_N = 10;
 const DQ_TREND_TOP_N = 5;
-// Categorical palette for reason series (trend mode) — validated for
-// lightness/chroma/CVD separation; gray is reserved for the "Other" fold.
+// Categorical palette for reason series (trend mode, 100% view) — validated
+// for lightness/chroma/CVD separation; gray is reserved for the "Other" fold.
 const REASON_COLORS = ['#4a7fd4', '#d98e00', '#1a9e94', '#c0392b', '#8a63d2', '#5f8a2a', '#b93a5e'];
+const REASON_OTHER_COLOR = '#8c8f9f';
+// The 100%-view single bar caps at exactly as many reason segments as the
+// validated categorical palette has colors — more than that and slivers
+// become unreadable/indistinguishable anyway, so the rest fold into one gray
+// "Other" segment rather than cycling or generating extra hues.
+const DQ_PCT_TOP_N = REASON_COLORS.length;
 function dqSourceOf(r) {
   const s = normalizeSalesStatus(r['Sales status']);
   if (s === 'disqualified') return 'sdr';
@@ -4371,6 +4388,14 @@ function renderDQReasonsChart(days) {
   const rows = collectDQRows(days, sdrKeys, sourceFilter, leadTypeVal);
   const legendEl = document.getElementById('legend-' + id);
 
+  // 100% view only means something for Team totals (a single reason-
+  // segmented bar) — hide the toggle for By SDR / Weekly trend rather than
+  // leave a control on screen that does nothing.
+  const pctWrap = document.getElementById('pctToggleWrap-' + id);
+  if (pctWrap) pctWrap.style.display = viewMode === 'team' ? '' : 'none';
+  const pct100 = viewMode === 'team' && !!document.getElementById('pctToggle-' + id) && document.getElementById('pctToggle-' + id).checked;
+  updateDQReasonsCanvasHeight(pct100);
+
   if (charts[id]) { charts[id].destroy(); delete charts[id]; }
   if (!rows.length) {
     if (legendEl) legendEl.innerHTML = `<span class="legend-item">No disqualifications in the selected range</span>`;
@@ -4394,7 +4419,47 @@ function renderDQReasonsChart(days) {
   let config;
   let legendItems = [];
 
-  if (viewMode === 'trend') {
+  if (pct100) {
+    // Single 100%-stacked horizontal bar: one bar, one segment per reason,
+    // segment width = that reason's share of every disqualification in
+    // range (not of a per-row count like the other views) — colored
+    // categorically by reason instead of by source/SDR, since the whole
+    // point is comparing reasons against each other at a glance.
+    const pctTop = ranked.slice(0, DQ_PCT_TOP_N);
+    const pctTopCounts = pctTop.map(r => countByReason.get(r));
+    const pctOtherCount = totalRows - pctTopCounts.reduce((a, n) => a + n, 0);
+    const pctLabels = pctOtherCount > 0 ? [...pctTop, `Other reasons (${ranked.length - pctTop.length})`] : pctTop;
+    const pctCounts = pctOtherCount > 0 ? [...pctTopCounts, pctOtherCount] : pctTopCounts;
+    const pctColorFor = i => i < pctTop.length ? REASON_COLORS[i] : REASON_OTHER_COLOR;
+    const datasets = pctLabels.map((lbl, i) => ({
+      label: lbl,
+      data: [parseFloat((pctCounts[i] / totalRows * 100).toFixed(1))],
+      _count: pctCounts[i],
+      backgroundColor: pctColorFor(i), stack: 'pct', borderWidth: 0
+    }));
+    legendItems = pctLabels.map((lbl, i) => ({ label: lbl, color: pctColorFor(i) }));
+    config = {
+      type: 'bar',
+      data: { labels: [''], datasets },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
+            titleColor: '#ffffff', bodyColor: '#cfd2e3',
+            callbacks: { label: c => ` ${c.dataset.label}: ${c.dataset._count} (${c.parsed.x}%)` }
+          }
+        },
+        scales: {
+          x: { stacked: true, min: 0, max: 100, ticks: { color: '#5b5f78', font: { size: 11 }, callback: v => v + '%' }, grid: { color: '#e4e6ef' } },
+          y: { stacked: true, ticks: { display: false }, grid: { display: false } }
+        }
+      }
+    };
+  } else if (viewMode === 'trend') {
     // Leading reasons over time: the top 5 reasons (by total count in the
     // range), one series each, weekly buckets — shows which reasons are
     // growing/shrinking rather than just the period total.
@@ -4494,11 +4559,21 @@ function renderDQReasonsChart(days) {
   }
 
   charts[id] = new Chart(ctx, config);
+  charts[id].resize();
   if (legendEl) {
     legendEl.innerHTML = legendItems.map(it =>
       `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${escapeHtml(it.label)}</span>`
     ).join('') + `<span class="legend-item" style="opacity:.7">${totalRows} disqualified lead${totalRows === 1 ? '' : 's'} in range</span>`;
   }
+}
+// The 100%-view single bar only needs enough height for one thick bar, not
+// the full multi-row canvas the per-reason breakdown uses. Sets the WRAPPER
+// div's height, not the canvas's own — Chart.js's responsive resize measures
+// the canvas's parent element, so sizing the canvas directly gets overwritten
+// on the next resize pass.
+function updateDQReasonsCanvasHeight(pct100) {
+  const wrap = document.getElementById('chartDQReasonsWrap');
+  if (wrap) wrap.style.height = pct100 ? '90px' : '320px';
 }
 
 // ─── GOALS ────────────────────────────────────────────────────────────────────
