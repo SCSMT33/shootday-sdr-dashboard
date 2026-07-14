@@ -861,7 +861,7 @@
     <div class="charts-grid">
       <div class="chart-card full" data-chart-id="chartActivity">
         <div class="chart-header">
-          <span class="chart-title"><span id="chartActivityTitle">Meetings Booked</span> <span class="goal-info" id="info-chartActivity" title="Count of leads counted as a booked meeting (Meeting Status Scheduled/Done/Not Atended, or Sales status Closed — Meeting Rejected does NOT count) — excluding deals that closed within 2 hours of the lead being created (an instant/self-serve close, not a real SDR-run meeting), regardless of Meeting Status, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
+          <span class="chart-title"><span id="chartActivityTitle">Meetings Booked</span> <span class="goal-info" id="info-chartActivity" title="Count of leads counted as a booked meeting: Meeting Status is Scheduled, Done, Rejected, or Not Atended — a Closed deal with no Meeting Status no longer counts on its own — excluding deals that closed within 2 hours of the lead being created (an instant/self-serve close, not a real SDR-run meeting), per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartActivity"></div>
             <span class="activity-metric-checks">
@@ -2091,19 +2091,15 @@ function isUnrecognizedStatus(status) {
   return !isQualifiedStatus(status) && !NON_QUALIFIED_SALES_STATUSES.has(normalizeSalesStatus(status));
 }
 const MEETING_BOOKED_STATUSES = ['Meeting Scheduled', 'Meeting Done', 'Meeting Rejected', 'Meeting Not Atended'];
-// "Meeting Rejected" (the prospect declined) no longer earns Meeting Booked
-// credit — deliberately narrower than MEETING_BOOKED_STATUSES above, which is
-// still used as-is by the Data Hygiene "meeting on non-qualified status"
-// check (that check is about detecting any meeting-shaped status on the row,
-// rejected included, not about commission credit).
-const MEETING_STATUSES_CREDITED_AS_BOOKED = ['Meeting Scheduled', 'Meeting Done', 'Meeting Not Atended'];
-// A closed (won) deal always implies a meeting happened, even when Meeting
-// Status was left blank — common in the pre-SDR AE-era data (66% of Closed
-// deals there have no Meeting Status at all) but also catches a handful of
-// blank-status Closed rows in current SDR data too, so this applies uniformly
-// rather than being an AE-only special case. "Meeting Requested" is
-// deliberately NOT treated as booked — 76% of those rows end up Disqualified
-// afterward, suggesting it means "asked for," not "confirmed."
+// Meeting Booked credit comes ONLY from an actual Meeting Status value now —
+// a Closed deal with a blank Meeting Status no longer implies a meeting
+// happened. Reasoning: a Sales status alone isn't evidence the SDR actually
+// ran a meeting; only a real Meeting Status entry is. Closed deals still
+// matter everywhere else (Qualified Leads, New Sales Incentive's closed
+// revenue) — this change only narrows what counts toward the Meeting Booked
+// number specifically. "Meeting Requested" is deliberately NOT included —
+// 76% of those rows end up Disqualified afterward, suggesting it means
+// "asked for," not "confirmed."
 // ─── THE "INSTANT CLOSE" RULE ──────────────────────────────────────────────────
 // What counts as a real booked meeting, for every chart, the Mandate
 // Scoreboard, and every commission number in this dashboard: a deal that
@@ -2111,18 +2107,18 @@ const MEETING_STATUSES_CREDITED_AS_BOOKED = ['Meeting Scheduled', 'Meeting Done'
 // SDR-run meeting to happen in between — it's an instant/self-serve-style
 // close (e.g. an auto-deposit trigger) the AE processed immediately, not a
 // meeting the SDR actually ran. These are excluded from "meeting booked"
-// entirely, regardless of what Meeting Status says on the row (blank,
-// Scheduled, or even marked Done) — the timestamps are treated as more
-// reliable than that field for this one judgment call. Anything that took
-// longer than 2 hours to close gets full credit as a real meeting, even if
-// it closed the same calendar day.
+// entirely, even if Meeting Status says Scheduled/Done/Rejected/Not
+// Attended — the timestamps are treated as more reliable than that field for
+// this one judgment call. Anything that took longer than 2 hours to close
+// gets full credit as a real meeting, even if it closed the same calendar
+// day.
 //
-// This affects ONLY the meeting-booked count — an instant close still counts
-// toward Qualified Leads (isQualifiedLead doesn't call this function at all)
-// and toward the New Sales Incentive's closed revenue (closedRevenueForSDR
-// doesn't call it either), so nothing is double-punished: she still gets
-// credit for the qualified lead and the revenue, just not meeting-credit for
-// something automated.
+// This affects ONLY the meeting-booked count — a Closed deal (instant or
+// not) still counts toward Qualified Leads (isQualifiedLead doesn't call
+// this function at all) and toward the New Sales Incentive's closed revenue
+// (closedRevenueForSDR doesn't call it either), so nothing is
+// double-punished: she still gets credit for the qualified lead and the
+// revenue, just not meeting-credit unless a real Meeting Status backs it up.
 const INSTANT_CLOSE_MINUTES = 120; // 2 hours
 function isInstantClose(r) {
   if (r['Sales status'] !== 'Closed') return false;
@@ -2134,7 +2130,7 @@ function isInstantClose(r) {
 }
 function isMeetingBooked(r) {
   if (isInstantClose(r)) return false;
-  return MEETING_STATUSES_CREDITED_AS_BOOKED.includes(r['Meeting Status']) || r['Sales status'] === 'Closed';
+  return MEETING_BOOKED_STATUSES.includes(r['Meeting Status']);
 }
 // Of all booked meetings, the subset that didn't actually happen — used by the
 // No-Show Rate by SDR chart to show what fraction of each SDR's booked meetings
@@ -2671,7 +2667,7 @@ function renderSummaryCards(days) {
   const infoLeadVolume = isCommission
     ? `Count of leads created in the selected range, currently filtered to B2B leads only (Commission View always uses B2B as the denominator regardless of the Leads: dropdown).${aeNote}`
     : `Count of leads created in the selected range, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
-  const infoMeetingsBooked = `Count of leads counted as a booked meeting (Meeting Status Scheduled/Done/Not Atended, or Sales status Closed — Meeting Rejected does NOT count) — excluding deals that closed within 2 hours of the lead being created (an instant/self-serve close, not a real SDR-run meeting), regardless of Meeting Status — filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
+  const infoMeetingsBooked = `Count of leads counted as a booked meeting: Meeting Status is Scheduled, Done, Rejected, or Not Atended — a Closed deal with no Meeting Status no longer counts on its own — excluding deals that closed within 2 hours of the lead being created (an instant/self-serve close, not a real SDR-run meeting) — filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
   const infoMeetingRate = isCommission
     ? `Meetings Booked (B2B+B2C combined) ÷ B2B-only Lead Volume — Commission View judges the combined meeting count against the B2B lead denominator.${aeNote}`
     : `Meetings Booked ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
@@ -3082,7 +3078,7 @@ const ACTIVITY_METRICS = {
   meetings: {
     label: 'Meetings Booked', field: 'meetings',
     singleSpec: (d, ae) => ({ type: 'count', field: 'meetings', goal: d.goalMeetings, pace: true, aeBaseline: ae ? ae.meetingsPerDay : null }),
-    info: 'Count of leads counted as a booked meeting (Meeting Status Scheduled/Done/Not Atended, or Sales status Closed — Meeting Rejected does NOT count) — excluding deals that closed within 2 hours of the lead being created (an instant/self-serve close, not a real SDR-run meeting), regardless of Meeting Status, per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).'
+    info: 'Count of leads counted as a booked meeting: Meeting Status is Scheduled, Done, Rejected, or Not Atended — a Closed deal with no Meeting Status no longer counts on its own — excluding deals that closed within 2 hours of the lead being created (an instant/self-serve close, not a real SDR-run meeting), per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).'
   },
   meetingsHeld: {
     label: 'Meetings Held', field: 'meetings_held',
@@ -5136,7 +5132,7 @@ function commissionCard(sdr, days, monthKey) {
         <div class="commission-stat-sub">${m.qualifiedRate.toFixed(1)}% of B2B leads</div>
       </div>
       <div class="commission-stat">
-        <div class="commission-stat-label">Meetings <span class="goal-info" title="Counted from ALL of this SDR's leads in the period — B2B and B2C combined, not B2B-only. Meeting Status = Scheduled, Done, or Not Attended, plus any Closed deal (which implies a meeting happened even if status was left blank) — Meeting Rejected does NOT count (the prospect declined, so there's nothing to credit as a booked meeting). Also EXCEPT a Closed deal that closed within 2 hours of the lead being created: that's treated as an automatic/instant close (e.g. an auto-deposit trigger), not a real SDR-run meeting, and is excluded here regardless of what Meeting Status says. The rate shown below is that count divided by B2B leads only, so B2C meetings can push the rate above 100% of B2B leads in an unusual month.">ⓘ</span></div>
+        <div class="commission-stat-label">Meetings <span class="goal-info" title="Counted from ALL of this SDR's leads in the period — B2B and B2C combined, not B2B-only. Meeting Status = Scheduled, Done, Rejected, or Not Attended. A Closed deal with a blank Meeting Status no longer counts on its own — a Sales status alone isn't evidence a meeting actually happened; it still counts toward Qualified Leads and New Sales Incentive, just not here. Also excluded: a deal that closed within 2 hours of the lead being created, even if Meeting Status is populated — that's an automatic/instant close (e.g. an auto-deposit trigger), not a real SDR-run meeting. The rate shown below is that count divided by B2B leads only, so B2C meetings can push the rate above 100% of B2B leads in an unusual month.">ⓘ</span></div>
         <div class="commission-stat-value">${m.meetings}</div>
         <div class="commission-stat-sub">${m.meetingRate.toFixed(1)}% of B2B leads</div>
       </div>
