@@ -2103,23 +2103,20 @@ const MEETING_BOOKED_STATUSES = ['Meeting Scheduled', 'Meeting Done', 'Meeting R
 // Scoreboard, and every commission number in this dashboard: a deal that
 // closed within 2 HOURS of the lead being created never had time for a real
 // SDR-run meeting to happen in between — it's an instant/self-serve-style
-// close the AE processed immediately, not a meeting the SDR actually ran.
-// These are excluded from "meeting booked" entirely, regardless of what
-// Meeting Status says on the row (blank, Scheduled, or even marked Done) —
-// the timestamps are treated as more reliable than that field for this one
-// judgment call. Deals that took longer than 2 hours to close still count
-// normally, even if they closed the same day.
+// close (e.g. an auto-deposit trigger) the AE processed immediately, not a
+// meeting the SDR actually ran. These are excluded from "meeting booked"
+// entirely, regardless of what Meeting Status says on the row (blank,
+// Scheduled, or even marked Done) — the timestamps are treated as more
+// reliable than that field for this one judgment call. Anything that took
+// longer than 2 hours to close gets full credit as a real meeting, even if
+// it closed the same calendar day.
 //
-// Threshold history: originally this was a same-CALENDAR-DAY rule (any Closed
-// deal where Closed date and Creation date fell on the same Dubai-local day),
-// which matched the founder's manual count for MJ's June meetings (104 -> 91,
-// gap = 13 same-day closes). But auditing the actual minute-level gaps behind
-// that rule turned up two false positives it would have wrongly excluded —
-// deals closed ~19 and ~18.75 hours after creation that only shared a
-// calendar day by coincidence of when the lead came in. Switched to a real
-// elapsed-time cutoff (2 hours) instead, which correctly keeps those two as
-// real meetings while still catching every genuine near-instant close (most
-// of which close in 0-15 minutes, per company-wide same-day-close data).
+// This affects ONLY the meeting-booked count — an instant close still counts
+// toward Qualified Leads (isQualifiedLead doesn't call this function at all)
+// and toward the New Sales Incentive's closed revenue (closedRevenueForSDR
+// doesn't call it either), so nothing is double-punished: she still gets
+// credit for the qualified lead and the revenue, just not meeting-credit for
+// something automated.
 const INSTANT_CLOSE_MINUTES = 120; // 2 hours
 function isInstantClose(r) {
   if (r['Sales status'] !== 'Closed') return false;
