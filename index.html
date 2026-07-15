@@ -1124,7 +1124,7 @@
       </div>
       <div class="chart-card full" data-chart-id="chartMeetingAttendance">
         <div class="chart-header">
-          <span class="chart-title">No-Show Rate by SDR (Meetings Not Attended) <span class="goal-info" id="info-chartMeetingAttendance" title="Bar height = booked meetings (Meeting Scheduled + Meeting Done + Meeting Rejected + Meeting Not Atended, minus instant closes) for that SDR, bucketed by when the LEAD was created (not when the meeting was booked/held — that date isn't available in the export), over the selected date range — matches how commission counts a booked meeting. Meeting Scheduled is included on purpose: a lead whose deal already went Lost/Disqualified/Closed but whose Meeting Status never got updated off Scheduled shouldn't just vanish from the math. The dark segment is Meeting Not Atended only (Meeting Rejected is excluded — that's an AE call, tracked separately) — the % shown is that segment's share of the SDR's booked meetings. Always shows all 4 SDRs regardless of the view-tab selection above. Average = one bar per SDR totaling the whole selected range; Week over week = one grouped bar per SDR per week, so you can see the trend instead of just the period total. 100% view normalizes every bar to the same height so you can compare the not-attended share directly, instead of eyeballing it against varying bar heights.">ⓘ</span></span>
+          <span class="chart-title">No-Show Rate by SDR (Meetings Not Attended) <span class="goal-info" id="info-chartMeetingAttendance" title="Bar height = booked meetings (Meeting Scheduled + Meeting Done + Meeting Rejected + Meeting Not Atended, minus instant closes) for that SDR, bucketed by when the LEAD was created (not when the meeting was booked/held — that date isn't available in the export), over the selected date range — matches how commission counts a booked meeting. Meeting Scheduled is included on purpose: a lead whose deal already went Lost/Disqualified/Closed but whose Meeting Status never got updated off Scheduled shouldn't just vanish from the math. The dark segment is Meeting Not Atended only (Meeting Rejected is excluded — that's an AE call, tracked separately) — the % shown is that segment's share of the SDR's booked meetings. Always shows all 4 SDRs regardless of the view-tab selection above. Average = one bar per SDR totaling the whole selected range; Week over week = one grouped bar per SDR per week; Daily = one grouped bar per SDR per day. 100% view normalizes every bar to the same height so you can compare the not-attended share directly, instead of eyeballing it against varying bar heights. Trendline (Week over week/Daily only, off in 100% view) is a trailing 3-weekday rolling average of raw not-attended counts, weekends excluded, starting from the first day with real loaded data.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetingAttendance"></div>
             <select class="chart-granularity" id="teamsComparison-chartMeetingAttendance" onchange="renderCharts(getFilteredDays())">
@@ -1134,6 +1134,7 @@
             <select class="chart-granularity" id="viewMode-chartMeetingAttendance" onchange="renderCharts(getFilteredDays())">
               <option value="average">Average</option>
               <option value="weekly">Week over week</option>
+              <option value="daily">Daily</option>
             </select>
             <select class="chart-granularity" id="leadType-chartMeetingAttendance" onchange="renderCharts(getFilteredDays())">
               <option value="all">All leads</option>
@@ -1144,6 +1145,11 @@
               <input type="checkbox" id="pctToggle-chartMeetingAttendance" onchange="renderCharts(getFilteredDays())">
               <span class="toggle-track"></span>
               <span class="toggle-text">100% view</span>
+            </label>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="trendToggle-chartMeetingAttendance" checked onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Trendline</span>
             </label>
             <button class="chart-expand-btn" onclick="toggleChartExpand('chartMeetingAttendance')" title="Expand">&#10530;</button>
           </div>
@@ -4256,7 +4262,12 @@ const meetingAttendancePctPlugin = {
 // Date, same as every other chart — meeting-booked date isn't in the export)
 // and draws one grouped stacked bar per SDR per week.
 function renderMeetingAttendanceChart(days) {
-  const weekly = document.getElementById('viewMode-chartMeetingAttendance').value === 'weekly';
+  const viewMode = document.getElementById('viewMode-chartMeetingAttendance').value;
+  const weekly = viewMode === 'weekly';
+  // Weekly and Daily are both time-series views (one bucket per week/day, in
+  // order) — Average collapses everything into one bar per SDR/team with no
+  // time axis, so a trend line doesn't apply there.
+  const timeSeries = weekly || viewMode === 'daily';
   // Chart-local B2B/B2C/All toggle — independent of the global "Leads:" filter above.
   const leadTypeEl = document.getElementById('leadType-chartMeetingAttendance');
   const leadType = leadTypeEl ? leadTypeEl.value : 'all';
@@ -4268,8 +4279,8 @@ function renderMeetingAttendanceChart(days) {
   // string) or a team (key: an array of member keys); sumMetric() already
   // handles both transparently.
   const groups = teamsComparisonViews('chartMeetingAttendance') || SDRS.map(s => ({ key: s.key, label: s.label, color: s.color }));
-  const buckets = weekly ? bucketize(days, 'weekly') : [{ label: null, days }];
-  const labels = weekly ? buckets.map(b => b.label) : groups.map(g => g.label);
+  const buckets = timeSeries ? bucketize(days, weekly ? 'weekly' : 'daily') : [{ label: null, days }];
+  const labels = timeSeries ? buckets.map(b => b.label) : groups.map(g => g.label);
 
   // Not Attended only — Meeting Rejected is excluded from this ratio (a
   // rejection is the AE's call, tracked separately as Handoff quality; this
@@ -4281,7 +4292,7 @@ function renderMeetingAttendanceChart(days) {
   // That means the non-red segment below isn't purely "Meeting Done"
   // anymore — it includes those still-Scheduled rows too, hence the more
   // honest "Not Flagged as No-Show" label.
-  const datasets = weekly
+  const datasets = timeSeries
     ? groups.flatMap(g => {
         const naData = buckets.map(b => sumMetricFrom(dataSource, b.days, g.key, 'meetings_no_show'));
         const doneData = buckets.map((b, i) => sumMetricFrom(dataSource, b.days, g.key, 'meetings_no_show_denom') - naData[i]);
@@ -4309,6 +4320,24 @@ function renderMeetingAttendanceChart(days) {
         ];
       })();
 
+  // Trend: same trailing 3-weekday rolling average as the raw-count chart
+  // below, starting only once real data begins. Only meaningful on the
+  // time-series views (Weekly/Daily) and only in raw-count terms, so it's
+  // skipped in Average view (no time axis) and in 100% view (axis is a
+  // percentage, not a count). Pushed onto datasets LAST so it draws in
+  // front of the bars — same array-order convention as Pace elsewhere.
+  const trendEl = document.getElementById('trendToggle-chartMeetingAttendance');
+  let trendDrawn = false;
+  if (timeSeries && !pct100 && trendEl && trendEl.checked) {
+    const trendData = noShowTrendValues(dataSource, buckets);
+    if (trendData && trendData.some(v => v != null)) {
+      // order: 1 (higher than the bars' implicit default of 0) — Chart.js
+      // draws higher-order datasets last, i.e. in front.
+      datasets.push({ label: 'Trend', data: trendData, type: 'line', borderColor: COLORS.Trend, borderWidth: 2.5, pointRadius: 0, fill: false, tension: 0, spanGaps: true, order: 1 });
+      trendDrawn = true;
+    }
+  }
+
   if (charts.chartMeetingAttendance) charts.chartMeetingAttendance.destroy();
   const ctx = document.getElementById('chartMeetingAttendance').getContext('2d');
   const f = chartFontSizes('chartMeetingAttendance');
@@ -4327,21 +4356,23 @@ function renderMeetingAttendanceChart(days) {
           callbacks: {
             label: ctx => {
               const ds = ctx.dataset;
+              if (ds.label === 'Trend') return ` Trend: ${ctx.parsed.y}`;
               const i = ctx.dataIndex;
               const na = ds._rawNA[i] || 0;
               const done = ds._rawDone[i] || 0;
               if (ds._isNA) {
                 const total = na + done;
                 const pct = total ? (na / total * 100).toFixed(1) : '0.0';
-                return ` ${weekly ? 'Not Attended' : ds.label}: ${na} (${pct}%)`;
+                return ` ${timeSeries ? 'Not Attended' : ds.label}: ${na} (${pct}%)`;
               }
-              return ` ${weekly ? 'Not Flagged as No-Show' : ds.label}: ${done}`;
+              return ` ${timeSeries ? 'Not Flagged as No-Show' : ds.label}: ${done}`;
             },
             footer: items => {
-              const ds = items[0].dataset;
+              const ds = items.find(it => it.dataset.label !== 'Trend') ? items.find(it => it.dataset.label !== 'Trend').dataset : null;
+              if (!ds) return '';
               const i = items[0].dataIndex;
               const total = (ds._rawNA[i] || 0) + (ds._rawDone[i] || 0);
-              return weekly ? ` ${ds._pairId} total booked: ${total}` : ` Total booked: ${total}`;
+              return timeSeries ? ` ${ds._pairId} total booked: ${total}` : ` Total booked: ${total}`;
             }
           }
         }
@@ -4357,9 +4388,10 @@ function renderMeetingAttendanceChart(days) {
   });
   const legendEl = document.getElementById('legend-chartMeetingAttendance');
   if (legendEl) {
-    const items = weekly
+    const items = timeSeries
       ? [{ label: 'Not Attended', color: '#8a1f1f' }, ...groups.map(g => ({ label: g.label, color: g.color }))]
       : [{ label: 'Not Attended (%)', color: '#8a1f1f' }, { label: 'Not Flagged as No-Show', color: '#4285f4' }];
+    if (trendDrawn) items.push({ label: 'Trend', color: COLORS.Trend });
     legendEl.innerHTML = items.map(it =>
       `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
     ).join('');
@@ -4446,7 +4478,9 @@ function renderNoShowCountChart(days) {
   if (trendEl && trendEl.checked) {
     const trendData = noShowTrendValues(dataSource, buckets);
     if (trendData && trendData.some(v => v != null)) {
-      datasets.push({ label: 'Trend', data: trendData, type: 'line', borderColor: COLORS.Trend, borderWidth: 2.5, pointRadius: 0, fill: false, tension: 0, spanGaps: true, borderDash: [] });
+      // order: 1 (higher than the bars' implicit default of 0) — Chart.js
+      // draws higher-order datasets last, i.e. in front.
+      datasets.push({ label: 'Trend', data: trendData, type: 'line', borderColor: COLORS.Trend, borderWidth: 2.5, pointRadius: 0, fill: false, tension: 0, spanGaps: true, order: 1 });
       trendDrawn = true;
     }
   }
