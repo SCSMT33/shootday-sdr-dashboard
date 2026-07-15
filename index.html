@@ -1170,6 +1170,11 @@
               <option value="business">B2B only</option>
               <option value="b2c">B2C only</option>
             </select>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="trendToggle-chartNoShowCount" checked onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Trendline</span>
+            </label>
             <button class="chart-expand-btn" onclick="toggleChartExpand('chartNoShowCount')" title="Expand">&#10530;</button>
           </div>
         </div>
@@ -2969,7 +2974,7 @@ function speedToLeadCard(label, medianMinutes, matched, eligible, mismatch, sdrL
 }
 
 // ─── CHARTS ───────────────────────────────────────────────────────────────────
-const COLORS = { Team: '#6c63ff', Goal: 'rgba(0,0,0,0.35)', Pace: '#9c6dff', AEBaseline: '#a0522d' };
+const COLORS = { Team: '#6c63ff', Goal: 'rgba(0,0,0,0.35)', Pace: '#9c6dff', AEBaseline: '#a0522d', Trend: '#f4b400' };
 
 function isCumulative(id) {
   const el = document.getElementById('cumulativeToggle-' + id);
@@ -4375,6 +4380,40 @@ function noShowCountGroups() {
   if (val === 'sdr') return SDRS.filter(s => selectedSDRs.has(s.key)).map(s => ({ key: s.key, label: s.label, color: s.color }));
   return [{ key: Array.from(selectedSDRs), label: 'Team', color: COLORS.Team }];
 }
+// Straight-line (least-squares) trend for the Not-Attended count chart below.
+// Fit on weekday-only day counts (Sat/Sun dropped entirely — nobody works
+// weekends, so a zero-count weekend would drag a flat trend downward for no
+// real reason) combined across whatever SDRs/leadType are currently
+// selected, i.e. one overall trend regardless of the Group dropdown's
+// breakdown. Evaluated at each bucket's mean weekday x-position so the line
+// stays perfectly straight (not a rolling/wavy average) while still tilting
+// up/down/level to match the actual data + toggles.
+function noShowTrendValues(dataSource, buckets) {
+  const weekdayDays = [];
+  buckets.forEach(b => b.days.forEach(d => {
+    const dow = new Date(d + 'T00:00:00Z').getUTCDay();
+    if (dow !== 0 && dow !== 6 && dataSource[d]) weekdayDays.push(d);
+  }));
+  if (weekdayDays.length < 2) return null;
+  const allKeys = Array.from(selectedSDRs);
+  const points = weekdayDays.map((d, i) => ({ x: i, y: sumMetricFrom(dataSource, [d], allKeys, 'meetings_no_show') }));
+  const n = points.length;
+  const sumX = points.reduce((a, p) => a + p.x, 0);
+  const sumY = points.reduce((a, p) => a + p.y, 0);
+  const sumXY = points.reduce((a, p) => a + p.x * p.y, 0);
+  const sumXX = points.reduce((a, p) => a + p.x * p.x, 0);
+  const denom = n * sumXX - sumX * sumX;
+  if (denom === 0) return null;
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  const xByDay = new Map(weekdayDays.map((d, i) => [d, i]));
+  return buckets.map(b => {
+    const xs = b.days.filter(d => xByDay.has(d)).map(d => xByDay.get(d));
+    if (!xs.length) return null;
+    const meanX = xs.reduce((a, x) => a + x, 0) / xs.length;
+    return parseFloat((slope * meanX + intercept).toFixed(2));
+  });
+}
 function renderNoShowCountChart(days) {
   const id = 'chartNoShowCount';
   const leadTypeEl = document.getElementById('leadType-' + id);
@@ -4396,6 +4435,16 @@ function renderNoShowCountChart(days) {
       ? { label: g.label, data, backgroundColor: g.color, borderRadius: 3, borderWidth: 0 }
       : { label: g.label, data, borderColor: g.color, backgroundColor: g.color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false };
   });
+
+  const trendEl = document.getElementById('trendToggle-' + id);
+  let trendDrawn = false;
+  if (trendEl && trendEl.checked) {
+    const trendData = noShowTrendValues(dataSource, buckets);
+    if (trendData && trendData.some(v => v != null)) {
+      datasets.push({ label: 'Trend', data: trendData, type: 'line', borderColor: COLORS.Trend, borderWidth: 2.5, pointRadius: 0, fill: false, tension: 0, spanGaps: true, borderDash: [] });
+      trendDrawn = true;
+    }
+  }
 
   if (charts[id]) charts[id].destroy();
   const ctx = document.getElementById(id).getContext('2d');
@@ -4425,8 +4474,10 @@ function renderNoShowCountChart(days) {
 
   const legendEl = document.getElementById('legend-' + id);
   if (legendEl) {
-    legendEl.innerHTML = groups.map(g =>
-      `<span class="legend-item"><span class="legend-dot" style="background:${g.color}"></span>${g.label}</span>`
+    const items = groups.map(g => ({ label: g.label, color: g.color }));
+    if (trendDrawn) items.push({ label: 'Trend', color: COLORS.Trend });
+    legendEl.innerHTML = items.map(it =>
+      `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
     ).join('');
   }
 }
