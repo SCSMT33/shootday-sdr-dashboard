@@ -559,6 +559,24 @@
     width: 100px;
   }
   .commission-base-input:focus { outline: none; border-color: var(--accent); }
+  .commission-notes-row { margin-top: 10px; }
+  .commission-notes-label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .commission-notes-input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 44px;
+    box-sizing: border-box;
+  }
+  .commission-notes-input:focus { outline: none; border-color: var(--accent); }
+  .report-summary-notes { font-size: 11px; color: #333; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #ccc; }
+  .report-summary-notes strong { color: #111; }
   .commission-calc-btn {
     background: var(--accent);
     color: #fff;
@@ -5200,10 +5218,10 @@ function commissionMetricsForSDR(days, sdrKey, monthKey) {
 function loadCommissionBases() {
   try { return JSON.parse(localStorage.getItem('sdr_commission_bases') || '{}'); } catch(e) { return {}; }
 }
-function saveCommissionInputs(key, base, bonus, override) {
+function saveCommissionInputs(key, base, bonus, override, notes) {
   try {
     const bases = loadCommissionBases();
-    bases[key] = { base, bonus, override };
+    bases[key] = { base, bonus, override, notes };
     localStorage.setItem('sdr_commission_bases', JSON.stringify(bases));
   } catch(e) {}
 }
@@ -5241,10 +5259,12 @@ function calculateCommission(key) {
   const baseInput = document.getElementById('commissionBase-' + key);
   const bonusInput = document.getElementById('commissionBonus-' + key);
   const overrideInput = document.getElementById('commissionOverride-' + key);
+  const notesInput = document.getElementById('commissionNotes-' + key);
   const base = parseFloat(baseInput.value) || 0;
   const bonus = parseFloat(bonusInput.value) || 0;
   const override = overrideInput.checked;
-  saveCommissionInputs(key, baseInput.value, bonusInput.value, override);
+  const notes = notesInput ? notesInput.value : '';
+  saveCommissionInputs(key, baseInput.value, bonusInput.value, override, notes);
   const qGross = parseFloat(document.getElementById('commissionQIncentive-' + key).dataset.amount) || 0;
   const mGross = parseFloat(document.getElementById('commissionMIncentive-' + key).dataset.amount) || 0;
   const nsGross = parseFloat(document.getElementById('commissionNSIncentive-' + key).dataset.amount) || 0;
@@ -5280,7 +5300,7 @@ function commissionCard(sdr, days, monthKey) {
   const bases = loadCommissionBases();
   const savedRaw = bases[sdr.key];
   // Back-compat: earlier versions stored a bare base string, not an object.
-  const saved = (savedRaw && typeof savedRaw === 'object') ? savedRaw : { base: savedRaw || '', bonus: '', override: false };
+  const saved = (savedRaw && typeof savedRaw === 'object') ? savedRaw : { base: savedRaw || '', bonus: '', override: false, notes: '' };
   return `<div class="commission-card">
     <div class="commission-card-header">
       <span class="split-name" style="color:${sdr.color}; font-size:13px;">${sdr.label}</span>
@@ -5335,6 +5355,10 @@ function commissionCard(sdr, days, monthKey) {
       <input class="commission-base-input" type="number" id="commissionBase-${sdr.key}" value="${saved.base}" placeholder="e.g. 2000">
       <span class="commission-stat-label">Bonus $</span>
       <input class="commission-base-input" type="number" id="commissionBonus-${sdr.key}" value="${saved.bonus}" placeholder="e.g. 100">
+    </div>
+    <div class="commission-notes-row">
+      <label class="commission-notes-label" for="commissionNotes-${sdr.key}">Bonus notes</label>
+      <textarea class="commission-notes-input" id="commissionNotes-${sdr.key}" placeholder="e.g. reason for bonus / adjustment">${escapeHtml(saved.notes || '')}</textarea>
     </div>
     <div class="commission-override-row">
       <label class="commission-override-label">
@@ -5543,6 +5567,7 @@ function reportCommissionSummaryHtml(sdr, monthKey, commissionDays) {
   const base = parseFloat(saved.base) || 0;
   const bonus = parseFloat(saved.bonus) || 0;
   const override = !!saved.override;
+  const notes = (saved.notes || '').trim();
   const total = override ? (base + bonus) : (base + bonus + p.qPaid + p.mPaid + p.nsPaid);
   const incentiveStats = override
     ? `<div class="report-summary-stat wide ignored"><span>Incentives</span><strong>Overridden (Base + Bonus only)</strong></div>`
@@ -5566,6 +5591,7 @@ function reportCommissionSummaryHtml(sdr, monthKey, commissionDays) {
         Closed deals: ${m.closedDeals} ($${Math.round(m.closedRevenueUSD).toLocaleString()} revenue, USD-equiv) &middot;
         Meeting Quality Multiplier: &times;${p.tier.multiplier.toFixed(2)} (${p.rate.toFixed(1)}% B2B rejection rate, trailing 30 days ending 1 week ago — applies to Qualified/Meeting only, not New Sales)
       </div>
+      ${notes ? `<div class="report-summary-notes"><strong>Bonus notes:</strong> ${escapeHtml(notes)}</div>` : ''}
     </div>
   `;
 }
