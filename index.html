@@ -4389,29 +4389,34 @@ function noShowCountGroups() {
 // stays perfectly straight (not a rolling/wavy average) while still tilting
 // up/down/level to match the actual data + toggles.
 function noShowTrendValues(dataSource, buckets) {
+  const allKeys = Array.from(selectedSDRs);
+  // Only start the trend once a day actually has loaded lead rows —
+  // rawByDay reflects real data, whereas dataSource[d] can still exist
+  // (with all-zero metrics) for days inside the selected range that were
+  // never actually loaded, which used to drag the line flat across empty
+  // leading days before the CSV's data even begins.
+  const hasRealData = d => allKeys.some(k => (rawByDay[d] && rawByDay[d][k] && rawByDay[d][k].length));
   const weekdayDays = [];
   buckets.forEach(b => b.days.forEach(d => {
     const dow = new Date(d + 'T00:00:00Z').getUTCDay();
-    if (dow !== 0 && dow !== 6 && dataSource[d]) weekdayDays.push(d);
+    if (dow !== 0 && dow !== 6 && dataSource[d] && hasRealData(d)) weekdayDays.push(d);
   }));
   if (weekdayDays.length < 2) return null;
-  const allKeys = Array.from(selectedSDRs);
-  const points = weekdayDays.map((d, i) => ({ x: i, y: sumMetricFrom(dataSource, [d], allKeys, 'meetings_no_show') }));
-  const n = points.length;
-  const sumX = points.reduce((a, p) => a + p.x, 0);
-  const sumY = points.reduce((a, p) => a + p.y, 0);
-  const sumXY = points.reduce((a, p) => a + p.x * p.y, 0);
-  const sumXX = points.reduce((a, p) => a + p.x * p.x, 0);
-  const denom = n * sumXX - sumX * sumX;
-  if (denom === 0) return null;
-  const slope = (n * sumXY - sumX * sumY) / denom;
-  const intercept = (sumY - slope * sumX) / n;
-  const xByDay = new Map(weekdayDays.map((d, i) => [d, i]));
+  const counts = weekdayDays.map(d => sumMetricFrom(dataSource, [d], allKeys, 'meetings_no_show'));
+  // Trailing 3-weekday rolling average, recomputed at every weekday (the
+  // very first couple of days just average whatever's available so far) —
+  // matches the "Pace" trailing-window pattern used elsewhere in this
+  // dashboard, so the line still reads as one overall trend without being
+  // thrown off by a single noisy day.
+  const rollingByDay = new Map();
+  weekdayDays.forEach((d, i) => {
+    const windowVals = counts.slice(Math.max(0, i - 2), i + 1);
+    rollingByDay.set(d, windowVals.reduce((a, v) => a + v, 0) / windowVals.length);
+  });
   return buckets.map(b => {
-    const xs = b.days.filter(d => xByDay.has(d)).map(d => xByDay.get(d));
-    if (!xs.length) return null;
-    const meanX = xs.reduce((a, x) => a + x, 0) / xs.length;
-    return parseFloat((slope * meanX + intercept).toFixed(2));
+    const vals = b.days.filter(d => rollingByDay.has(d)).map(d => rollingByDay.get(d));
+    if (!vals.length) return null;
+    return parseFloat((vals.reduce((a, v) => a + v, 0) / vals.length).toFixed(2));
   });
 }
 function renderNoShowCountChart(days) {
