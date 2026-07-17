@@ -1250,6 +1250,13 @@
           </div>
         </div>
         <div class="goal-item">
+          <div class="goal-label">No-Show Rate max</div>
+          <div class="goal-input-row">
+            <input class="goal-input" type="number" id="goal_no_show_rate" placeholder="e.g. 15" oninput="saveGoals(); renderDashboard()">
+            <span class="goal-unit">%</span>
+          </div>
+        </div>
+        <div class="goal-item">
           <div class="goal-label">Speed-to-Lead max <span class="goal-info" title="Target average minutes from lead creation to first outbound call. Requires a Call History CSV to be loaded.">ⓘ</span></div>
           <div class="goal-input-row">
             <input class="goal-input" type="number" id="goal_speed_to_lead" placeholder="e.g. 15" oninput="saveGoals(); renderDashboard()">
@@ -2804,7 +2811,7 @@ function renderSummaryCards(days) {
     ${countCard('Leads Qualified', totalQualified, perSDR.map(s => ({ ...s, value: s.qualified, goal: s.qualifiedGoal })), elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified, ae ? ae.qualifiedPerDay : null, infoQualified, deltas.qualified)}
     ${rateCard('% Leads Qualified', pctQual, perSDR.map(s => ({ ...s, value: s.pctQual })), isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'status-based: blank/DQ/cold/non-respondant excluded', d.goalPctQual, false, ae ? ae.overall.pct_qualified : null, infoPctQualified, deltas.pctQual)}
     ${rateCard('Non-Responsive Rate', nrRate, perSDR.map(s => ({ ...s, value: s.nrRate })), isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true, ae ? ae.overall.nr_rate : null, infoNR, deltas.nrRate)}
-    ${rateCard('No-Show Rate', noShowRate, perSDR.map(s => ({ ...s, value: s.noShowRate })), null, `${totalNoShow} no-show${totalNoShow === 1 ? '' : 's'} of ${totalResolved} resolved meetings`, null, true, null, infoNoShow, deltas.noShowRate)}
+    ${rateCard('No-Show Rate', noShowRate, perSDR.map(s => ({ ...s, value: s.noShowRate })), null, `${totalNoShow} no-show${totalNoShow === 1 ? '' : 's'} of ${totalResolved} resolved meetings`, d.goalNoShowRate, true, null, infoNoShow, deltas.noShowRate)}
     ${rawCalls ? speedToLeadCard('Speed-to-Lead', stlMedian, totalSTLMatched, totalSTLEligible, totalSTLMismatch, perSDR, d.goalSpeedToLead,
         { median: stlOnMedian, matched: totalSTLOnMatched, eligible: totalSTLOnEligible },
         { median: stlOffMedian, matched: totalSTLOffMatched, eligible: totalSTLOffEligible }, deltas.stl) : pendingCard('Speed-to-Lead', 'Load a Call History CSV to enable')}
@@ -4966,6 +4973,7 @@ function goals() {
     meeting_rate: document.getElementById('goal_meeting_rate').value,
     pct_qual: document.getElementById('goal_pct_qual').value,
     nr_rate: document.getElementById('goal_nr_rate').value,
+    no_show_rate: document.getElementById('goal_no_show_rate').value,
     speed_to_lead: document.getElementById('goal_speed_to_lead').value,
   };
 }
@@ -4981,6 +4989,7 @@ function derivedGoals() {
     goalMeetingRate,
     goalPctQual,
     goalNRRate: parseFloat(g.nr_rate) || null,
+    goalNoShowRate: parseFloat(g.no_show_rate) || null,
     goalSpeedToLead: parseFloat(g.speed_to_lead) || null,
     goalMeetings: (goalLeads && goalMeetingRate) ? goalLeads * goalMeetingRate / 100 : null,
     goalQualified: (goalLeads && goalPctQual) ? goalLeads * goalPctQual / 100 : null,
@@ -5005,6 +5014,7 @@ function loadGoals() {
     if (saved.meeting_rate) document.getElementById('goal_meeting_rate').value = saved.meeting_rate;
     if (saved.pct_qual) document.getElementById('goal_pct_qual').value = saved.pct_qual;
     if (saved.nr_rate) document.getElementById('goal_nr_rate').value = saved.nr_rate;
+    if (saved.no_show_rate) document.getElementById('goal_no_show_rate').value = saved.no_show_rate;
     if (saved.speed_to_lead) document.getElementById('goal_speed_to_lead').value = saved.speed_to_lead;
     const override = localStorage.getItem('sdr_goal_leads_override') === 'true';
     document.getElementById('goal_leads_override').checked = override;
