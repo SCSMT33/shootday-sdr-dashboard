@@ -1186,6 +1186,35 @@
         </div>
         <canvas id="chartNoShowCount"></canvas>
       </div>
+      <div class="chart-card full" data-chart-id="chartCallActivity">
+        <div class="chart-header">
+          <span class="chart-title">Call Activity by SDR <span class="goal-info" id="info-chartCallActivity" title="Outbound calls from the Aircall Call History CSV, bucketed by day/SDR. 'Raw Call Count' is every outbound call placed, no duration filter. '% Leads Called 60s+' is calls lasting 60 seconds or longer, divided by leads received, in the same bucket/SDR/team — a connect-rate view. Group dropdown splits into Combined, US vs OUS Teams, or Per SDR. Independent B2B/B2C/All dropdown, separate from the global Leads: filter above; a call counts toward B2B/B2C based on whether its phone number matches a lead flagged that way.">ⓘ</span></span>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartCallActivity"></div>
+            <select class="chart-granularity" id="metric-chartCallActivity" onchange="renderCharts(getFilteredDays())">
+              <option value="raw" selected>Raw Call Count</option>
+              <option value="pct60">% Leads Called 60s+</option>
+            </select>
+            <select class="chart-granularity" id="teamsComparison-chartCallActivity" onchange="renderCharts(getFilteredDays())">
+              <option value="off" selected>Group: Combined</option>
+              <option value="on">Group: US vs OUS Teams</option>
+              <option value="sdr">Group: Per SDR</option>
+            </select>
+            <select class="chart-granularity" id="granularity-chartCallActivity" onchange="renderCharts(getFilteredDays())">
+              <option value="daily">Daily</option>
+              <option value="weekly" selected>Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <select class="chart-granularity" id="leadType-chartCallActivity" onchange="renderCharts(getFilteredDays())">
+              <option value="all">All leads</option>
+              <option value="business">B2B only</option>
+              <option value="b2c">B2C only</option>
+            </select>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartCallActivity')" title="Expand">&#10530;</button>
+          </div>
+        </div>
+        <canvas id="chartCallActivity"></canvas>
+      </div>
     </div>
 
     <!-- DATA HYGIENE -->
@@ -1455,6 +1484,13 @@ function toUTCMillis(raw) {
   const romaniaOffset = isRomaniaDST(asUTC) ? 3 : 2;
   return asUTC.getTime() - romaniaOffset * 3600000;
 }
+// Aircall's "datetime (utc)" is already a true UTC instant (see parseAircallUTC
+// above) — no Romania-offset correction needed here, just the Dubai (UTC+4,
+// no DST) shift to bucket a call into the right local day.
+function dubaiDayKeyFromUTCMs(utcMs) {
+  const dubai = new Date(utcMs + 4 * 3600000);
+  return `${dubai.getUTCFullYear()}-${String(dubai.getUTCMonth() + 1).padStart(2, '0')}-${String(dubai.getUTCDate()).padStart(2, '0')}`;
+}
 
 // ─── SDR ROUTING SHIFTS (on-hours vs off-hours) ───────────────────────────────
 // Per the SDR Lead Routing Logic doc: an SDR's "on-hours" is their solo chunk
@@ -1517,8 +1553,11 @@ let allDataB2B = null;   // same shape, always business-leads-only — used by C
 let allDataB2C = null;   // same shape, always b2c-leads-only — used by chart-local B2B/B2C/All toggles
 let allDataAll = null;   // same shape, always combined B2B+B2C regardless of the global lead-type filter — used by chart-local B2B/B2C/All toggles
 let rawByDay = null;   // { date: { <sdrKey>: [rows] } } — unfiltered raw rows, persisted
-let rawCalls = null;   // [{ phoneDigits, utcMs, sdrKey }] from the Aircall call-history CSV, persisted
+let rawCalls = null;   // [{ phoneDigits, utcMs, sdrKey, durationSec }] from the Aircall call-history CSV, persisted
 let callsFilename = null;
+let allCallsDataAll = null;   // { date: { <sdrKey>: {calls, calls_over60}, Team: {...} } } — derived from rawCalls, every call regardless of phone-to-lead match
+let allCallsDataB2B = null;   // same shape, only calls whose phone number matches a B2B lead
+let allCallsDataB2C = null;   // same shape, only calls whose phone number matches a B2C lead
 let rawAEBaseline = null;   // flat array of pre-SDR AE-owned rows, persisted — loaded once, rarely refreshed
 let aeBaselineFilename = null;
 let selectedSDRs = new Set(SDRS.map(s => s.key));   // toggle-selected SDRs; all 4 selected by default
@@ -1696,6 +1735,26 @@ function parseAircallUTC(raw) {
   if (!m) return null;
   return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
 }
+// Aircall exports duration as "duration (mm:ss)"; the plain "duration" header
+// name is also accepted (some exports omit the unit suffix), and a bare
+// integer is treated as seconds already.
+const DURATION_HEADER_CANDIDATES = ['duration (mm:ss)', 'duration', 'call duration'];
+function findDurationRaw(row) {
+  for (const h of DURATION_HEADER_CANDIDATES) {
+    if (row[h] !== undefined && row[h] !== '') return row[h];
+  }
+  return '';
+}
+function parseDurationSeconds(raw) {
+  const s = (raw || '').trim();
+  if (!s) return null;
+  if (/^\d+$/.test(s)) return +s;
+  const hms = s.match(/^(\d+):(\d{2}):(\d{2})$/);
+  if (hms) return (+hms[1]) * 3600 + (+hms[2]) * 60 + (+hms[3]);
+  const ms = s.match(/^(\d+):(\d{2})$/);
+  if (ms) return (+ms[1]) * 60 + (+ms[2]);
+  return null;
+}
 function parseCallCSV(text, filename) {
   const raw = text.replace(/^﻿/, '');
   const table = parseCSVText(raw);
@@ -1713,7 +1772,8 @@ function parseCallCSV(text, filename) {
     if (!phoneDigits) continue;
     const utcMs = parseAircallUTC(row['datetime (utc)']);
     if (utcMs == null) continue;
-    calls.push({ phoneDigits, utcMs, sdrKey });
+    const durationSec = parseDurationSeconds(findDurationRaw(row));
+    calls.push({ phoneDigits, utcMs, sdrKey, durationSec });
   }
   rawCalls = calls;
   callsFilename = filename;
@@ -2014,6 +2074,63 @@ function recomputeAllData() {
       allDataAll[day][s.key] = computeMetrics(all[s.key]);
     });
   });
+  recomputeCallData();
+}
+// Buckets rawCalls into { date: { <sdrKey>: {calls, calls_over60}, Team: {...} } },
+// split by whether each call's phone number matches a known B2B or B2C lead
+// (same is_business_lead flag the rest of the dashboard uses) — a call to a
+// number with no matching lead row is counted in allCallsDataAll only, not
+// in either B2B/B2C split. Depends on rawByDay (for the phone lookup), so it
+// runs at the end of recomputeAllData() rather than only from parseCallCSV —
+// re-derived any time either the leads or the calls CSV changes.
+function recomputeCallData() {
+  allCallsDataAll = {};
+  allCallsDataB2B = {};
+  allCallsDataB2C = {};
+  if (!rawCalls || !rawCalls.length) return;
+
+  const phoneIsBusiness = new Map();
+  if (rawByDay) {
+    Object.keys(rawByDay).forEach(day => {
+      SDRS.forEach(s => {
+        (rawByDay[day][s.key] || []).forEach(r => {
+          const phone = normalizePhoneDigits(r['Phone']);
+          if (phone) phoneIsBusiness.set(phone, isBusinessLead(r));
+        });
+      });
+    });
+  }
+
+  const summarize = calls => ({
+    calls: calls.length,
+    calls_over60: calls.filter(c => c.durationSec != null && c.durationSec >= 60).length
+  });
+
+  const byDay = {};
+  rawCalls.forEach(c => {
+    const day = dubaiDayKeyFromUTCMs(c.utcMs);
+    if (!byDay[day]) byDay[day] = Object.fromEntries(SDRS.map(s => [s.key, []]));
+    if (byDay[day][c.sdrKey]) byDay[day][c.sdrKey].push(c);
+  });
+
+  Object.keys(byDay).sort().forEach(day => {
+    allCallsDataAll[day] = {};
+    allCallsDataB2B[day] = {};
+    allCallsDataB2C[day] = {};
+    const teamAll = [], teamB2B = [], teamB2C = [];
+    SDRS.forEach(s => {
+      const calls = byDay[day][s.key] || [];
+      const b2b = calls.filter(c => phoneIsBusiness.get(c.phoneDigits) === true);
+      const b2c = calls.filter(c => phoneIsBusiness.get(c.phoneDigits) === false);
+      allCallsDataAll[day][s.key] = summarize(calls);
+      allCallsDataB2B[day][s.key] = summarize(b2b);
+      allCallsDataB2C[day][s.key] = summarize(b2c);
+      teamAll.push(...calls); teamB2B.push(...b2b); teamB2C.push(...b2c);
+    });
+    allCallsDataAll[day].Team = summarize(teamAll);
+    allCallsDataB2B[day].Team = summarize(teamB2B);
+    allCallsDataB2C[day].Team = summarize(teamB2C);
+  });
 }
 function saveLeadTypeFilter() {
   try { localStorage.setItem('sdr_lead_type', leadTypeFilter()); } catch(e) {}
@@ -2093,6 +2210,9 @@ function clearLoadedData() {
   allDataB2B = null;
   rawCalls = null;
   callsFilename = null;
+  allCallsDataAll = null;
+  allCallsDataB2B = null;
+  allCallsDataB2C = null;
   Object.values(charts).forEach(c => c.destroy());
   charts = {};
   document.getElementById('fileInput').value = '';
@@ -3432,10 +3552,12 @@ function renderCharts(days) {
   renderSpeedToLeadChart(chartDays);
   renderMeetingAttendanceChart(days);
   renderNoShowCountChart(days);
+  renderCallActivityChart(days);
   ['chartMeetingRate', 'chartQualPct', 'chartNR', 'chartDQ', 'chartSpeedToLead']
     .forEach(id => updateChartInfoTooltip(id));
   updateChartInfoTooltip('chartMeetingAttendance', true);
   updateChartInfoTooltip('chartNoShowCount', true);
+  updateChartInfoTooltip('chartCallActivity', true);
   updateChartInfoTooltip('chartDQReasons', true);
 }
 
@@ -4524,6 +4646,110 @@ function renderNoShowCountChart(days) {
     if (trendDrawn) items.push({ label: 'Trend', color: COLORS.Trend });
     legendEl.innerHTML = items.map(it =>
       `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
+    ).join('');
+  }
+}
+
+// ─── CALL ACTIVITY (AIRCALL) ───────────────────────────────────────────────────
+// Independent of Speed-to-Lead's 1-call-per-lead matching above — this counts
+// every outbound call an SDR placed, bucketed by day/SDR straight from the
+// call log (see recomputeCallData()), not tied to any particular lead row.
+function callActivityGroups() {
+  const id = 'chartCallActivity';
+  const groupEl = document.getElementById('teamsComparison-' + id);
+  const val = groupEl ? groupEl.value : 'off';
+  if (val === 'on') return TEAM_GROUPS.map(g => ({ key: g.members, label: g.label, color: g.color }));
+  if (val === 'sdr') return SDRS.filter(s => selectedSDRs.has(s.key)).map(s => ({ key: s.key, label: s.label, color: s.color }));
+  return [{ key: Array.from(selectedSDRs), label: 'Team', color: COLORS.Team }];
+}
+// Mirrors metricsForSelection()/sumMetricFrom() above, but for the {calls,
+// calls_over60} shape produced by recomputeCallData() instead of the full
+// lead-metrics object — a multi-SDR team view (e.g. US Team) sums both fields
+// across its members' per-day buckets.
+function callMetricsForSelection(dataset, day, view) {
+  const bucket = dataset[day];
+  if (!bucket) return null;
+  if (!Array.isArray(view)) return bucket[view] || null;
+  if (view.length === SDRS.length) return bucket.Team;
+  if (view.length === 1) return bucket[view[0]] || null;
+  const parts = view.map(k => bucket[k]).filter(Boolean);
+  if (!parts.length) return null;
+  return {
+    calls: parts.reduce((a, p) => a + (p.calls || 0), 0),
+    calls_over60: parts.reduce((a, p) => a + (p.calls_over60 || 0), 0)
+  };
+}
+function sumCallsMetricFrom(dataset, days, view, key) {
+  return days.reduce((acc, d) => {
+    const m = callMetricsForSelection(dataset, d, view);
+    return acc + (m ? (m[key] || 0) : 0);
+  }, 0);
+}
+function renderCallActivityChart(days) {
+  const id = 'chartCallActivity';
+  const leadTypeEl = document.getElementById('leadType-' + id);
+  const leadType = leadTypeEl ? leadTypeEl.value : 'all';
+  const callsSource = leadType === 'business' ? allCallsDataB2B : leadType === 'b2c' ? allCallsDataB2C : allCallsDataAll;
+  const leadsSource = leadType === 'business' ? allDataB2B : leadType === 'b2c' ? allDataB2C : allDataAll;
+  const metricEl = document.getElementById('metric-' + id);
+  const metric = metricEl ? metricEl.value : 'raw';
+  const pct = metric === 'pct60';
+  const granularity = chartGranularity(id);
+  const buckets = bucketize(days, granularity);
+  const labels = buckets.map(b => b.label);
+  const groups = callActivityGroups();
+  const barMode = isBarMode();
+
+  const datasets = groups.map(g => {
+    const data = buckets.map(b => {
+      const present = b.days.filter(d => (callsSource && callsSource[d]) || (leadsSource && leadsSource[d]));
+      if (!present.length) return null;
+      if (pct) {
+        const leads = sumMetricFrom(leadsSource, present, g.key, 'leads');
+        if (!leads) return 0;
+        const over60 = sumCallsMetricFrom(callsSource, present, g.key, 'calls_over60');
+        return parseFloat((over60 / leads * 100).toFixed(1));
+      }
+      return sumCallsMetricFrom(callsSource, present, g.key, 'calls');
+    });
+    return barMode
+      ? { label: g.label, data, backgroundColor: g.color, borderRadius: 3, borderWidth: 0 }
+      : { label: g.label, data, borderColor: g.color, backgroundColor: g.color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false };
+  });
+
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id).getContext('2d');
+  const f = chartFontSizes(id);
+  charts[id] = new Chart(ctx, {
+    type: barMode ? 'bar' : 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
+          titleColor: '#ffffff', bodyColor: '#cfd2e3',
+          titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody },
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}${pct ? '%' : ''}` }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' } },
+        y: {
+          ticks: { color: '#5b5f78', font: { size: f.tick }, precision: pct ? undefined : 0, callback: v => pct ? `${v}%` : v },
+          grid: { color: '#e4e6ef' }, beginAtZero: true, max: pct ? 100 : undefined
+        }
+      }
+    }
+  });
+
+  const legendEl = document.getElementById('legend-' + id);
+  if (legendEl) {
+    legendEl.innerHTML = groups.map(g =>
+      `<span class="legend-item"><span class="legend-dot" style="background:${g.color}"></span>${g.label}</span>`
     ).join('');
   }
 }
