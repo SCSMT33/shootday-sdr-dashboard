@@ -702,6 +702,14 @@
   .mandate-inputs { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; align-items: center; font-size: 11px; color: var(--muted); }
   .mandate-inputs input[type=number] { width: 62px; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 5px; padding: 3px 6px; font-size: 12px; }
 
+  /* SALES FUNNEL */
+  .funnel-cell-value { font-size: 13px; font-weight: 700; white-space: nowrap; }
+  .funnel-delta { font-size: 11px; font-weight: 700; white-space: nowrap; margin-left: 6px; }
+  .funnel-delta.good { color: var(--green); }
+  .funnel-delta.bad { color: var(--red); }
+  .funnel-delta.flat { color: var(--muted); }
+  .funnel-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
   /* DATA HYGIENE */
   .hygiene-section {
     background: var(--surface);
@@ -1235,6 +1243,37 @@
         <canvas id="chartHygiene"></canvas>
         <div id="hygieneDrilldown" class="speed-to-lead-drilldown" style="display:none"></div>
         <div class="hygiene-laws" id="hygieneLaws"></div>
+      </div>
+    </div>
+
+    <!-- SALES FUNNEL -->
+    <div class="mandate-section" id="funnelSection">
+      <div class="mandate-header" onclick="toggleFunnelSection()">
+        <div class="mandate-header-left">
+          <span class="mandate-title">Sales Funnel <span class="goal-info" title="The lead-to-deal funnel period over period: leads in, how many qualified, how many made it to a held meeting, and the three conversion rates into closed deals. Closed deals are counted by lead CREATION date (a June lead closing in July credits June), matching the Mandate Scoreboard — so recent periods read low until their leads have had time to close. Uses its own period picker and lead-type filter below, independent of the global Range and Lead-type controls above.">ⓘ</span></span>
+          <span class="mandate-sub" id="funnelHeaderNote">Leads → qualified → meetings done → closed, compared period over period</span>
+        </div>
+        <span class="mandate-chevron">&#9654;</span>
+      </div>
+      <div class="mandate-body">
+        <div class="mandate-subheading-row">
+          <div class="mandate-subheading" id="funnelHeading">Month over Month</div>
+          <div class="funnel-controls">
+            <select class="chart-granularity" id="funnelMode" onchange="saveFunnelState({ mode: this.value })">
+              <option value="mom">Month over Month</option>
+              <option value="wow">Week over Week</option>
+              <option value="t30">Trailing 30 days</option>
+              <option value="t15">Trailing 15 days</option>
+            </select>
+            <select class="chart-granularity" id="funnelLeadType" onchange="saveFunnelState({ leadType: this.value })">
+              <option value="all">All leads</option>
+              <option value="b2b">B2B only</option>
+              <option value="b2c">B2C only</option>
+            </select>
+          </div>
+        </div>
+        <div style="overflow-x:auto"><table class="mandate-kpi-table" id="funnelTable"></table></div>
+        <div id="funnelSdrBreakdown"></div>
       </div>
     </div>
 
@@ -2791,6 +2830,7 @@ function renderDashboard() {
   if (!allData) return;
   const days = getFilteredDays();
   renderSummaryCards(days);
+  renderFunnelSection();
   renderMandateSection();
   renderCharts(days);
   renderHygieneSection(days);
@@ -4357,6 +4397,148 @@ function renderMandateSection() {
   const overallScored = currentOks.filter(v => v !== null).length;
   document.getElementById('mandateHeaderNote').textContent =
     `${monthLabel}: ${overallOk}/${overallScored} scored KPIs on track — 90 days counted from June 1, 2026 (re-benchmark: August)`;
+}
+
+// ─── SALES FUNNEL ─────────────────────────────────────────────────────────────
+// Period-over-period funnel table (leads → qualified → meetings done → closed
+// rates). Has its own period picker and lead-type filter, independent of the
+// global Range / Lead-type controls. Closed deals count by lead CREATION date
+// (same cohort semantics as mandateClosedCount, but lead-type-filterable).
+const FUNNEL_DEFAULTS = { mode: 'mom', leadType: 'all' };
+function funnelState() {
+  try { return { ...FUNNEL_DEFAULTS, ...JSON.parse(localStorage.getItem('sdr_funnel') || '{}') }; }
+  catch (e) { return { ...FUNNEL_DEFAULTS }; }
+}
+function saveFunnelState(patch) {
+  try { localStorage.setItem('sdr_funnel', JSON.stringify({ ...funnelState(), ...patch })); } catch (e) {}
+  renderFunnelSection();
+}
+function toggleFunnelSection() {
+  document.getElementById('funnelSection').classList.toggle('expanded');
+}
+
+function funnelShortDate(dayKey) {
+  const [y, m, d] = dayKey.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+// Columns for each comparison mode, oldest → newest so deltas read left to
+// right. partial marks a period still in progress (MTD/WTD); the trailing
+// windows are equal-length by construction so neither column is partial.
+function funnelPeriods(mode, todayKey) {
+  if (mode === 'mom') {
+    return [-2, -1, 0].map(off => {
+      const prefix = dubaiYearMonth(off);
+      const [y, m] = prefix.split('-').map(Number);
+      const dim = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      const partial = prefix === todayKey.slice(0, 7);
+      const monthName = new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+      return { label: partial ? `${monthName} (MTD)` : monthName, dayKeys: dayKeySpan(`${prefix}-01`, dim).filter(d => d <= todayKey), partial };
+    });
+  }
+  if (mode === 'wow') {
+    const ws = dubaiWeekStart(todayKey); // Sat–Fri work week, like the rest of the dashboard
+    return [-21, -14, -7, 0].map(off => {
+      const start = dayKeyOffsetFrom(ws, off);
+      const partial = off === 0;
+      const label = `${funnelShortDate(start)} – ${funnelShortDate(dayKeyOffsetFrom(start, 6))}${partial ? ' (WTD)' : ''}`;
+      return { label, dayKeys: dayKeySpan(start, 7).filter(d => d <= todayKey), partial };
+    });
+  }
+  const n = mode === 't15' ? 15 : 30;
+  return [
+    { label: `Prev ${n}d`, dayKeys: dayKeySpan(dayKeyOffsetFrom(todayKey, -(2 * n - 1)), n), partial: false },
+    { label: `Last ${n}d`, dayKeys: dayKeySpan(dayKeyOffsetFrom(todayKey, -(n - 1)), n), partial: false }
+  ];
+}
+
+function funnelLeadPred(leadType) {
+  return leadType === 'b2b' ? isBusinessLead : leadType === 'b2c' ? isB2CLead : () => true;
+}
+// sdrKeys is the per-SDR breakdown hook; omitted = whole team.
+function funnelPeriodStats(dayKeys, pred, sdrKeys) {
+  const keys = sdrKeys || SDRS.map(s => s.key);
+  const st = { leads: 0, qualified: 0, meetingsDone: 0, closed: 0 };
+  dayKeys.forEach(d => {
+    const day = rawByDay[d];
+    if (!day) return;
+    keys.forEach(k => (day[k] || []).forEach(r => {
+      if (!pred(r)) return;
+      st.leads++;
+      if (isQualifiedLead(r)) st.qualified++;
+      // Same "meeting actually happened" definition as computeMetrics' meetings_held
+      if (r['Meeting Status'] === 'Meeting Done' || isInstantClose(r)) st.meetingsDone++;
+      if (normalizeSalesStatus(r['Sales status']) === 'closed') st.closed++;
+    }));
+  });
+  return st;
+}
+
+// Inline ▲/▼ vs the previous column. Counts compare as % change; rates
+// (isPct) compare as percentage-point difference — a 20% → 25% move reads
+// "▲ 5.0pp", not a confusing "▲ 25%" (same convention as deltaChip). All
+// funnel metrics are higher-is-better. Returns '' when there's nothing
+// sound to compare against (first column, missing rate, prev count of 0).
+function funnelDelta(current, prev, isPct) {
+  if (current == null || prev == null || (!isPct && !prev)) return '';
+  const diff = isPct ? current - prev : (current - prev) / prev * 100;
+  if (Math.abs(diff) < 0.05) return '<span class="funnel-delta flat">—</span>';
+  const up = diff > 0;
+  return `<span class="funnel-delta ${up ? 'good' : 'bad'}">${up ? '▲' : '▼'} ${Math.abs(diff).toFixed(1)}${isPct ? 'pp' : '%'}</span>`;
+}
+
+function renderFunnelSection() {
+  const table = document.getElementById('funnelTable');
+  if (!table) return;
+  if (!rawByDay || !Object.keys(rawByDay).length) {
+    table.innerHTML = '<tbody><tr><td class="mandate-kpi-note">Upload a leads CSV to see the funnel.</td></tr></tbody>';
+    return;
+  }
+  const st = funnelState();
+  const modeEl = document.getElementById('funnelMode');
+  const typeEl = document.getElementById('funnelLeadType');
+  if (modeEl) modeEl.value = st.mode;
+  if (typeEl) typeEl.value = st.leadType;
+
+  const periods = funnelPeriods(st.mode, dubaiTodayKey());
+  const pred = funnelLeadPred(st.leadType);
+  const earliest = Object.keys(rawByDay).sort()[0];
+  // A period that ends before the loaded data gets "no data" cells and is
+  // skipped as a delta baseline, instead of reading as a misleading ±100%.
+  const cols = periods.map(p => {
+    const hasData = p.dayKeys.length > 0 && p.dayKeys[p.dayKeys.length - 1] >= earliest;
+    return { ...p, hasData, stats: hasData ? funnelPeriodStats(p.dayKeys, pred) : null };
+  });
+
+  const MODE_NAMES = { mom: 'Month over Month', wow: 'Week over Week', t30: 'Trailing 30 days', t15: 'Trailing 15 days' };
+  const TYPE_NAMES = { all: 'All leads', b2b: 'B2B leads', b2c: 'B2C leads' };
+  document.getElementById('funnelHeading').textContent = MODE_NAMES[st.mode] || '';
+  const partialNote = cols.some(c => c.partial) ? ' — current period is still in progress, so its raw counts trail full periods' : '';
+  document.getElementById('funnelHeaderNote').textContent = `${TYPE_NAMES[st.leadType]}: leads → qualified → meetings done → closed${partialNote}`;
+
+  const rate = (num, den) => den ? num / den * 100 : null;
+  const cohortNote = 'Closed deals are counted by lead creation date (cohort), so recent periods read low until their leads have had time to close — the rate keeps rising as they do.';
+  const rows = [
+    { label: 'Leads', isPct: false, get: s => s.leads, info: 'Leads created in the period, after the lead-type filter above.' },
+    { label: 'Qualified leads', isPct: false, get: s => s.qualified, info: 'Leads whose Sales status marks them qualified — same definition as the % Qualified card and the Mandate Scoreboard.' },
+    { label: 'Meetings done', isPct: false, get: s => s.meetingsDone, info: 'Meetings that actually happened: Meeting Status = Meeting Done, plus instant closes (a deal closed right after creation implies a meeting). Same as the Meetings Held definition on the cards. Excludes still-upcoming Scheduled meetings.' },
+    { label: 'Qualified → closed rate', isPct: true, get: s => rate(s.closed, s.qualified), info: 'Closed (won) deals ÷ qualified leads from the same period. ' + cohortNote },
+    { label: 'Meeting → closed rate', isPct: true, get: s => rate(s.closed, s.meetingsDone), info: 'Closed (won) deals ÷ meetings done from the same period. ' + cohortNote },
+    { label: 'Lead → closed rate', isPct: true, get: s => rate(s.closed, s.leads), info: 'Closed (won) deals ÷ all leads from the same period. ' + cohortNote }
+  ];
+
+  table.innerHTML = `
+    <thead><tr><th>Metric</th>${cols.map(c => `<th class="mandate-month-cell${c.partial ? ' current' : ''}">${escapeHtml(c.label)}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(row => `<tr>
+      <td class="mandate-kpi-name">${row.label} <span class="goal-info" title="${escapeHtml(row.info)}">ⓘ</span></td>
+      ${cols.map((c, i) => {
+        if (!c.hasData) return '<td><span class="mandate-status na">no data</span></td>';
+        const v = row.get(c.stats);
+        const text = v == null ? '—' : row.isPct ? v.toFixed(1) + '%' : String(v);
+        const prevCol = i > 0 ? cols[i - 1] : null;
+        const prev = prevCol && prevCol.hasData ? row.get(prevCol.stats) : null;
+        return `<td><span class="funnel-cell-value">${text}</span>${funnelDelta(v, prev, row.isPct)}</td>`;
+      }).join('')}
+    </tr>`).join('')}</tbody>`;
 }
 
 // Draws the % (not-attended/rejected ÷ total resolved meetings) inside the
