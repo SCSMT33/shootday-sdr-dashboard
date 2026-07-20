@@ -1188,12 +1188,12 @@
       </div>
       <div class="chart-card full" data-chart-id="chartCallActivity">
         <div class="chart-header">
-          <span class="chart-title">Call Activity by SDR <span class="goal-info" id="info-chartCallActivity" title="Outbound calls from the Aircall Call History CSV, bucketed by day/SDR. 'Raw Call Count' is every outbound call placed, no duration filter. '% Leads Called 60s+' is calls lasting 60 seconds or longer, divided by leads received, in the same bucket/SDR/team — a connect-rate view. Group dropdown splits into Combined, US vs OUS Teams, or Per SDR. Independent B2B/B2C/All dropdown, separate from the global Leads: filter above; a call counts toward B2B/B2C based on whether its phone number matches a lead flagged that way.">ⓘ</span></span>
+          <span class="chart-title">Call Activity by SDR <span class="goal-info" id="info-chartCallActivity" title="Outbound calls from the Aircall Call History CSV, bucketed by day/SDR — no matching against Bookings/leads data, just the raw call log. Duration = talk time (Aircall's 'duration (in call)' column), not ring time — a missed/unanswered call has no talk time and never counts toward the 60s+ figures. 'Raw Call Count' is every outbound call placed, no duration filter. '% Calls 60s+ (Connect Rate)' is calls lasting 60 seconds or longer, divided by TOTAL calls placed in the same bucket/SDR/team — not leads received, so it's always 0-100%. Group dropdown splits into Combined, US vs OUS Teams, or Per SDR. Independent B2B/B2C/All dropdown, separate from the global Leads: filter above; a call counts toward B2B/B2C based on whether its phone number matches a lead flagged that way (purely a display split — leads still don't factor into the denominator).">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartCallActivity"></div>
             <select class="chart-granularity" id="metric-chartCallActivity" onchange="renderCharts(getFilteredDays())">
               <option value="raw" selected>Raw Call Count</option>
-              <option value="pct60">% Leads Called 60s+</option>
+              <option value="pct60">% Calls 60s+ (Connect Rate)</option>
             </select>
             <select class="chart-granularity" id="teamsComparison-chartCallActivity" onchange="renderCharts(getFilteredDays())">
               <option value="off" selected>Group: Combined</option>
@@ -4697,7 +4697,6 @@ function renderCallActivityChart(days) {
   const leadTypeEl = document.getElementById('leadType-' + id);
   const leadType = leadTypeEl ? leadTypeEl.value : 'all';
   const callsSource = leadType === 'business' ? allCallsDataB2B : leadType === 'b2c' ? allCallsDataB2C : allCallsDataAll;
-  const leadsSource = leadType === 'business' ? allDataB2B : leadType === 'b2c' ? allDataB2C : allDataAll;
   const metricEl = document.getElementById('metric-' + id);
   const metric = metricEl ? metricEl.value : 'raw';
   const pct = metric === 'pct60';
@@ -4709,15 +4708,22 @@ function renderCallActivityChart(days) {
 
   const datasets = groups.map(g => {
     const data = buckets.map(b => {
-      const present = b.days.filter(d => (callsSource && callsSource[d]) || (leadsSource && leadsSource[d]));
+      const present = b.days.filter(d => callsSource && callsSource[d]);
       if (!present.length) return null;
+      // Denominator is the SDR's own raw call volume from the Aircall
+      // upload, NOT leads received — leads received doesn't bound how many
+      // times an SDR calls (follow-ups, repeat dials to the same lead), so
+      // dividing by leads produced nonsense readings like "100% of leads
+      // called 60s+" off a single day of 40 calls. This is a straight
+      // connect-rate: of the calls this SDR placed, what share connected
+      // for 60+ seconds.
+      const total = sumCallsMetricFrom(callsSource, present, g.key, 'calls');
       if (pct) {
-        const leads = sumMetricFrom(leadsSource, present, g.key, 'leads');
-        if (!leads) return 0;
+        if (!total) return 0;
         const over60 = sumCallsMetricFrom(callsSource, present, g.key, 'calls_over60');
-        return parseFloat((over60 / leads * 100).toFixed(1));
+        return parseFloat((over60 / total * 100).toFixed(1));
       }
-      return sumCallsMetricFrom(callsSource, present, g.key, 'calls');
+      return total;
     });
     return barMode
       ? { label: g.label, data, backgroundColor: g.color, borderRadius: 3, borderWidth: 0 }
