@@ -1735,10 +1735,17 @@ function parseAircallUTC(raw) {
   if (!m) return null;
   return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
 }
-// Aircall exports duration as "duration (mm:ss)"; the plain "duration" header
-// name is also accepted (some exports omit the unit suffix), and a bare
-// integer is treated as seconds already.
-const DURATION_HEADER_CANDIDATES = ['duration (mm:ss)', 'duration', 'call duration'];
+// Aircall's Call History export has two separate duration columns:
+// "duration (total)" includes ring/wait time before pickup, while
+// "duration (in call)" (plain seconds; "in-call duration" is the same value
+// as HH:MM:SS, kept as a fallback for export variants missing the former) is
+// actual talk time — empty for missed/unanswered calls. A ">60 seconds"
+// filter is meant to mean "talked for a minute", not "rang for a minute
+// then went to voicemail", so this deliberately uses talk time and never
+// falls back to duration (total): an unanswered call has no talk-time
+// column at all and should parse as no duration, not get miscounted using
+// its ring time.
+const DURATION_HEADER_CANDIDATES = ['duration (in call)', 'in-call duration'];
 function findDurationRaw(row) {
   for (const h of DURATION_HEADER_CANDIDATES) {
     if (row[h] !== undefined && row[h] !== '') return row[h];
