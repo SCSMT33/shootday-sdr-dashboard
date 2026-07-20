@@ -887,7 +887,7 @@
     <div class="charts-grid">
       <div class="chart-card full" data-chart-id="chartActivity">
         <div class="chart-header">
-          <span class="chart-title"><span id="chartActivityTitle">Meetings Booked</span> <span class="goal-info" id="info-chartActivity" title="Count of leads counted as a booked meeting: Meeting Status is Scheduled, Done, Rejected, or Not Atended — a Closed deal with no Meeting Status no longer counts on its own — excluding deals that closed within 2 hours of the lead being created (an instant/self-serve close, not a real SDR-run meeting), per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
+          <span class="chart-title"><span id="chartActivityTitle">Meetings Booked</span> <span class="goal-info" id="info-chartActivity" title="Meeting Status = Scheduled, Done, Rejected, or Not Atended, per bucket — excludes instant closes (closed within 2h of lead creation, not a real SDR meeting) and Closed deals with no Meeting Status. Dashed Target = Lead Volume goal × Meeting Booked Rate target; dashed Pace = trailing 3-bucket rolling rate.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartActivity"></div>
             <span class="activity-metric-checks">
@@ -934,7 +934,7 @@
       </div>
       <div class="chart-card full" data-chart-id="chartMeetingRate">
         <div class="chart-header">
-          <span class="chart-title">Meeting Booked Rate % <span class="goal-info" id="info-chartMeetingRate" title="Meetings Booked ÷ Lead Volume for each bucket — numerator and denominator are summed across the whole bucket first, then divided (never an average of daily rates, which would over-weight thin days). Dashed Target line = your Meeting Booked Rate target goal; dashed Pace line = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
+          <span class="chart-title">Meeting Booked Rate % <span class="goal-info" id="info-chartMeetingRate" title="Meetings Booked ÷ Lead Volume per bucket — summed first, then divided (never an average of daily rates, which over-weights thin days). Dashed Target = your Meeting Booked Rate goal; dashed Pace = trailing 3-bucket rolling rate.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetingRate"></div>
             <select class="chart-granularity" id="teamsComparison-chartMeetingRate" onchange="renderCharts(getFilteredDays())">
@@ -963,7 +963,7 @@
       </div>
       <div class="chart-card full" data-chart-id="chartQualPct">
         <div class="chart-header">
-          <span class="chart-title">% Leads Qualified <span class="goal-info" id="info-chartQualPct" title="Qualified leads ÷ Lead Volume per bucket, summed then divided (not an average of daily rates). Qualified = Sales status on the explicit qualified list (Hot, Warm, Pending, Closed, Lost, refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need a scheduled follow-up, Qualified SDR, Disqualified AE); blank/Disqualified/Cold/Non respondant are non-qualified. Blank-status legacy rows with SQL status = Qualified still count. Dashed Target = your % Qualified target goal; dashed Pace = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
+          <span class="chart-title">% Leads Qualified <span class="goal-info" id="info-chartQualPct" title="Qualified leads ÷ Lead Volume per bucket (summed first, not averaged). Qualified = Sales status Hot, Warm, Pending, Closed, Lost, refund, Quote sent, Potential deal, Pending to quote/contact, Need follow-up, Qualified SDR, or Disqualified AE; blank/Disqualified/Cold/Non respondant don't count (legacy blank-status rows with SQL status = Qualified still do). Dashed Target = your % Qualified goal; dashed Pace = trailing 3-bucket rolling rate.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartQualPct"></div>
             <select class="chart-granularity" id="teamsComparison-chartQualPct" onchange="renderCharts(getFilteredDays())">
@@ -992,7 +992,7 @@
       </div>
       <div class="chart-card full" data-chart-id="chartNR">
         <div class="chart-header">
-          <span class="chart-title">Non-Responsive Rate % <span class="goal-info" id="info-chartNR" title="Leads marked Sales status = Non respondant or Disqualified reason = Not responsive, ÷ Lead Volume per bucket, summed then divided. Lower is better. Dashed Target only appears if you've set a Non-Responsive Rate max goal; dashed Pace = a trailing 3-bucket rolling rate (3 weeks/days/months, matching whatever granularity is selected).">ⓘ</span></span>
+          <span class="chart-title">Non-Responsive Rate % <span class="goal-info" id="info-chartNR" title="Sales status = Non respondant or Disqualified reason = Not responsive, ÷ Lead Volume per bucket (summed then divided). Lower is better. Dashed Target shows only if you've set a Non-Responsive Rate max goal; dashed Pace = trailing 3-bucket rolling rate.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartNR"></div>
             <select class="chart-granularity" id="teamsComparison-chartNR" onchange="renderCharts(getFilteredDays())">
@@ -1021,7 +1021,7 @@
       </div>
       <div class="chart-card full" data-chart-id="chartDQ">
         <div class="chart-header">
-          <span class="chart-title">Disqualified Rate % <span class="goal-info" id="info-chartDQ" title="All disqualifications in one chart, measured against the lead volume of this chart's own leads dropdown (All/B2B/B2C — independent of the global Leads: filter). SDR DQ = leads the SDR themselves marked plain Disqualified ÷ lead volume. AE DQ = leads the AE bounced back as wrongly qualified (Sales status contains 'Disqualified AE') ÷ lead volume. With both toggles on, the bars stack — the full bar height is the Total Disqualified rate (SDR + AE combined); in Lines mode each series is its own line (AE DQ dashed) and the tooltip footer still shows the total. Note: AE DQ is judged against lead volume here so it can stack with SDR DQ into one meaningful total; the handoff-quality version of that metric (AE DQ ÷ qualified leads) still lives in the Mandate Scoreboard. Summed then divided per bucket, never an average of daily rates. No Target line; Pace (with Trend lines on) shows a trailing 3-bucket rolling total-DQ rate of whichever segments are toggled on.">ⓘ</span></span>
+          <span class="chart-title">Disqualified Rate % <span class="goal-info" id="info-chartDQ" title="All disqualifications ÷ this chart's own leads dropdown (All/B2B/B2C, independent of the global filter), summed then divided per bucket. SDR DQ = SDR-marked plain Disqualified ÷ lead volume. AE DQ = AE-bounced 'Disqualified AE' ÷ lead volume — judged against lead volume (not qualified leads) so it can stack with SDR DQ into one Total DQ rate; the ÷ qualified-leads version of AE DQ lives in the Mandate Scoreboard instead. Both toggles on: bars stack to the total; Lines mode shows AE DQ dashed, tooltip footer still totals both. No Target line; Pace = trailing 3-bucket rolling total-DQ rate of whichever segments are on.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartDQ"></div>
             <span class="activity-metric-checks">
@@ -1067,7 +1067,7 @@
       </div>
       <div class="chart-card full" data-chart-id="chartDQReasons">
         <div class="chart-header">
-          <span class="chart-title">Disqualification Reasons <span class="goal-info" id="info-chartDQReasons" title="The Disqualified reason field behind every disqualification in the selected date range and SDR-tab selection, with its own source filter (SDR + AE, SDR only, or AE only) and its own B2B/B2C/All leads dropdown (independent of the global Leads: filter). Blank reasons show as '(no reason given)' — the Data Hygiene section flags those for cleanup. Team totals = one bar per reason, stacked SDR-DQ vs AE-DQ when both sources are on; By SDR = the same reason bars split by which SDR owns the lead; Weekly trend = the top 5 reasons (by total count in the range) tracked week by week, so you can see which reasons are growing or shrinking. Beyond the top 10, reasons fold into 'Other reasons'. 100% view (Team totals only) collapses the whole range into a single bar spanning the full width, segmented by reason — each segment's width is that reason's share of every disqualification in range, largest first; beyond the top 7 (kept legible/colorblind-safe), the rest fold into one gray 'Other' segment.">ⓘ</span></span>
+          <span class="chart-title">Disqualification Reasons <span class="goal-info" id="info-chartDQReasons" title="The Disqualified reason field behind every disqualification in range, with its own source filter (SDR+AE / SDR only / AE only) and B2B/B2C/All dropdown (independent of the global filter). Blank reasons show as '(no reason given)' — flagged for cleanup in Data Hygiene. Team totals = one bar per reason (stacked SDR vs AE when both sources on); By SDR = same bars split by owner; Weekly trend = top 5 reasons tracked week by week, rest folded into 'Other' beyond the top 10. 100% view (Team totals only) = one full-width bar segmented by reason share, largest first, top 7 kept then folded into 'Other'.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartDQReasons"></div>
             <select class="chart-granularity" id="source-chartDQReasons" onchange="renderCharts(getFilteredDays())">
@@ -1097,7 +1097,7 @@
       </div>
       <div class="chart-card full" id="chartCardSpeedToLead" data-chart-id="chartSpeedToLead">
         <div class="chart-header">
-          <span class="chart-title">Speed-to-Lead (median minutes) <span class="goal-info" id="info-chartSpeedToLead" title="Median minutes from lead creation to first outbound call, matched by phone number from the Aircall call-history export. Median (not mean) so a few stale/unreliable matches can't skew it. Leads created before the Call History export's own earliest call — or matched to a call over 48h later — are excluded entirely. Requires a Call History CSV to be loaded. Dashed Target = your Speed-to-Lead goal; dashed Pace = a trailing 3-bucket rolling median (3 weeks/days/months, matching whatever granularity is selected), and can be limited to On-hours-only or Off-hours-only leads with the dropdown next to the legend. On-hours uses each SDR's own local time (EST for MJ/Gospel, CET for Mark/Levi) and only counts Monday–Friday during their shift — a lead created on a Saturday or Sunday is always off-hours, even if the clock time would otherwise fall inside that SDR's weekday shift, since nobody works weekends. Click any bar/point to drill down into every lead over 20 minutes in that period — Name, created time, called time (shown in that SDR's own local time: EST for MJ, PST for Gospel, CET for Mark/Levi), and total wait. "Exclude current week" drops the still-in-progress trailing week (and its Pace contribution) — that bucket usually has very few matched leads so far, so one slow or fast one can look like a defining trend before the week is even over.">ⓘ</span></span>
+          <span class="chart-title">Speed-to-Lead (median minutes) <span class="goal-info" id="info-chartSpeedToLead" title="Median minutes from lead creation to first outbound call, phone-matched from the Aircall export (median, not mean, so a few stale matches can't skew it). Leads before the export's own earliest call, or matched to a call over 48h later, are excluded entirely. Requires a Call History CSV. Dashed Target = your Speed-to-Lead goal; dashed Pace = trailing 3-bucket rolling median; both can be limited to On/Off-hours via the dropdown next to the legend. On-hours = each SDR's own local time (EST for MJ/Gospel, CET for Mark/Levi), Monday–Friday during their shift only — weekends are always off-hours. Click a bar/point to drill into every lead over 20 minutes that period: name, created time, called time (in that SDR's own local time: EST for MJ, PST for Gospel, CET for Mark/Levi), and wait. “Exclude current week” drops the still-in-progress week — too few matched leads so far for one outlier not to look like a trend.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartSpeedToLead"></div>
             <select class="chart-granularity" id="teamsComparison-chartSpeedToLead" onchange="renderCharts(getFilteredDays())">
@@ -1132,7 +1132,7 @@
       </div>
       <div class="chart-card full" data-chart-id="chartMeetingAttendance">
         <div class="chart-header">
-          <span class="chart-title">No-Show Rate by SDR (Meetings Not Attended) <span class="goal-info" id="info-chartMeetingAttendance" title="Bar height = booked meetings (Meeting Scheduled + Meeting Done + Meeting Rejected + Meeting Not Atended, minus instant closes) for that SDR, bucketed by when the LEAD was created (not when the meeting was booked/held — that date isn't available in the export), over the selected date range — matches how commission counts a booked meeting. Meeting Scheduled is included on purpose: a lead whose deal already went Lost/Disqualified/Closed but whose Meeting Status never got updated off Scheduled shouldn't just vanish from the math. The dark segment is Meeting Not Atended only (Meeting Rejected is excluded — that's an AE call, tracked separately) — the % shown is that segment's share of the SDR's booked meetings. Shows whichever SDRs are selected at the top of the dashboard. Average = one bar per SDR totaling the whole selected range; Week over week = one grouped bar per SDR per week; Daily = one grouped bar per SDR per day. 100% view normalizes every bar to the same height so you can compare the not-attended share directly, instead of eyeballing it against varying bar heights. Trendline (Week over week/Daily only, off in 100% view) is a trailing 3-weekday rolling average of raw not-attended counts, weekends excluded, starting from the first day with real loaded data.">ⓘ</span></span>
+          <span class="chart-title">No-Show Rate by SDR (Meetings Not Attended) <span class="goal-info" id="info-chartMeetingAttendance" title="Bar height = booked meetings (Scheduled + Done + Rejected + Not Atended, minus instant closes) per SDR, bucketed by when the LEAD was created — matches how commission counts a booked meeting. Scheduled is included so a lead whose deal resolved without its Meeting Status being updated off Scheduled doesn't vanish from the math. Dark segment = Not Atended only (Rejected excluded — that's an AE call, tracked separately); % = that segment's share of booked meetings. Average = one bar per SDR for the range; Week over week/Daily = one grouped bar per SDR per period. 100% view normalizes bar height for direct comparison. Trendline (not in 100% view) = trailing 3-weekday rolling average of raw counts, weekends excluded.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartMeetingAttendance"></div>
             <select class="chart-granularity" id="teamsComparison-chartMeetingAttendance" onchange="renderCharts(getFilteredDays())">
@@ -1166,7 +1166,7 @@
       </div>
       <div class="chart-card full" data-chart-id="chartNoShowCount">
         <div class="chart-header">
-          <span class="chart-title">Meetings Not Attended — Raw Count <span class="goal-info" id="info-chartNoShowCount" title="Whole-number count of leads with Meeting Status = Meeting Not Atended, bucketed by when the LEAD was created — no percentages, no denominator, just how many. Group dropdown splits into Combined (one bar/line for the whole team), US vs OUS Teams, or Per SDR. Independent B2B/B2C/All dropdown, separate from the global Leads: filter above.">ⓘ</span></span>
+          <span class="chart-title">Meetings Not Attended — Raw Count <span class="goal-info" id="info-chartNoShowCount" title="Count of leads with Meeting Status = Meeting Not Atended, bucketed by when the LEAD was created — no percentages, just raw counts. Group dropdown: Combined, US vs OUS Teams, or Per SDR. Independent B2B/B2C/All dropdown, separate from the global Leads: filter.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartNoShowCount"></div>
             <select class="chart-granularity" id="teamsComparison-chartNoShowCount" onchange="renderCharts(getFilteredDays())">
@@ -1196,7 +1196,7 @@
       </div>
       <div class="chart-card full" data-chart-id="chartCallActivity">
         <div class="chart-header">
-          <span class="chart-title">Call Activity by SDR <span class="goal-info" id="info-chartCallActivity" title="Outbound calls from the Aircall Call History CSV, bucketed by day/SDR — no matching against Bookings/leads data, just the raw call log. Duration = talk time (Aircall's 'duration (in call)' column), not ring time — a missed/unanswered call has no talk time and never counts toward the 60s+ figures. 'Raw Call Count' is every outbound call placed, no duration filter. '% Calls 60s+ (Connect Rate)' is calls lasting 60 seconds or longer, divided by TOTAL calls placed in the same bucket/SDR/team — not leads received, so it's always 0-100%. Group dropdown splits into Combined, US vs OUS Teams, or Per SDR. Independent B2B/B2C/All dropdown, separate from the global Leads: filter above; a call counts toward B2B/B2C based on whether its phone number matches a lead flagged that way (purely a display split — leads still don't factor into the denominator).">ⓘ</span></span>
+          <span class="chart-title">Call Activity by SDR <span class="goal-info" id="info-chartCallActivity" title="Outbound calls from the Aircall CSV, bucketed by day/SDR — raw call log, not matched against leads data. Duration = talk time ('duration (in call)'), not ring time, so missed calls never count toward 60s+. 'Raw Call Count' = every outbound call, no duration filter. '% Calls 60s+ (Connect Rate)' = calls ≥60s ÷ TOTAL calls in that bucket/SDR/team (not leads), always 0-100%. Group dropdown: Combined, US vs OUS Teams, or Per SDR. B2B/B2C/All dropdown is a display split only (by phone-number match) — leads never factor into the denominator.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartCallActivity"></div>
             <select class="chart-granularity" id="metric-chartCallActivity" onchange="renderCharts(getFilteredDays())">
@@ -1229,7 +1229,7 @@
     <div class="hygiene-section" id="hygieneSection">
       <div class="hygiene-header" onclick="toggleHygieneSection()">
         <div class="hygiene-header-left">
-          <span class="hygiene-title">Data Hygiene <span class="goal-info" title="Checks every lead (all SDRs, B2B + B2C, regardless of the Leads: filter) against the marking laws listed at the bottom of this section — rules derived from the team's own majority conventions in past data. Weekly score per SDR = 100 minus (weighted violation points ÷ leads handled that week) × 100, floored at 0 — so one severe violation in a 30-lead week costs 10 points, and clean marking scores 100. Recomputed from the current CSV on every load, so fixing a lead in Airtable clears its violation on the next refresh.">ⓘ</span></span>
+          <span class="hygiene-title">Data Hygiene <span class="goal-info" title="Checks every lead (all SDRs, B2B+B2C, regardless of the Leads: filter) against the marking laws below — rules derived from the team's own majority conventions. Weekly score = 100 − (weighted violation points ÷ leads handled that week) × 100, floored at 0 — one severe violation in a 30-lead week costs 10 points; clean marking scores 100. Recomputed from the current CSV every load, so fixing a lead in Airtable clears its violation next refresh.">ⓘ</span></span>
           <span class="hygiene-sub" id="hygieneHeaderNote">Marking-quality score per SDR — click a bar to see the violations behind it</span>
         </div>
         <span class="hygiene-chevron">&#9654;</span>
@@ -1250,7 +1250,7 @@
     <div class="mandate-section" id="funnelSection">
       <div class="mandate-header" onclick="toggleFunnelSection()">
         <div class="mandate-header-left">
-          <span class="mandate-title">Sales Funnel <span class="goal-info" title="The lead-to-deal funnel period over period: leads in, how many qualified, how many made it to a held meeting, and the three conversion rates into closed deals. Closed deals are counted by lead CREATION date (a June lead closing in July credits June), matching the Mandate Scoreboard — so recent periods read low until their leads have had time to close. Uses its own period picker and lead-type filter below, independent of the global Range and Lead-type controls above.">ⓘ</span></span>
+          <span class="mandate-title">Sales Funnel <span class="goal-info" id="funnelSectionInfo" title="The lead-to-deal funnel period over period: leads in, qualified, meetings held, and the three conversion rates into closed deals. Closed deals count by lead CREATION date (a June lead closing in July credits June), matching the Mandate Scoreboard — recent periods read low until their leads have had time to close. Its period and lead-type filters below are independent of the global Range/Lead-type controls above.">ⓘ</span></span>
           <span class="mandate-sub" id="funnelHeaderNote">Leads → qualified → meetings done → closed, compared period over period</span>
         </div>
         <span class="mandate-chevron">&#9654;</span>
@@ -1283,7 +1283,7 @@
       <div class="goals-sub">Lead Volume is your monthly baseline. Meeting Booked Rate and % Qualified are KPI percentages — their count goals (and chart/card targets) are calculated automatically as % × Lead Volume. Saved automatically.</div>
       <div class="goals-grid">
         <div class="goal-item">
-          <div class="goal-label">Lead Volume / month <span class="goal-info" title="Baseline. All other count goals (Meetings Booked, Leads Qualified) are calculated as a percentage of this number. By default this auto-fills with whatever the Lead Volume card currently shows (for whichever filter/SDR/range you have selected) — check Manual override to type your own number instead.">ⓘ</span></div>
+          <div class="goal-label">Lead Volume / month <span class="goal-info" title="Baseline — Meetings Booked and Leads Qualified goals are calculated as a % of this number. Auto-fills from the Lead Volume card (for your current filter/SDR/range); check Manual override to type your own.">ⓘ</span></div>
           <div class="goal-input-row">
             <input class="goal-input" type="number" id="goal_leads" placeholder="e.g. 450" readonly oninput="saveGoals(); renderDashboard()">
             <span class="goal-unit">leads</span>
@@ -1295,7 +1295,7 @@
           <div class="goal-derived" id="derived_leads"></div>
         </div>
         <div class="goal-item">
-          <div class="goal-label">Meeting Booked Rate target <span class="goal-info" title="Meetings Booked goal = this % × Lead Volume goal (team). For each SDR's individual check, the same % is applied to their own actual lead volume — not an even split — since leads aren't divided 50/50.">ⓘ</span></div>
+          <div class="goal-label">Meeting Booked Rate target <span class="goal-info" title="Meetings Booked goal = this % × Lead Volume goal (team). Each SDR's individual check applies the same % to their own actual lead volume, not an even split.">ⓘ</span></div>
           <div class="goal-input-row">
             <input class="goal-input" type="number" id="goal_meeting_rate" placeholder="e.g. 20" oninput="saveGoals(); renderDashboard()">
             <span class="goal-unit">%</span>
@@ -1303,7 +1303,7 @@
           <div class="goal-derived" id="derived_meetings"></div>
         </div>
         <div class="goal-item">
-          <div class="goal-label">% Qualified target <span class="goal-info" title="Leads Qualified goal = this % × Lead Volume goal (team). For each SDR's individual check, the same % is applied to their own actual lead volume — not an even split — since leads aren't divided 50/50.">ⓘ</span></div>
+          <div class="goal-label">% Qualified target <span class="goal-info" title="Leads Qualified goal = this % × Lead Volume goal (team). Each SDR's individual check applies the same % to their own actual lead volume, not an even split.">ⓘ</span></div>
           <div class="goal-input-row">
             <input class="goal-input" type="number" id="goal_pct_qual" placeholder="e.g. 40" oninput="saveGoals(); renderDashboard()">
             <span class="goal-unit">%</span>
@@ -1342,7 +1342,7 @@
     <div class="ae-baseline-section" id="aeBaselineSection">
       <div class="ae-baseline-header" onclick="toggleAEBaselineSection()">
         <div class="ae-baseline-header-left">
-          <span class="ae-baseline-title">AE Baseline <span class="goal-info" title="A frozen, one-time Airtable export from before SDRs existed, when Account Executives (Owner field) ran full-cycle deals themselves — no SDR-to-AE handoff, so there's no AE-Disqualified-Rate or Speed-to-Lead equivalent (no Aircall data from that era). Every other metric is computed with the exact same qualification/meeting-status logic used for SDRs, respecting the Leads: B2B/B2C/All filter above, so it's an apples-to-apples 'what did performance look like before SDRs' benchmark. Load once — this data doesn't change, so there's no need to re-upload it.">ⓘ</span></span>
+          <span class="ae-baseline-title">AE Baseline <span class="goal-info" title="A frozen, one-time export from before SDRs existed, when AEs (Owner field) ran full-cycle deals themselves — no SDR-to-AE handoff, so no AE-Disqualified-Rate or Speed-to-Lead equivalent (no Aircall data from that era). Every other metric uses the same qualification/meeting-status logic as SDRs, respecting the Leads: filter above — an apples-to-apples 'before SDRs' benchmark. Load once; this data doesn't change.">ⓘ</span></span>
           <span class="ae-baseline-sub" id="aeBaselineHeaderNote">Click to expand — load once, compare SDR performance to the pre-SDR AE era</span>
         </div>
         <span class="ae-baseline-chevron">&#9654;</span>
@@ -1362,7 +1362,7 @@
     <div class="mandate-section" id="mandateSection">
       <div class="mandate-header" onclick="toggleMandateSection()">
         <div class="mandate-header-left">
-          <span class="mandate-title">Mandate Scoreboard <span class="goal-info" title="Progress against the SDR Team Lead onboarding doc and strategic briefing (May 2026): the six Team Lead KPIs, the 90-day gates (counted from June 1, 2026), and the funnel numbers the founders watch. Everything here counts B2B leads only — the briefing's 1,700/month figure is business leads (BL), which is what the mandate is about — summed across all SDRs (team roll-up, not per SDR) for the current calendar month, regardless of the filters above. Doc baselines are shown as references; targets are editable below and via Monthly Targets.">ⓘ</span></span>
+          <span class="mandate-title">Mandate Scoreboard <span class="goal-info" title="Progress against the SDR Team Lead onboarding doc and strategic briefing (May 2026): the six Team Lead KPIs, the 90-day gates (from June 1, 2026), and the founders' funnel numbers. Counts B2B leads only (the briefing's 1,700/month figure is business leads), summed across all SDRs — team roll-up, not per SDR — for the current calendar month, regardless of the filters above. Doc baselines are references; targets are editable below and via Monthly Targets.">ⓘ</span></span>
           <span class="mandate-sub" id="mandateHeaderNote">Progress vs. the 90-day mandate — counted from June 1, 2026</span>
         </div>
         <span class="mandate-chevron">&#9654;</span>
@@ -2957,20 +2957,20 @@ function renderSummaryCards(days) {
   const infoLeadVolume = isCommission
     ? `Count of leads created in the selected range, currently filtered to B2B leads only (Commission View always uses B2B as the denominator regardless of the Leads: dropdown).${aeNote}`
     : `Count of leads created in the selected range, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
-  const infoMeetingsBooked = `Count of leads counted as a booked meeting: Meeting Status is Scheduled, Done, Rejected, or Not Atended, or the deal closed within 2 hours of the lead being created (an instant/self-serve close, counted as a completed meeting so this stays consistent with Lead Volume and Qualified Leads) — a Closed deal that took longer than 2 hours with no Meeting Status doesn't count on its own — filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Note: the Commission tab's own Meetings figure excludes instant closes, since they're not a real SDR-run meeting for payout purposes.${aeNote}`;
+  const infoMeetingsBooked = `Meeting Status = Scheduled, Done, Rejected, or Not Atended, or an instant close (closed within 2h of lead creation, counted as a meeting for consistency with Lead Volume/Qualified) — a Closed deal past 2h with no Meeting Status doesn't count alone. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Commission's own Meetings figure excludes instant closes — not a real SDR meeting for payout.${aeNote}`;
   const infoMeetingRate = isCommission
     ? `Meetings Booked (B2B+B2C combined) ÷ B2B-only Lead Volume — Commission View judges the combined meeting count against the B2B lead denominator.${aeNote}`
     : `Meetings Booked ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
-  const infoQualified = `Count of leads whose Sales status is on the explicit qualified list (Hot, Warm, Pending, Closed, Lost, refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need a scheduled follow-up, Qualified SDR, Disqualified AE). Blank, Disqualified, Cold, and Non respondant are non-qualified — a booked meeting no longer overrides the status (those contradictions show in the Hygiene Report instead). Blank-status legacy rows with SQL status = Qualified still count. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
+  const infoQualified = `Sales status on the qualified list: Hot, Warm, Pending, Closed, Lost, refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need follow-up, Qualified SDR, Disqualified AE. Blank/Disqualified/Cold/Non respondant don't count — a booked meeting no longer overrides the status (contradictions show in Hygiene Report instead); legacy blank-status rows with SQL status = Qualified still do. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
   const infoPctQualified = isCommission
     ? `Leads Qualified (B2B+B2C combined) ÷ B2B-only Lead Volume.${aeNote}`
-    : `Leads Qualified ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Qualified = Sales status on the explicit qualified list; blank/Disqualified/Cold/Non respondant are non-qualified regardless of meeting status.${aeNote}`;
+    : `Leads Qualified ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Qualified = status allowlist; blank/Disqualified/Cold/Non respondant don't count regardless of meeting status.${aeNote}`;
   const infoNR = isCommission
-    ? `Non-Responsive leads (B2B+B2C combined) ÷ B2B-only Lead Volume. Non-responsive = Disqualified reason "Not responsive" or Sales status "Non respondant" (includes leads still mid-cadence, not yet given up on). Lower is better. The Mandate Scoreboard's non-responsive rate is narrower — terminal Not-responsive only, to match the strategic briefing's baseline.${aeNote}`
-    : `Leads marked Sales status = Non respondant or Disqualified reason = Not responsive (includes leads still mid-cadence, not yet given up on), ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Lower is better. The Mandate Scoreboard's non-responsive rate is narrower — terminal Not-responsive only, to match the strategic briefing's baseline.${aeNote}`;
+    ? `Non-Responsive leads (B2B+B2C) ÷ B2B-only Lead Volume. Non-responsive = Disqualified reason "Not responsive" or Sales status "Non respondant" (includes leads still mid-cadence). Lower is better. The Mandate Scoreboard's version is narrower — terminal Not-responsive only, matching the strategic briefing's baseline.${aeNote}`
+    : `Sales status = Non respondant or Disqualified reason = Not responsive (includes leads still mid-cadence) ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Lower is better. The Mandate Scoreboard's version is narrower — terminal Not-responsive only, matching the strategic briefing's baseline.${aeNote}`;
   const infoAEDQ = `Count of leads the AE bounced back as wrongly qualified (Sales status contains "Disqualified AE") — measures SDR hand-off quality, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
   const infoPipeline = `Snapshot as of the last day in range: leads whose Sales status is NOT Closed, Disqualified, Lost, Deposit refund, or blank — i.e. still open/in-progress, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
-  const infoNoShow = `Meetings the lead didn't show up for (Meeting Status = Meeting Not Atended) ÷ booked meetings (Scheduled + Done + Not Atended + Rejected, minus instant closes) in the selected range — the same booked definition commission uses. Meeting Scheduled is included in the denominator (not excluded as "hasn't happened yet") so a lead whose deal already went Lost/Disqualified/Closed without its Meeting Status ever being updated off Scheduled doesn't just disappear from the math; note this means genuinely brand-new upcoming meetings also count here, so expect this rate to read a bit higher in the most recent week or two before those meetings resolve. Meeting Rejected counts toward the denominator but not the numerator — a rejection is the AE's call on qualification, not a client no-show. Lower is better. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Full breakdown in the "No-Show Rate by SDR" chart below.`;
+  const infoNoShow = `Meeting Not Atended ÷ booked meetings (Scheduled + Done + Not Atended + Rejected, minus instant closes) in range — same booked definition commission uses. Scheduled is in the denominator so a lead whose deal resolved without Meeting Status being updated off Scheduled doesn't vanish from the math (this also means brand-new upcoming meetings count here, so the rate reads higher in the most recent week or two before they resolve). Rejected counts in the denominator but not the numerator — that's the AE's qualification call, not a client no-show. Lower is better. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Full breakdown in the "No-Show Rate by SDR" chart below.`;
   document.getElementById('summaryCards').innerHTML = `
     ${countCard('Lead Volume', leadVolTotal, perSDR.map(s => ({ ...s, value: s.leadVol, goal: s.leadsGoal })), elapsed, daysInMo, showProjection, isCommission ? 'B2B leads only' : undefined, d.goalLeads, ae ? ae.leadsPerDay : null, infoLeadVolume, deltas.leadVol)}
     ${countCard('Meetings Booked', totalMeetings, perSDR.map(s => ({ ...s, value: s.meetings, goal: s.meetingsGoal })), elapsed, daysInMo, showProjection, undefined, d.goalMeetings, ae ? ae.meetingsPerDay : null, infoMeetingsBooked, deltas.meetings)}
@@ -3142,7 +3142,7 @@ function speedToLeadCard(label, medianMinutes, matched, eligible, mismatch, sdrL
   const enriched = sdrList.map(s => ({ ...s, value: s.medianMinutes != null ? s.medianMinutes : 0, goalVal }));
   return `<div class="card" data-label="${label}">
     ${expandBtn(label)}
-    <div class="card-label">${label} <span class="goal-info" title="Median minutes from a lead's creation to that SDR's first outbound call to it, matched by phone number from the Aircall call-history export (median, not mean, so a few stale/unreliable matches can't skew the number). Leads created before your Call History export's own earliest call are excluded entirely — there's no reliable way to know when those were first called — as are matches over 48h (almost certainly a missed early call, not a real gap). On-hours/Off-hours split per the SDR Lead Routing Logic doc, using each SDR's own local time (fixed EST for MJ/Gospel, CET for Mark/Levi) — on-hours is that SDR's solo shift plus their overlap window, Monday–Friday only; off-hours is everything else, including the overnight round-robin and all day Saturday/Sunday (nobody works weekends, so a weekend lead is always off-hours regardless of what time it came in, even if the clock time would normally fall inside that SDR's weekday shift).">ⓘ</span></div>
+    <div class="card-label">${label} <span class="goal-info" title="Median minutes from a lead's creation to that SDR's first outbound call, matched by phone number from the Aircall export (median, not mean, so a few stale matches can't skew it). Leads before your Call History export's own earliest call are excluded — no reliable way to know when they were first called — as are matches over 48h (almost certainly a missed early call, not a real gap). On/Off-hours split per the SDR Lead Routing Logic doc, using each SDR's own local time (EST for MJ/Gospel, CET for Mark/Levi) — on-hours is that SDR's solo shift plus overlap window, Monday–Friday only; off-hours is everything else, including the overnight round-robin and all weekend (weekend leads are always off-hours, regardless of clock time).">ⓘ</span></div>
     <div class="card-value">${medianMinutes != null ? fmtMinutes(medianMinutes) : '—'}</div>
     <div class="card-sub">${matched}/${eligible} eligible leads called (${matchedPct}%)${mismatch ? ` · ${mismatch} flagged: different SDR than lead owner` : ''}</div>
     ${deltaHtml || ''}
@@ -3363,17 +3363,17 @@ const ACTIVITY_METRICS = {
   leadVol: {
     label: 'Lead Volume', field: 'leadVol',
     singleSpec: (d, ae) => ({ type: 'count', field: 'leadVol', cumulativeAllowed: true, aeBaseline: ae ? ae.leadsPerDay : null }),
-    info: 'Count of leads created per bucket, after your Leads: filter (B2B/B2C/All/Commission) is applied. Cumulative toggle switches from per-bucket counts to a running total across the range. No Target/Pace line shown for this straight count chart.'
+    info: 'Count of leads created per bucket, after the Leads: filter (B2B/B2C/All/Commission). Cumulative toggle switches to a running total across the range. No Target/Pace line for this straight count.'
   },
   meetings: {
     label: 'Meetings Booked', field: 'meetings',
     singleSpec: (d, ae) => ({ type: 'count', field: 'meetings', goal: d.goalMeetings, pace: true, aeBaseline: ae ? ae.meetingsPerDay : null }),
-    info: 'Count of leads counted as a booked meeting: Meeting Status is Scheduled, Done, Rejected, or Not Atended — a Closed deal with no Meeting Status no longer counts on its own — excluding deals that closed within 2 hours of the lead being created (an instant/self-serve close, not a real SDR-run meeting), per bucket. Dashed Target = your Meetings Booked goal (Lead Volume goal × Meeting Booked Rate target); dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected).'
+    info: 'Meeting Status = Scheduled, Done, Rejected, or Not Atended, per bucket — excludes instant closes (closed within 2h of lead creation, not a real SDR meeting) and Closed deals with no Meeting Status. Dashed Target = Lead Volume goal × Meeting Booked Rate target; dashed Pace = trailing 3-bucket rolling rate.'
   },
   meetingsHeld: {
     label: 'Meetings Held', field: 'meetings_held',
     singleSpec: () => ({ type: 'count', field: 'meetings_held', pace: true }),
-    info: 'Count of leads whose Meeting Status is exactly Meeting Done, or an instant close (a deal closed within 2 hours of the lead being created, treated as a completed meeting), per bucket — distinct from Meetings Booked (which also counts still-upcoming Scheduled meetings). Dashed Pace = a trailing 3-bucket rolling run rate (3 weeks/days/months, matching whatever granularity is selected). No goal/Target line for this one.'
+    info: 'Count of leads with Meeting Status = Meeting Done, or an instant close (closed within 2h of lead creation) — distinct from Meetings Booked, which also counts still-upcoming Scheduled meetings. Dashed Pace = trailing 3-bucket rolling run rate. No Target line.'
   }
 };
 
@@ -3418,7 +3418,7 @@ function renderActivityChart(chartDays, d, ae) {
   if (titleEl) titleEl.textContent = metrics.map(k => ACTIVITY_METRICS[k].label).join(' + ');
   const infoEl = document.getElementById('info-chartActivity');
   const infoText = metrics.length > 1
-    ? `Overlaid, not stacked: ${metrics.map(k => ACTIVITY_METRICS[k].label).join(', ')} — same-width bars sharing one x slot, layered back-to-front (Lead Volume back/lightest, Meetings Booked middle, Meetings Held front/darkest, all shaded from whichever group's own color is showing) so you can see at a glance what share of that bucket made it from one stage to the next. These numbers don't sum to anything meaningful, so they're deliberately not stacked. Hover any bar to see the conversion percentages behind it — Meetings Booked as a % of that bucket's Lead Volume (the baseline it was generated from), Meetings Held as a % of both Lead Volume and Booked. Uncheck a metric above to drop it. The Group dropdown splits this into Combined (one bar), US vs OUS Teams, or Per SDR — Per SDR and Teams cap out at Weekly/Monthly (Daily gets too cramped with this many layers).`
+    ? `Overlaid, not stacked: ${metrics.map(k => ACTIVITY_METRICS[k].label).join(', ')} — same-width bars layered back-to-front (Lead Volume back/lightest, Meetings Booked middle, Meetings Held front/darkest) so you can see what share made it from one stage to the next. Numbers don't sum to anything meaningful, so they're not stacked. Hover a bar for conversion %s: Meetings Booked ÷ Lead Volume, Meetings Held ÷ both. Uncheck a metric to drop it. Group dropdown: Combined, US vs OUS Teams, or Per SDR — Per SDR/Teams cap at Weekly/Monthly (Daily too cramped with this many layers).`
     : ACTIVITY_METRICS[metrics[0]].info;
   if (infoEl) infoEl.dataset.base = infoText;
   const cumWrap = document.getElementById('cumulativeToggleWrap-chartActivity');
@@ -4299,7 +4299,7 @@ function renderMandateSection() {
   const gateTargets = [s.gateM1, s.gateM2, s.gateM3];
   const rows = [
     {
-      label: 'Hiring milestones', info: 'Current active Coordinator count (set below) vs. each month\'s cumulative team-size gate — editable below, defaults to the onboarding doc\'s 4 by June, 5 by July, 6 by August. There\'s no historical headcount data, so every month compares against the SAME live count; "…" means that gate isn\'t due yet, so it\'s not scored as behind.',
+      label: 'Hiring milestones', info: 'Current active Coordinator count vs. each month\'s cumulative team-size gate — editable below, defaults to 4 by June, 5 by July, 6 by August. No historical headcount data, so every month compares against the SAME live count; "…" means that gate isn\'t due yet.',
       target: `${s.gateM1} by Jun · ${s.gateM2} by Jul · ${s.gateM3} by Aug`,
       cells: MANDATE_GATES.map((g, i) => {
         const due = g.deadline <= today;
@@ -4309,7 +4309,7 @@ function renderMandateSection() {
       })
     },
     {
-      label: 'Team meetings booked', info: 'Meetings booked ÷ B2B leads, whole team (all 4 SDRs), per calendar month — the onboarding doc measures the roll-up, not per SDR. Raw counts shown in parentheses. Target = your Meeting Booked Rate target.',
+      label: 'Team meetings booked', info: 'Meetings booked ÷ B2B leads, whole team (4 SDRs), per calendar month — the onboarding doc measures the roll-up, not per SDR. Raw counts in parentheses. Target = your Meeting Booked Rate target.',
       target: d.goalMeetingRate ? `≥ ${d.goalMeetingRate}%` : 'set Meeting Booked Rate target',
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.meetingRatePct != null ? `${r.meetingRatePct.toFixed(1)}% (${r.meetings})` : null, r.meetingsOk))
     },
@@ -4319,7 +4319,7 @@ function renderMandateSection() {
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.qualPct != null ? r.qualPct.toFixed(1) + '%' : null, r.qualOk))
     },
     {
-      label: `Speed-to-lead (${hoursLabel})`, info: 'Median minutes from a B2B lead arriving to the first call, per month — filtered by the dropdown above (currently: ' + hoursLabel + '). Research: calling within 5 minutes makes you ~21× more likely to qualify the lead vs waiting 30.',
+      label: `Speed-to-lead (${hoursLabel})`, info: 'Median minutes from a B2B lead arriving to first call, per month — filtered by the dropdown above (currently: ' + hoursLabel + '). Calling within 5 minutes makes you ~21× more likely to qualify the lead vs waiting 30.',
       target: d.goalSpeedToLead ? `≤ ${d.goalSpeedToLead}m` : 'set goal below (suggested: 5m)',
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.stl != null ? fmtMinutes(r.stl) : (r.hasData && rawCalls ? '—' : null), r.stlOk))
     },
@@ -4329,27 +4329,27 @@ function renderMandateSection() {
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.covPct != null ? r.covPct.toFixed(1) + '%' : null, r.covOk))
     },
     {
-      label: 'Handoff quality (AE-rated)', info: 'AE Disqualified Rate: leads the AE bounced back as "Disqualified AE (wrong SDR qualification)" ÷ the team\'s qualified leads for that month. This is the AE\'s own judgment on the qualifications the team handed off — not a proxy — since it\'s the one place an AE explicitly overrules an SDR\'s call. Lower is better.',
+      label: 'Handoff quality (AE-rated)', info: 'AE Disqualified Rate: leads the AE bounced back as "Disqualified AE (wrong SDR qualification)" ÷ the team\'s qualified leads that month — the AE\'s own judgment on what the team handed off, the one place an AE explicitly overrules an SDR\'s call. Lower is better.',
       target: `≤ ${s.handoffMax}%`,
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.aeDqPct != null ? r.aeDqPct.toFixed(1) + '%' : null, r.aeDqOk))
     },
     {
-      label: 'Meeting no-show rate', info: 'Meeting Status = Meeting Not Attended ÷ that month\'s booked meetings (Scheduled + Done + Not Attended + Rejected, minus instant closes — the same booked definition commission uses). Scheduled is included so a lead whose deal already resolved Lost/Disqualified/Closed without Meeting Status ever being corrected off Scheduled still counts. A lead simply not showing up — distinct from Handoff quality above, which is the AE\'s judgment on qualification.',
+      label: 'Meeting no-show rate', info: 'Meeting Not Attended ÷ that month\'s booked meetings (Scheduled + Done + Not Attended + Rejected, minus instant closes — same booked definition commission uses). Scheduled is included so a lead whose deal resolved without Meeting Status being corrected off Scheduled still counts. A lead not showing up — distinct from Handoff quality above, which is the AE\'s judgment on qualification.',
       target: `≤ ${s.noShowMax}%`,
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.noShowPct != null ? r.noShowPct.toFixed(1) + '%' : null, r.noShowOk))
     },
     {
-      label: 'Non-responsive rate', info: 'Leads permanently disqualified as unreachable (Disqualified reason = Not responsive) ÷ that month\'s B2B leads. Deliberately excludes the transient "Non respondant" Sales status a lead carries mid-cadence while still being worked — this row only counts leads given up on for good, to match how the briefing\'s 29% baseline was measured. (The Non-Responsive Rate card up top is broader and also counts mid-cadence leads — see its ⓘ.) The briefing calls this the single largest leak in the company funnel. Company baseline is 29% (all business leads, Jan–May YTD) — your team works the low-value/incomplete tier, so expect to run above that; the founders watch the direction, not the absolute number. Target editable below.',
+      label: 'Non-responsive rate', info: 'Leads permanently disqualified as unreachable ÷ that month\'s B2B leads — excludes the transient "Non respondant" status (lead still being worked; the top card\'s broader version includes those too). The briefing flags this as the funnel\'s biggest leak. Baseline: 29% (Jan–May YTD, all business leads) — your team works the low-value tier, so expect to run above it; founders track direction, not the raw number. Target editable below.',
       target: `< ${s.nrMax}%`,
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.nrPct != null ? r.nrPct.toFixed(1) + '%' : null, r.nrOk))
     },
     {
-      label: 'Lead → closed deal', info: 'Closed (won) deals ÷ that month\'s B2B leads — of every 100 leads that arrived that month, how many have turned into paying deals so far. Company benchmark is 14.2%. Recent months always run low here since a lead created this month hasn\'t had time to close yet — this isn\'t a same-month conversion rate, it\'s a running tally that keeps rising as those leads close later. Target editable below.',
+      label: 'Lead → closed deal', info: 'Closed (won) deals ÷ that month\'s B2B leads — of every 100 leads that month, how many have become paying deals so far. Benchmark: 14.2%. Recent months read low since a lead created this month hasn\'t had time to close yet — this is a running tally that rises as leads close later. Target editable below.',
       target: `≥ ${s.leadToDealMin}% (catches up over time)`,
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.leadToDealPct != null ? `${r.leadToDealPct.toFixed(1)}% (${r.closed})` : null, r.leadToDealOk))
     },
     {
-      label: 'Qualified → closed rate', info: 'Closed (won) deals ÷ that month\'s qualified B2B leads. The strategic briefing calls this out alongside Lead → closed deal as one of the two key conversion rates — this one isolates the AE\'s close rate on what your team hands off, separate from your own qualification volume. Company benchmark is 35%. Like Lead → closed deal, recent months run low since qualified leads from this month haven\'t all had time to close yet. Target editable below.',
+      label: 'Qualified → closed rate', info: 'Closed (won) deals ÷ that month\'s qualified B2B leads — one of the briefing\'s two key conversion rates alongside Lead → closed deal, isolating the AE\'s close rate on what your team hands off. Benchmark: 35%. Like Lead → closed deal, recent months read low since this month\'s qualified leads haven\'t all had time to close. Target editable below.',
       target: `≥ ${s.qualToCloseMin}% (catches up over time)`,
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.qualToClosePct != null ? `${r.qualToClosePct.toFixed(1)}%` : null, r.qualToCloseOk))
     }
@@ -4486,6 +4486,14 @@ function funnelDelta(current, prev, isPct) {
   return `<span class="funnel-delta ${up ? 'good' : 'bad'}">${up ? '▲' : '▼'} ${Math.abs(diff).toFixed(1)}${isPct ? 'pp' : '%'}</span>`;
 }
 
+// Live view-state sentence appended to every ⓘ in this section, so the
+// tooltip always names the mode/lead-type actually on screen instead of a
+// static generic explanation — same idea as chartViewContext for charts.
+function funnelViewContext(st, cols, MODE_NAMES, TYPE_NAMES) {
+  const partialNote = cols.some(c => c.partial) ? ', current period still in progress' : '';
+  return ` Currently showing: ${TYPE_NAMES[st.leadType]}, ${MODE_NAMES[st.mode]}${partialNote}.`;
+}
+
 function renderFunnelSection() {
   const table = document.getElementById('funnelTable');
   if (!table) return;
@@ -4515,15 +4523,24 @@ function renderFunnelSection() {
   const partialNote = cols.some(c => c.partial) ? ' — current period is still in progress, so its raw counts trail full periods' : '';
   document.getElementById('funnelHeaderNote').textContent = `${TYPE_NAMES[st.leadType]}: leads → qualified → meetings done → closed${partialNote}`;
 
+  // Live "Currently showing: ..." context appended to every ⓘ in this section,
+  // same convention as chartViewContext/updateChartInfoTooltip for chart cards.
+  const context = funnelViewContext(st, cols, MODE_NAMES, TYPE_NAMES);
+  const infoEl = document.getElementById('funnelSectionInfo');
+  if (infoEl) {
+    if (infoEl.dataset.base === undefined) infoEl.dataset.base = infoEl.title;
+    infoEl.title = infoEl.dataset.base + context;
+  }
+
   const rate = (num, den) => den ? num / den * 100 : null;
   const cohortNote = 'Closed deals are counted by lead creation date (cohort), so recent periods read low until their leads have had time to close — the rate keeps rising as they do.';
   const rows = [
-    { label: 'Leads', isPct: false, get: s => s.leads, info: 'Leads created in the period, after the lead-type filter above.' },
-    { label: 'Qualified leads', isPct: false, get: s => s.qualified, info: 'Leads whose Sales status marks them qualified — same definition as the % Qualified card and the Mandate Scoreboard.' },
-    { label: 'Meetings done', isPct: false, get: s => s.meetingsDone, info: 'Meetings that actually happened: Meeting Status = Meeting Done, plus instant closes (a deal closed right after creation implies a meeting). Same as the Meetings Held definition on the cards. Excludes still-upcoming Scheduled meetings.' },
-    { label: 'Qualified → closed rate', isPct: true, get: s => rate(s.closed, s.qualified), info: 'Closed (won) deals ÷ qualified leads from the same period. ' + cohortNote },
-    { label: 'Meeting → closed rate', isPct: true, get: s => rate(s.closed, s.meetingsDone), info: 'Closed (won) deals ÷ meetings done from the same period. ' + cohortNote },
-    { label: 'Lead → closed rate', isPct: true, get: s => rate(s.closed, s.leads), info: 'Closed (won) deals ÷ all leads from the same period. ' + cohortNote }
+    { label: 'Leads', isPct: false, get: s => s.leads, info: 'Leads created in the period, after the lead-type filter above.' + context },
+    { label: 'Qualified leads', isPct: false, get: s => s.qualified, info: 'Leads whose Sales status marks them qualified — same definition as the % Qualified card and the Mandate Scoreboard.' + context },
+    { label: 'Meetings done', isPct: false, get: s => s.meetingsDone, info: 'Meeting Status = Meeting Done, or an instant close (deal closed right after creation) — same as Meetings Held on the cards, excludes still-upcoming Scheduled meetings.' + context },
+    { label: 'Qualified → closed rate', isPct: true, get: s => rate(s.closed, s.qualified), info: 'Closed (won) deals ÷ qualified leads from the same period. ' + cohortNote + context },
+    { label: 'Meeting → closed rate', isPct: true, get: s => rate(s.closed, s.meetingsDone), info: 'Closed (won) deals ÷ meetings done from the same period. ' + cohortNote + context },
+    { label: 'Lead → closed rate', isPct: true, get: s => rate(s.closed, s.leads), info: 'Closed (won) deals ÷ all leads from the same period. ' + cohortNote + context }
   ];
 
   table.innerHTML = `
@@ -5833,26 +5850,26 @@ function commissionCard(sdr, days, monthKey) {
         <div class="commission-stat-value">${m.b2bLeads}</div>
       </div>
       <div class="commission-stat">
-        <div class="commission-stat-label">B2C Leads <span class="goal-info" title="Count of B2C (consumer) leads that arrived in the selected period, for this SDR only. Not used as the denominator for any incentive rate below — those are all judged as a % of B2B leads only — but B2C leads DO count toward the Qualified Leads and Meetings totals themselves.">ⓘ</span></div>
+        <div class="commission-stat-label">B2C Leads <span class="goal-info" title="Count of B2C (consumer) leads in the period, for this SDR only. Not used as the denominator for any incentive rate below — those are judged as a % of B2B leads only — but B2C leads DO count toward Qualified Leads and Meetings totals.">ⓘ</span></div>
         <div class="commission-stat-value">${m.b2cLeads}</div>
       </div>
       <div class="commission-stat">
-        <div class="commission-stat-label">Qualified Leads <span class="goal-info" title="Counted from ALL of this SDR's leads in the period — B2B and B2C combined, not B2B-only — using the same qualified-status allowlist as the rest of the dashboard. The rate shown below is that count divided by B2B leads only (the incentive brackets are judged against B2B volume), so a B2C qualification can push the rate above 100% of B2B leads in an unusual month.">ⓘ</span></div>
+        <div class="commission-stat-label">Qualified Leads <span class="goal-info" title="Counted from ALL of this SDR's leads — B2B and B2C combined, not B2B-only — using the same qualified-status allowlist as the rest of the dashboard. The rate below divides that count by B2B leads only (incentive brackets are judged against B2B volume), so a B2C qualification can push the rate above 100% in an unusual month.">ⓘ</span></div>
         <div class="commission-stat-value">${m.qualified}</div>
         <div class="commission-stat-sub">${m.qualifiedRate.toFixed(1)}% of B2B leads</div>
       </div>
       <div class="commission-stat">
-        <div class="commission-stat-label">Meetings <span class="goal-info" title="Counted from ALL of this SDR's leads in the period — B2B and B2C combined, not B2B-only. Meeting Status = Scheduled, Done, Rejected, or Not Attended. A Closed deal with a blank Meeting Status no longer counts on its own — a Sales status alone isn't evidence a meeting actually happened; it still counts toward Qualified Leads and New Sales Incentive, just not here. Also excluded: a deal that closed within 2 hours of the lead being created, even if Meeting Status is populated — that's an automatic/instant close (e.g. an auto-deposit trigger), not a real SDR-run meeting. The rate shown below is that count divided by B2B leads only, so B2C meetings can push the rate above 100% of B2B leads in an unusual month.">ⓘ</span></div>
+        <div class="commission-stat-label">Meetings <span class="goal-info" title="Counted from ALL of this SDR's leads — B2B and B2C combined. Meeting Status = Scheduled, Done, Rejected, or Not Attended. A Closed deal with blank Meeting Status doesn't count alone — a Sales status isn't evidence a meeting happened; it still counts toward Qualified Leads/New Sales Incentive, just not here. Also excluded: a deal closed within 2h of lead creation (an instant/auto-deposit close, not a real SDR meeting). The rate below divides by B2B leads only, so B2C meetings can push it above 100% in an unusual month.">ⓘ</span></div>
         <div class="commission-stat-value">${m.meetings}</div>
         <div class="commission-stat-sub">${m.meetingRate.toFixed(1)}% of B2B leads</div>
       </div>
       <div class="commission-stat" style="grid-column: 1 / -1;">
-        <div class="commission-stat-label">Closed Deals (${monthLabelFromKey(monthKey)}) <span class="goal-info" title="Deals with Sales status = Closed whose Closed date falls in this calendar month — regardless of when the lead arrived or the meeting was booked (could be from an earlier month). Includes both B2B and B2C leads. Looks across this SDR's ENTIRE loaded history, not just the currently selected date range, since a deal can close well after the lead/meeting that started it.">ⓘ</span></div>
+        <div class="commission-stat-label">Closed Deals (${monthLabelFromKey(monthKey)}) <span class="goal-info" title="Deals with Sales status = Closed whose Closed date falls in this calendar month — regardless of when the lead/meeting originated. Includes both B2B and B2C. Looks across this SDR's ENTIRE loaded history, not just the selected range, since a deal can close well after it started.">ⓘ</span></div>
         <div class="commission-stat-value">${m.closedDeals}</div>
         <div class="commission-stat-sub">$${Math.round(m.closedRevenueUSD).toLocaleString()} closed revenue, USD-equivalent (deals that CLOSED this month, regardless of when the lead/meeting originated)</div>
       </div>
       <div class="commission-stat" style="grid-column: 1 / -1;">
-        <div class="commission-stat-label">Meeting Quality Multiplier <span class="goal-info" title="Rejected or no-show meetings ÷ all meetings this SDR booked, B2B leads only, in a trailing 30-day window ending 1 week ago (not the selected date range or calendar month — see \'How compensation works\' below for why). Includes meetings still Scheduled or already Closed within that window. Scales the Qualified Leads and Meeting incentives only — New Sales Incentive is unaffected.">ⓘ</span></div>
+        <div class="commission-stat-label">Meeting Quality Multiplier <span class="goal-info" title="Rejected or no-show meetings ÷ all meetings booked, B2B only, in a trailing 30-day window ending 1 week ago (not the selected range/month — see \'How compensation works\' below for why). Includes meetings still Scheduled or already Closed within that window. Scales Qualified Leads and Meeting incentives only — New Sales Incentive is unaffected.">ⓘ</span></div>
         <div class="commission-stat-value">&times;${payout.tier.multiplier.toFixed(2)}</div>
         <div class="commission-stat-sub">${payout.rate.toFixed(1)}% rejection — ${payout.bad} of ${payout.booked} booked meetings rejected/no-show (trailing 30 days, ending 1 week ago; B2B leads only, incl. scheduled &amp; closed)</div>
       </div>
@@ -6002,7 +6019,7 @@ function renderAEBaselineSection() {
 
   const sdrAllTime = computeSDRAllTimeMetrics();
   const sdrTableHtml = sdrAllTime ? `
-    <div class="ae-baseline-subheading">SDR Averages <span class="goal-info" title="Full loaded Bookings history (${sdrAllTime.firstDay} – ${sdrAllTime.lastDay}) for each SDR — not affected by the Range: filter above, so it stays a stable benchmark next to the AE table, computed the same way (and respecting the same B2B/B2C/All Leads: filter).">ⓘ</span></div>
+    <div class="ae-baseline-subheading">SDR Averages <span class="goal-info" title="Full loaded Bookings history (${sdrAllTime.firstDay} – ${sdrAllTime.lastDay}) for each SDR — not affected by the Range: filter, so it's a stable benchmark next to the AE table (same B2B/B2C/All Leads: filter, computed the same way).">ⓘ</span></div>
     <table class="report-table">
       ${benchmarkTableHeader('SDR')}
       <tbody>${sdrAllTime.perSDR.map(({ sdr, metrics: m }) => benchmarkRow(sdr.name, m)).join('')}</tbody>
