@@ -2158,14 +2158,22 @@ function autoBookedExcluded() {
   const el = document.getElementById('autoBookedToggle');
   return !!el && el.value === 'exclude';
 }
+// Summary Cards/charts/Mandate Scoreboard don't call computeMetrics() live on
+// every render — they read from the allData/allDataB2B/allDataB2C/allDataAll
+// cache that recomputeAllData() builds once per day/SDR (see its comment).
+// Since computeMetrics() calls isMeetingBooked(), which reads this toggle,
+// the cache goes stale the moment the toggle changes unless it's rebuilt —
+// same reason saveLeadTypeFilter() below also calls recomputeAllData().
 function saveAutoBookedToggle() {
   try { localStorage.setItem('sdr_auto_booked_toggle', document.getElementById('autoBookedToggle').value); } catch (e) {}
+  recomputeAllData();
 }
 function loadAutoBookedToggle() {
   try {
     const saved = localStorage.getItem('sdr_auto_booked_toggle');
     if (saved) document.getElementById('autoBookedToggle').value = saved;
   } catch (e) {}
+  recomputeAllData();
 }
 // Global Pace/"trend line" visibility — one switch for every chart instead of
 // a per-chart toggle, defaulting to Off since the rolling-trend line is more
