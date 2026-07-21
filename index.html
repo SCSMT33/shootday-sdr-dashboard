@@ -13,6 +13,7 @@
     --border: #e3e5ec;
     --accent: #4285f4;
     --accent-light: #cfe0fb;
+    --accent-mid: #7fb0f5;
     --accent-dark: #1e4fa8;
     --team: #4285f4;
     --goal: rgba(0,0,0,0.35);
@@ -755,9 +756,11 @@
   .funnel-viz-stage-label { font-size: 12px; font-weight: 700; fill: var(--text); }
   .funnel-viz-stage-value { font-size: 15px; font-weight: 800; fill: var(--text); }
   .funnel-viz-stage-prev { font-size: 11px; font-weight: 600; fill: var(--muted); }
+  .funnel-viz-rate-label { font-size: 12px; font-weight: 700; fill: var(--accent-dark); }
   #funnelSection.funnel-zoomed .funnel-viz-stage-label { font-size: 16px; }
   #funnelSection.funnel-zoomed .funnel-viz-stage-value { font-size: 22px; }
   #funnelSection.funnel-zoomed .funnel-viz-stage-prev { font-size: 15px; }
+  #funnelSection.funnel-zoomed .funnel-viz-rate-label { font-size: 16px; }
 
   .funnel-sdr-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
   .funnel-sdr-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; gap: 12px; }
@@ -4940,6 +4943,15 @@ const FUNNEL_VIZ_STAGES = [
   { key: 'meetingsDone', label: 'Meetings Done' },
   { key: 'closed', label: 'Closed' }
 ];
+// Style per layer, indexed by distance-from-current (0 = current/topmost,
+// 1 = previous, 2 = two periods back) — a 3-tone progression in one hue
+// family (light+faint -> mid -> solid+dark-outlined) so recency reads from
+// the shape alone, without relying on the legend text.
+const FUNNEL_VIZ_LAYER_STYLES = [
+  { fill: 'var(--accent)', fillOpacity: 0.65, stroke: 'var(--accent-dark)', strokeOpacity: 1, strokeWidth: 2.5, dash: null, legendBorder: '1.5px solid var(--accent-dark)' },
+  { fill: 'var(--accent-mid)', fillOpacity: 0.42, stroke: 'var(--accent)', strokeOpacity: 0.6, strokeWidth: 1.5, dash: '5,3', legendBorder: '1.5px dashed var(--accent)' },
+  { fill: 'var(--accent-light)', fillOpacity: 0.3, stroke: 'var(--accent-light)', strokeOpacity: 0.55, strokeWidth: 1.2, dash: '3,3', legendBorder: '1.5px dashed var(--accent-light)' }
+];
 function renderFunnelViz(cols) {
   const wrap = document.getElementById('funnelVizSvgWrap');
   const legend = document.getElementById('funnelVizLegend');
@@ -4950,24 +4962,25 @@ function renderFunnelViz(cols) {
     legend.innerHTML = '';
     return;
   }
-  const current = dataCols[dataCols.length - 1];
-  const prev = dataCols.length > 1 ? dataCols[dataCols.length - 2] : null;
-  const curVals = FUNNEL_VIZ_STAGES.map(s => current.stats[s.key] || 0);
-  const prevVals = prev ? FUNNEL_VIZ_STAGES.map(s => prev.stats[s.key] || 0) : null;
-  const maxVal = Math.max(...curVals, ...(prevVals || [0]), 1);
+  // Oldest -> newest, up to 3: current, previous, and 2-periods-back.
+  const layers = dataCols.slice(-3).map(c => ({ col: c, vals: FUNNEL_VIZ_STAGES.map(s => c.stats[s.key] || 0) }));
+  const current = layers[layers.length - 1];
+  const prevLayer = layers.length > 1 ? layers[layers.length - 2] : null;
+  const allVals = layers.flatMap(l => l.vals);
+  const maxVal = Math.max(...allVals, 1);
 
-  const W = 820, H = 210, padTop = 36, padBottom = 44, padX = 52;
+  const W = 820, H = 240, padTop = 66, padBottom = 44, padX = 52;
   const midY = padTop + (H - padTop - padBottom) / 2;
   const usableH = H - padTop - padBottom;
-  // 4 stages = 3 trapezoid segments spanning the full plot width, so the
-  // funnel's right tip lands exactly under the last label instead of a
-  // quarter-width short of it. Boundary x-positions (padX, padX+stageW, …)
-  // are both where each trapezoid segment starts/ends AND where its label
-  // and value sit — per Chase's ask, labels mark the start of their segment
-  // (the vertical seam line), not the segment's center.
+  // 4 stages = 3 trapezoid segments spanning the full plot width, so each
+  // segment's own tip lands exactly under its stage label instead of short
+  // of it. Boundary x-positions are both where each segment starts/ends AND
+  // where its stage label/value sit — labels mark the start of their
+  // segment (the vertical seam line), not the segment's center.
   const segments = FUNNEL_VIZ_STAGES.length - 1;
   const stageW = (W - padX * 2) / segments;
   const boundaryX = i => padX + i * stageW;
+  const midX = i => (boundaryX(i) + boundaryX(i + 1)) / 2;
   // Non-zero stages still get a thin sliver (6px) so they don't visually
   // vanish into the axis line and read as "no data" instead of "small".
   const heightFor = v => v > 0 ? Math.max((v / maxVal) * usableH, 6) : 0;
@@ -4983,36 +4996,75 @@ function renderFunnelViz(cols) {
     return d;
   };
 
-  const prevPath = prevVals ? trapezoidPath(prevVals) : '';
-  const curPath = trapezoidPath(curVals);
+  // Draw oldest first (bottom of the stack) so current always paints last,
+  // on top, and reads as the clearest/most solid shape on the page.
+  const shapePaths = layers.map((layer, idx) => {
+    const distanceFromCurrent = layers.length - 1 - idx;
+    const style = FUNNEL_VIZ_LAYER_STYLES[distanceFromCurrent];
+    const d = trapezoidPath(layer.vals);
+    const dashAttr = style.dash ? `stroke-dasharray:${style.dash};` : '';
+    return `<path d="${d}" style="fill:${style.fill};fill-opacity:${style.fillOpacity};stroke:${style.stroke};stroke-opacity:${style.strokeOpacity};stroke-width:${style.strokeWidth};${dashAttr}"></path>`;
+  }).join('');
 
-  const labels = FUNNEL_VIZ_STAGES.map((s, i) => {
+  // Stage name + value labels, at each of the 4 boundaries. Only current
+  // (bold) and the immediately-previous period (small "was X") get numbers
+  // here — the 2-periods-back layer is represented by its shape + legend
+  // only, so 3 overlaid stacks of numbers never compete for the same spot;
+  // its exact figures are always one glance away in the table below.
+  const stageLabels = FUNNEL_VIZ_STAGES.map((s, i) => {
     const x = boundaryX(i);
-    const curV = curVals[i];
-    const prevV = prevVals ? prevVals[i] : null;
+    const curV = current.vals[i];
+    const prevV = prevLayer ? prevLayer.vals[i] : null;
     const prevTspan = prevV != null ? `<tspan x="${x}" dy="15" class="funnel-viz-stage-prev">was ${prevV.toLocaleString()}</tspan>` : '';
-    return `<text x="${x}" y="${padTop - 16}" text-anchor="middle" class="funnel-viz-stage-label">${escapeHtml(s.label)}</text>
+    return `<text x="${x}" y="18" text-anchor="middle" class="funnel-viz-stage-label">${escapeHtml(s.label)}</text>
       <text x="${x}" y="${H - padBottom + 22}" text-anchor="middle">
         <tspan x="${x}" class="funnel-viz-stage-value">${curV.toLocaleString()}</tspan>
         ${prevTspan}
       </text>`;
   }).join('');
 
-  // Three-tone progression in one hue family (light -> solid -> dark outline)
-  // so "which one is more recent" reads at a glance without relying on the
-  // legend text: previous is a pale, dashed-outline tint (further back =
-  // fainter); current is the full solid accent fill with a darker, crisper
-  // outline on top (closer/now = clearest, most solid shape on the page).
-  wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-height:260px;display:block" preserveAspectRatio="xMidYMid meet">
-    ${prevPath ? `<path d="${prevPath}" style="fill:var(--accent-light);fill-opacity:0.55;stroke:var(--accent);stroke-opacity:0.55;stroke-width:1.5;stroke-dasharray:5,3"></path>` : ''}
-    <path d="${curPath}" style="fill:var(--accent);fill-opacity:0.65;stroke:var(--accent-dark);stroke-width:2.5"></path>
-    ${labels}
+  // Conversion-rate row, one per transition (3 of them), centered over each
+  // segment's midpoint — a dedicated row between the stage names and the
+  // funnel shape itself, deliberately never overlapping the (possibly
+  // 3-layer-deep) shape below it. Current period's rate is the headline;
+  // a small ▲/▼pp delta against the immediately-previous period's same
+  // transition sits right next to it — the "previous rate" the user asked
+  // for, without a second full row of numbers.
+  const rateLabels = [];
+  for (let i = 0; i < segments; i++) {
+    const x = midX(i);
+    const curFrom = current.vals[i], curTo = current.vals[i + 1];
+    const curRate = curFrom ? (curTo / curFrom * 100) : null;
+    const rateText = curRate != null ? curRate.toFixed(0) + '%' : '—';
+    let deltaSpan = '';
+    if (prevLayer && curRate != null) {
+      const prevFrom = prevLayer.vals[i], prevTo = prevLayer.vals[i + 1];
+      const prevRate = prevFrom ? (prevTo / prevFrom * 100) : null;
+      if (prevRate != null) {
+        const diff = curRate - prevRate;
+        if (Math.abs(diff) < 0.5) {
+          deltaSpan = `<tspan style="fill:var(--muted)" dx="6">—</tspan>`;
+        } else {
+          const up = diff > 0;
+          deltaSpan = `<tspan style="fill:${up ? 'var(--green)' : 'var(--red)'}" dx="6">${up ? '▲' : '▼'} ${Math.abs(diff).toFixed(0)}pp</tspan>`;
+        }
+      }
+    }
+    rateLabels.push(`<text x="${x}" y="46" text-anchor="middle" class="funnel-viz-rate-label">${rateText}${deltaSpan}</text>`);
+  }
+
+  wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-height:290px;display:block" preserveAspectRatio="xMidYMid meet">
+    ${shapePaths}
+    ${stageLabels}
+    ${rateLabels.join('')}
   </svg>`;
 
-  legend.innerHTML = `
-    <span><span class="funnel-viz-legend-swatch" style="background:var(--accent);border:1.5px solid var(--accent-dark)"></span>${escapeHtml(current.label)} (current)</span>
-    ${prev ? `<span><span class="funnel-viz-legend-swatch" style="background:var(--accent-light);border:1.5px dashed var(--accent)"></span>${escapeHtml(prev.label)} (previous)</span>` : ''}
-  `;
+  const legendItems = layers.slice().reverse().map((layer, idx) => {
+    const style = FUNNEL_VIZ_LAYER_STYLES[idx];
+    const tag = idx === 0 ? 'current' : idx === 1 ? 'previous' : '2 periods back';
+    return `<span><span class="funnel-viz-legend-swatch" style="background:${style.fill};border:${style.legendBorder}"></span>${escapeHtml(layer.col.label)} (${tag})</span>`;
+  });
+  legend.innerHTML = legendItems.join('');
 }
 
 function renderFunnelSection() {
