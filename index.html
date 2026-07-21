@@ -784,6 +784,18 @@
   .funnel-sdr-color-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
   .funnel-sdr-empty { color: var(--muted); font-size: 12px; }
 
+  /* CAPACITY & COST */
+  .capacity-team-block { margin-bottom: 22px; }
+  .capacity-team-block:last-child { margin-bottom: 0; }
+  .capacity-team-label { font-size: 12px; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .capacity-team-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .capacity-cost-summary { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0 18px; }
+  .capacity-cost-tile { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; min-width: 150px; }
+  .capacity-cost-tile-label { font-size: 11px; color: var(--muted); font-weight: 600; margin-bottom: 3px; }
+  .capacity-cost-tile-value { font-size: 18px; font-weight: 800; color: var(--text); }
+  .capacity-goal-input { width: 60px; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 5px; padding: 3px 6px; font-size: 12px; }
+  .capacity-over { color: var(--red); font-weight: 700; }
+
   /* DEFINITIONS */
   .definitions-list { columns: 1; margin: 0; }
   @media (min-width: 900px) { .definitions-list { columns: 2; column-gap: 32px; } }
@@ -1026,6 +1038,34 @@
             <div id="funnelSdrTables"></div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- CAPACITY & COST -->
+    <div class="mandate-section" id="capacitySection">
+      <div class="mandate-header" onclick="toggleCapacitySection()">
+        <div class="mandate-header-left">
+          <span class="mandate-title">Capacity &amp; Cost <span class="goal-info" id="capacitySectionInfo" title="Workload and spend, all scoped to last calendar month (same cohort Commission uses, independent of the Range: picker above). AE Capacity is grouped by team, not by individual SDR — see its own ⓘ for why. SDR Cost Efficiency's Total Compensation reuses the exact same base+bonus+incentive math as the Commission Calculator below, including each SDR's saved Base/Bonus inputs and the Meeting Quality Multiplier.">ⓘ</span></span>
+          <span class="mandate-sub" id="capacityHeaderNote">AE and SDR workload, and what the SDR team costs vs. what it brings in</span>
+        </div>
+        <span class="mandate-chevron">&#9654;</span>
+      </div>
+      <div class="mandate-body">
+        <div class="mandate-subheading-row">
+          <div class="mandate-subheading">AE Capacity, by team <span class="goal-info" title="Grouped by team (US Team / OUS Team), not by individual SDR: the data shows every AE on a regional team receives qualified leads from BOTH SDRs on the matching team, not one exclusively — e.g. Andrew Thomas gets leads from both MJ and Gospel. So there's no clean 1-to-1 SDR-to-AE line to draw; team-to-team is the honest grouping. Leads Routed = every lead assigned to that AE (via the Owner field), regardless of qualification status. No capacity target shown — there's no stated ceiling per AE in the data or docs yet.">ⓘ</span></div>
+        </div>
+        <div id="capacityAeTables"></div>
+
+        <div class="mandate-subheading-row" style="margin-top:24px">
+          <div class="mandate-subheading">SDR Capacity <span class="goal-info" title="Leads (B2B) is measured against the editable Capacity target below — defaults to 275/month, the onboarding brief's own steady-state target per Coordinator once the team reaches 6 people. Qualified/Meetings Booked/Closed use the same all-leads (B2B+B2C) definitions as everywhere else on this dashboard.">ⓘ</span></div>
+        </div>
+        <div style="overflow-x:auto"><table class="mandate-kpi-table" id="capacitySdrTable"></table></div>
+
+        <div class="mandate-subheading-row" style="margin-top:24px">
+          <div class="mandate-subheading">SDR Cost Efficiency <span class="goal-info" title="Total Compensation = Base + Bonus + Qualified Leads Incentive + Meeting Incentive + New Sales Incentive, exactly as computed on that SDR's Commission Calculator card (same saved Base/Bonus inputs, same Meeting Quality Multiplier) — edit an SDR's Base/Bonus on their Commission card below and it updates here too. Cost per Qualified Lead = Total Compensation ÷ Qualified Leads. AOV = closed revenue ÷ closed deals for that SDR's leads created last month — often \'—\' in a low-volume month, same caveat as the Commission card's own Closed Deals figure.">ⓘ</span></div>
+        </div>
+        <div id="capacityCostSummary" class="capacity-cost-summary"></div>
+        <div style="overflow-x:auto"><table class="mandate-kpi-table" id="capacityCostTable"></table></div>
       </div>
     </div>
 
@@ -1568,6 +1608,7 @@
       <div class="mandate-body">
         <dl class="definitions-list">
           <div class="definition-item"><dt>AE Baseline</dt><dd>A frozen, one-time export from before SDRs existed, when Account Executives ran full-cycle deals themselves. Uses the same qualification and meeting logic as SDR data, with one exception: a Closed deal with a blank Meeting Status still counts as a completed meeting, since roughly two-thirds of the AE-era Closed rows never got Meeting Status filled in and would otherwise read as artificially deflated next to SDR-era numbers.</dd></div>
+          <div class="definition-item"><dt>AE Capacity (by Team)</dt><dd>Capacity &amp; Cost section, last calendar month. Grouped by team (US Team / OUS Team), not by individual SDR — every AE on a regional team receives qualified leads from BOTH SDRs on the matching team (e.g. Andrew Thomas gets leads from both MJ and Gospel), not one exclusively, so there's no clean 1-to-1 SDR-to-AE line to draw. Leads Routed = every lead assigned to that AE via the <code>Owner</code> field, regardless of qualification status. No capacity target — there's no stated ceiling per AE in the data or docs yet.</dd></div>
           <div class="definition-item"><dt>AE Disqualified Rate (Handoff Quality)</dt><dd>Leads the AE bounced back as wrongly qualified (Sales status contains "Disqualified AE"). Shown with two different denominators depending on where you look: the Disqualified Rate chart divides by lead volume, so it can stack with SDR Disqualified into one Total DQ rate; the Mandate Scoreboard's "Handoff quality" row divides by qualified leads instead — the AE's judgment on what the team actually handed off. Both are correct for their own purpose; they're not meant to match.</dd></div>
           <div class="definition-item"><dt>Auto-Booked Meetings Toggle</dt><dd>Dashboard-wide switch (top controls bar) for whether an Instant Close counts as a booked/held meeting. Included (default): counts everywhere except commission. Excluded: doesn't count as a meeting anywhere. Affects Meetings Booked/Held/Resolved on Summary Cards, charts, Mandate Scoreboard, Sales Funnel, and AE Baseline. Never affects Qualified Leads (a Closed deal qualifies via Sales status either way) or commission (which always excludes Instant Closes from meeting credit and revenue regardless of this toggle).</dd></div>
           <div class="definition-item"><dt>B2B Lead (Business Lead)</dt><dd>A lead whose <code>is_business_lead</code> field is checked in the source data. Everything else counts as B2C.</dd></div>
@@ -1579,6 +1620,7 @@
           <div class="definition-item"><dt>Commission — New Sales Incentive</dt><dd>A flat 0.25% of closed-deal revenue (USD-equivalent — AED is treated at 1:1 parity with USD by policy, not real exchange rate), no minimum, no cap, and not scaled by the Meeting Quality Multiplier. Counted from leads created last calendar month that are Closed as of now, excluding Instant Closes (not the SDR's doing) — same cohort as Qualified Leads/Meetings, not by when the deal actually closed.</dd></div>
           <div class="definition-item"><dt>Commission — Payout Timing</dt><dd>Commission always looks at last calendar month's performance, independent of the Range: picker elsewhere on the dashboard — the brackets need a fully completed month to mean anything.</dd></div>
           <div class="definition-item"><dt>Commission — Qualified Leads Incentive</dt><dd>Qualified leads (B2B + B2C combined) as a % of that SDR's B2B leads, from last calendar month's leads by creation date: &lt;40% → $0, 40–50% → $150, 50–55% → $200, 55–60% → $250, 60%+ → $400.</dd></div>
+          <div class="definition-item"><dt>Cost per Qualified Lead (SDR)</dt><dd>Capacity &amp; Cost section, last calendar month. That SDR's Total Compensation (Base + Bonus + all three commission incentives, quality-multiplier applied — the exact same figure as their Commission Calculator card) ÷ their Qualified Leads count. Requires that SDR's Base/Bonus to be entered on their Commission card first, or it reads low (incentives only). The team-wide summary strip above the table also shows Cost ÷ Revenue and Avg Cost per SDR.</dd></div>
           <div class="definition-item"><dt>Coverage (Lead Coverage)</dt><dd>Share of the team's B2B leads that got worked at all — any Sales status set, any Meeting Status set, or a matched first call. Leads younger than 4 days are excluded from both sides of the ratio, so brand-new leads still being worked don't read as leakage.</dd></div>
           <div class="definition-item"><dt>Sales Funnel Compare Mode</dt><dd>Compare: dropdown in the Sales Funnel controls. "vs Previous period" (default): each column's ▲/▼ is measured against the column before it — the first column never has one. "vs AE Baseline": each column's ▲/▼ is instead measured against that same column's own AE Baseline reference, scaled to its length — every column can have a delta, but only where AE Baseline data is loaded.</dd></div>
           <div class="definition-item"><dt>Data Hygiene — Marking Laws (under construction — not finalized)</dt><dd>The 7 rules the score is built from, weighted 1–3 by how badly they corrupt the dashboard's numbers: (3) a meeting on a lead whose Sales status isn't qualified; (3) a Sales status the dashboard doesn't recognize; (2) "Meeting Scheduled" still set 21+ days after creation; (1) Disqualified with no reason given; (1) a Disqualified reason present on a live or won lead (Lost is exempt — the team routinely files its reason under either field); (1) "Non respondant" status with a Disqualified reason that isn't "Not responsive"/"Stopped responding"; (1) blank Sales status on a lead more than 3 days old.</dd></div>
@@ -1599,6 +1641,7 @@
           <div class="definition-item"><dt>Pay ÷ Revenue</dt><dd>Sales Funnel row (Month over Month view, individual SDR tables only — behind the "Show pay ÷ revenue" toggle in the Per-SDR Breakdown, off by default so it's never accidentally visible while screen-sharing). That SDR's total pay for the calendar month ÷ USD-equivalent closed revenue from leads created that month — same creation-date cohort and Instant Close exclusion as commission's own revenue figure. Pay is entered by hand (click a value to set/edit it); lower is better, so the delta color is inverted from every other funnel row. No AE Baseline column — pay data doesn't exist for the pre-SDR era.</dd></div>
           <div class="definition-item"><dt>Qualified → Closed Rate</dt><dd>Closed deals ÷ qualified leads from the same creation-date cohort. Same "reads low until leads catch up" caveat as the other cohort rates.</dd></div>
           <div class="definition-item"><dt>Qualified Lead</dt><dd>Qualified by the SDR (not by what the AE later did with it) — a lead counts as qualified if EITHER is true: Sales status is on an allowlist (Hot, Warm, Pending, Closed, Lost, the refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need a scheduled follow-up, Qualified SDR, or anything starting with "Disqualified AE"), OR a meeting was ever booked on it (Meeting Status is Scheduled, Done, Rejected, or Not Atended) — regardless of what Sales status says now. The CSV is only a snapshot: an AE moving Sales status to Cold/Disqualified after the fact doesn't erase that the SDR already did their job. If Sales status is blank and no meeting was booked, an explicit SQL status = Qualified still counts — a legacy fallback that mostly applies to AE Baseline data.</dd></div>
+          <div class="definition-item"><dt>SDR Capacity</dt><dd>Capacity &amp; Cost section, last calendar month. Leads (B2B), Qualified, Meetings Booked, and Closed for that SDR, plus an editable Capacity target — defaults to 275/month, the onboarding brief's own steady-state target per Coordinator once the team reaches 6 people. Leads shown in red when they exceed the target.</dd></div>
           <div class="definition-item"><dt>SDR Disqualified</dt><dd>Sales status is exactly "Disqualified" — the SDR's own screening call. Distinct from AE Disqualified, which is the AE overruling a qualification after handoff.</dd></div>
           <div class="definition-item"><dt>Speed-to-Lead</dt><dd>Median (not mean) minutes from a lead's creation to that SDR's first outbound call, matched by phone number against the Aircall call log. A lead created before the call log's own earliest call is excluded as ineligible to measure; a match found more than 48 hours later is treated as unreliable and discarded rather than counted as a real (very slow) response.</dd></div>
           <div class="definition-item"><dt>Work Week (Saturday–Friday)</dt><dd>The 7-day week every "Weekly" view on this dashboard uses, running Saturday through Friday rather than the Monday-start Western convention — matches the team's actual working week.</dd></div>
@@ -3033,6 +3076,7 @@ function renderDashboard() {
   const days = getFilteredDays();
   renderSummaryCards(days);
   renderFunnelSection();
+  renderCapacitySection();
   renderMandateSection();
   renderCharts(days);
   renderHygieneSection(days);
@@ -4628,6 +4672,9 @@ function toggleFunnelZoom() {
 }
 function toggleDefinitionsSection() {
   document.getElementById('definitionsSection').classList.toggle('expanded');
+}
+function toggleCapacitySection() {
+  document.getElementById('capacitySection').classList.toggle('expanded');
 }
 // Collapsed by default (matches the Per-SDR Breakdown's own default) — synced
 // from localStorage on every renderFunnelSection() pass, not just on click,
@@ -6381,6 +6428,174 @@ function commissionPayout(key, qGross, mGross, nsGross) {
     nsPaid: Math.round(nsGross)
   };
 }
+// Standalone version of the Total Compensation figure the Commission
+// Calculator card shows (calculateCommission() computes the same thing, but
+// only from live DOM inputs after that section has rendered) — reused by
+// Capacity & Cost's SDR Cost Efficiency table, which needs the number
+// without depending on the Commission section being open. Reads the exact
+// same saved Base/Bonus/override inputs via loadCommissionBases(), so
+// editing an SDR's Base/Bonus on their Commission card changes this too.
+function sdrTotalCompensation(days, sdrKey) {
+  const m = commissionMetricsForSDR(days, sdrKey);
+  const qIdx = findBracketIndex(m.qualifiedRate, QUALIFIED_BRACKETS);
+  const mIdx = findBracketIndex(m.meetingRate, MEETING_BRACKETS);
+  const qAmount = QUALIFIED_BRACKETS[qIdx].amount;
+  const mAmount = MEETING_BRACKETS[mIdx].amount;
+  const nsAmount = Math.round(m.closedRevenueUSD * NEW_SALES_INCENTIVE_RATE);
+  const payout = commissionPayout(sdrKey, qAmount, mAmount, nsAmount);
+  const bases = loadCommissionBases();
+  const savedRaw = bases[sdrKey];
+  const saved = (savedRaw && typeof savedRaw === 'object') ? savedRaw : { base: savedRaw || '', bonus: '', override: false };
+  const base = parseFloat(saved.base) || 0;
+  const bonus = parseFloat(saved.bonus) || 0;
+  const total = saved.override ? (base + bonus) : (base + bonus + payout.qPaid + payout.mPaid + payout.nsPaid);
+  return { total, base, bonus, qPaid: payout.qPaid, mPaid: payout.mPaid, nsPaid: payout.nsPaid, metrics: m };
+}
+
+// ─── CAPACITY & COST ────────────────────────────────────────────────────────────
+// Per-SDR lead-capacity target, editable, defaulting to MANDATE_REF.leadsPerCoordinator
+// (275/month — the onboarding brief's own steady-state target once the team
+// reaches 6 people).
+function capacityGoals() {
+  try { return JSON.parse(localStorage.getItem('sdr_capacity_goals') || '{}'); } catch (e) { return {}; }
+}
+function saveCapacityGoal(sdrKey, value) {
+  const goals = capacityGoals();
+  const num = parseFloat(value);
+  if (value === '' || isNaN(num) || num < 0) delete goals[sdrKey];
+  else goals[sdrKey] = num;
+  try { localStorage.setItem('sdr_capacity_goals', JSON.stringify(goals)); } catch (e) {}
+  renderCapacitySection();
+}
+function capacityMonthRows(days, sdrKeys) {
+  const rows = [];
+  days.forEach(d => {
+    const day = rawByDay[d];
+    if (!day) return;
+    sdrKeys.forEach(k => (day[k] || []).forEach(r => rows.push(r)));
+  });
+  return rows;
+}
+// Grouped by TEAM, not individual SDR: the real data shows every AE on a
+// regional team (Owner field) receives qualified leads from BOTH SDRs on the
+// matching team, not one exclusively — e.g. Andrew Thomas gets leads from
+// both MJ and Gospel, not just one of them. There's no clean 1-to-1 SDR-AE
+// line to draw, so team-to-team is the honest grouping here.
+function renderCapacityAeTables() {
+  const el = document.getElementById('capacityAeTables');
+  if (!el) return;
+  if (!rawByDay || !Object.keys(rawByDay).length) {
+    el.innerHTML = '<div class="funnel-sdr-empty">Upload a leads CSV to see AE capacity.</div>';
+    return;
+  }
+  const days = priorMonthDayKeys();
+  el.innerHTML = TEAM_GROUPS.map(g => {
+    const rows = capacityMonthRows(days, g.members);
+    const byOwner = {};
+    rows.forEach(r => {
+      const owner = (r['Owner'] || '').trim();
+      if (!owner) return;
+      if (!byOwner[owner]) byOwner[owner] = { leads: 0, qualified: 0, meetings: 0, closed: 0 };
+      byOwner[owner].leads++;
+      if (isQualifiedLead(r)) byOwner[owner].qualified++;
+      if (isMeetingBooked(r)) byOwner[owner].meetings++;
+      if (normalizeSalesStatus(r['Sales status']) === 'closed') byOwner[owner].closed++;
+    });
+    const owners = Object.keys(byOwner).sort();
+    const bodyRows = owners.length ? owners.map(o => `<tr>
+        <td class="mandate-kpi-name">${escapeHtml(o)}</td>
+        <td>${byOwner[o].leads.toLocaleString()}</td>
+        <td>${byOwner[o].qualified.toLocaleString()}</td>
+        <td>${byOwner[o].meetings.toLocaleString()}</td>
+        <td>${byOwner[o].closed.toLocaleString()}</td>
+      </tr>`).join('') : `<tr><td colspan="5" class="mandate-kpi-note">No data for ${escapeHtml(g.label)} last month.</td></tr>`;
+    return `<div class="capacity-team-block">
+      <div class="capacity-team-label"><span class="capacity-team-dot" style="background:${g.color}"></span>${escapeHtml(g.label)} (${g.members.map(k => SDR_BY_KEY[k].name).join(' & ')})</div>
+      <div style="overflow-x:auto"><table class="mandate-kpi-table">
+        <thead><tr><th>AE</th><th>Leads Routed</th><th>Qualified</th><th>Meetings Booked</th><th>Closed</th></tr></thead>
+        <tbody>${bodyRows}</tbody>
+      </table></div>
+    </div>`;
+  }).join('');
+}
+function renderCapacitySdrTable() {
+  const table = document.getElementById('capacitySdrTable');
+  if (!table) return;
+  if (!rawByDay || !Object.keys(rawByDay).length) {
+    table.innerHTML = '<tbody><tr><td class="mandate-kpi-note">Upload a leads CSV to see SDR capacity.</td></tr></tbody>';
+    return;
+  }
+  const days = priorMonthDayKeys();
+  const goals = capacityGoals();
+  const bodyRows = SDRS.map(s => {
+    const rows = capacityMonthRows(days, [s.key]);
+    const b2bLeads = rows.filter(isBusinessLead).length;
+    const qualified = rows.filter(isQualifiedLead).length;
+    const meetings = rows.filter(isMeetingBooked).length;
+    const closed = rows.filter(r => normalizeSalesStatus(r['Sales status']) === 'closed').length;
+    const goal = goals[s.key] != null ? goals[s.key] : MANDATE_REF.leadsPerCoordinator;
+    const overCap = goal > 0 && b2bLeads > goal;
+    return `<tr>
+      <td class="mandate-kpi-name">${escapeHtml(s.name)}</td>
+      <td class="${overCap ? 'capacity-over' : ''}">${b2bLeads.toLocaleString()}</td>
+      <td>${qualified.toLocaleString()}</td>
+      <td>${meetings.toLocaleString()}</td>
+      <td>${closed.toLocaleString()}</td>
+      <td><input type="number" class="capacity-goal-input" min="0" value="${goals[s.key] != null ? goals[s.key] : ''}" placeholder="${MANDATE_REF.leadsPerCoordinator}" onchange="saveCapacityGoal('${s.key}', this.value)"></td>
+    </tr>`;
+  }).join('');
+  table.innerHTML = `<thead><tr><th>SDR</th><th>Leads (B2B)</th><th>Qualified</th><th>Meetings Booked</th><th>Closed</th><th>Capacity target /mo</th></tr></thead><tbody>${bodyRows}</tbody>`;
+}
+function renderCapacityCostTable() {
+  const table = document.getElementById('capacityCostTable');
+  const summary = document.getElementById('capacityCostSummary');
+  if (!table || !summary) return;
+  if (!rawByDay || !Object.keys(rawByDay).length) {
+    table.innerHTML = '<tbody><tr><td class="mandate-kpi-note">Upload a leads CSV to see cost efficiency.</td></tr></tbody>';
+    summary.innerHTML = '';
+    return;
+  }
+  const days = priorMonthDayKeys();
+  const perSdr = SDRS.map(s => {
+    const comp = sdrTotalCompensation(days, s.key);
+    const costPerQualified = comp.metrics.qualified ? comp.total / comp.metrics.qualified : null;
+    const aov = comp.metrics.closedDeals ? comp.metrics.closedRevenueUSD / comp.metrics.closedDeals : null;
+    return { sdr: s, comp, costPerQualified, aov };
+  });
+  const bodyRows = perSdr.map(({ sdr, comp, costPerQualified, aov }) => `<tr>
+      <td class="mandate-kpi-name">${escapeHtml(sdr.name)}</td>
+      <td>$${Math.round(comp.total).toLocaleString()}</td>
+      <td>${comp.metrics.qualified.toLocaleString()}</td>
+      <td>${costPerQualified != null ? '$' + Math.round(costPerQualified).toLocaleString() : '—'}</td>
+      <td>${aov != null ? '$' + Math.round(aov).toLocaleString() : '—'}</td>
+    </tr>`).join('');
+  table.innerHTML = `<thead><tr><th>SDR</th><th>Total Compensation</th><th>Qualified Leads</th><th>Cost / Qualified Lead</th><th>AOV</th></tr></thead><tbody>${bodyRows}</tbody>`;
+
+  const teamTotalComp = perSdr.reduce((sum, p) => sum + p.comp.total, 0);
+  const teamQualified = perSdr.reduce((sum, p) => sum + p.comp.metrics.qualified, 0);
+  const teamRevenue = perSdr.reduce((sum, p) => sum + p.comp.metrics.closedRevenueUSD, 0);
+  const teamCostPerQualified = teamQualified ? teamTotalComp / teamQualified : null;
+  const teamCostToRevenuePct = teamRevenue ? (teamTotalComp / teamRevenue * 100) : null;
+  const avgCostPerSdr = perSdr.length ? teamTotalComp / perSdr.length : null;
+  const tile = (label, value) => `<div class="capacity-cost-tile"><div class="capacity-cost-tile-label">${label}</div><div class="capacity-cost-tile-value">${value}</div></div>`;
+  summary.innerHTML =
+    tile('Team SDR cost', '$' + Math.round(teamTotalComp).toLocaleString()) +
+    tile('Team revenue (closed)', '$' + Math.round(teamRevenue).toLocaleString()) +
+    tile('Cost ÷ revenue', teamCostToRevenuePct != null ? teamCostToRevenuePct.toFixed(1) + '%' : '—') +
+    tile('Cost / qualified lead (team)', teamCostPerQualified != null ? '$' + Math.round(teamCostPerQualified).toLocaleString() : '—') +
+    tile('Avg cost per SDR', avgCostPerSdr != null ? '$' + Math.round(avgCostPerSdr).toLocaleString() : '—');
+}
+function renderCapacitySection() {
+  const section = document.getElementById('capacitySection');
+  if (!section) return;
+  const monthKey = priorMonthKey();
+  const note = document.getElementById('capacityHeaderNote');
+  if (note) note.textContent = `AE and SDR workload, and what the SDR team costs vs. what it brings in — ${monthLabelFromKey(monthKey)}`;
+  renderCapacityAeTables();
+  renderCapacitySdrTable();
+  renderCapacityCostTable();
+}
+
 function multiplierRowHtml(p) {
   return `<div class="commission-incentive-row"><span>Meeting Quality Multiplier</span><span>&times;${p.tier.multiplier.toFixed(2)} (${p.rate.toFixed(1)}% B2B rejection, trailing 30 days — ${p.tier.minPct}${p.tier.maxPct === Infinity ? '%+' : '–' + p.tier.maxPct + '%'} tier)</span></div>`;
 }
