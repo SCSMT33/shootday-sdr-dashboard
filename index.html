@@ -710,6 +710,13 @@
   .funnel-delta.flat { color: var(--muted); }
   .funnel-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
+  /* DEFINITIONS */
+  .definitions-list { columns: 1; margin: 0; }
+  @media (min-width: 900px) { .definitions-list { columns: 2; column-gap: 32px; } }
+  .definition-item { break-inside: avoid; margin-bottom: 16px; }
+  .definition-item dt { font-weight: 700; font-size: 13px; margin: 0 0 3px; }
+  .definition-item dd { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text); }
+
   /* DATA HYGIENE */
   .hygiene-section {
     background: var(--surface);
@@ -883,11 +890,47 @@
     <!-- SUMMARY CARDS -->
     <div class="summary-grid" id="summaryCards"></div>
 
+    <!-- SALES FUNNEL -->
+    <div class="mandate-section" id="funnelSection">
+      <div class="mandate-header" onclick="toggleFunnelSection()">
+        <div class="mandate-header-left">
+          <span class="mandate-title">Sales Funnel <span class="goal-info" id="funnelSectionInfo" title="The lead-to-deal funnel period over period: leads in, qualified, meetings held, and the three conversion rates into closed deals. Closed deals count by lead CREATION date (a June lead closing in July credits June), matching the Mandate Scoreboard — recent periods read low until their leads have had time to close. Its period and lead-type filters below are independent of the global Range/Lead-type controls above.">ⓘ</span></span>
+          <span class="mandate-sub" id="funnelHeaderNote">Leads → qualified → meetings done → closed, compared period over period</span>
+        </div>
+        <span class="mandate-chevron">&#9654;</span>
+      </div>
+      <div class="mandate-body">
+        <div class="mandate-subheading-row">
+          <div class="mandate-subheading" id="funnelHeading">Month over Month</div>
+          <div class="funnel-controls">
+            <select class="chart-granularity" id="funnelMode" onchange="saveFunnelState({ mode: this.value })">
+              <option value="mom">Month over Month</option>
+              <option value="wow">Week over Week</option>
+              <option value="t30">Trailing 30 days</option>
+              <option value="t14">Trailing 14 days</option>
+            </select>
+            <select class="chart-granularity" id="funnelLeadType" onchange="saveFunnelState({ leadType: this.value })">
+              <option value="all">All leads</option>
+              <option value="b2b">B2B only</option>
+              <option value="b2c">B2C only</option>
+            </select>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="funnelExcludeCurrent" onchange="saveFunnelState({ excludeCurrent: this.checked })">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Exclude current period</span>
+            </label>
+          </div>
+        </div>
+        <div style="overflow-x:auto"><table class="mandate-kpi-table" id="funnelTable"></table></div>
+        <div id="funnelSdrBreakdown"></div>
+      </div>
+    </div>
+
     <!-- CHARTS -->
     <div class="charts-grid">
       <div class="chart-card full" data-chart-id="chartActivity">
         <div class="chart-header">
-          <span class="chart-title"><span id="chartActivityTitle">Meetings Booked</span> <span class="goal-info" id="info-chartActivity" title="Meeting Status = Scheduled, Done, Rejected, or Not Atended, per bucket — excludes instant closes (closed within 2h of lead creation, not a real SDR meeting) and Closed deals with no Meeting Status. Dashed Target = Lead Volume goal × Meeting Booked Rate target; dashed Pace = trailing 3-bucket rolling rate.">ⓘ</span></span>
+          <span class="chart-title"><span id="chartActivityTitle">Meetings Booked</span> <span class="goal-info" id="info-chartActivity" title="Meeting Status = Scheduled, Done, Rejected, or Not Atended, or an instant close (closed within 2h of lead creation, counted as a meeting) — a Closed deal past 2h with no Meeting Status doesn't count alone. Dashed Target = Lead Volume goal × Meeting Booked Rate target; dashed Pace = trailing 3-bucket rolling rate.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartActivity"></div>
             <span class="activity-metric-checks">
@@ -1246,37 +1289,6 @@
       </div>
     </div>
 
-    <!-- SALES FUNNEL -->
-    <div class="mandate-section" id="funnelSection">
-      <div class="mandate-header" onclick="toggleFunnelSection()">
-        <div class="mandate-header-left">
-          <span class="mandate-title">Sales Funnel <span class="goal-info" id="funnelSectionInfo" title="The lead-to-deal funnel period over period: leads in, qualified, meetings held, and the three conversion rates into closed deals. Closed deals count by lead CREATION date (a June lead closing in July credits June), matching the Mandate Scoreboard — recent periods read low until their leads have had time to close. Its period and lead-type filters below are independent of the global Range/Lead-type controls above.">ⓘ</span></span>
-          <span class="mandate-sub" id="funnelHeaderNote">Leads → qualified → meetings done → closed, compared period over period</span>
-        </div>
-        <span class="mandate-chevron">&#9654;</span>
-      </div>
-      <div class="mandate-body">
-        <div class="mandate-subheading-row">
-          <div class="mandate-subheading" id="funnelHeading">Month over Month</div>
-          <div class="funnel-controls">
-            <select class="chart-granularity" id="funnelMode" onchange="saveFunnelState({ mode: this.value })">
-              <option value="mom">Month over Month</option>
-              <option value="wow">Week over Week</option>
-              <option value="t30">Trailing 30 days</option>
-              <option value="t15">Trailing 15 days</option>
-            </select>
-            <select class="chart-granularity" id="funnelLeadType" onchange="saveFunnelState({ leadType: this.value })">
-              <option value="all">All leads</option>
-              <option value="b2b">B2B only</option>
-              <option value="b2c">B2C only</option>
-            </select>
-          </div>
-        </div>
-        <div style="overflow-x:auto"><table class="mandate-kpi-table" id="funnelTable"></table></div>
-        <div id="funnelSdrBreakdown"></div>
-      </div>
-    </div>
-
     <!-- GOALS -->
     <div class="goals-section">
       <div class="goals-title">Monthly Targets</div>
@@ -1438,6 +1450,54 @@
              review without exposing teammates' compensation. -->
         <div class="view-tabs commission-tabs" id="commissionTabs"></div>
         <div class="commission-grid single-card" id="commissionCards"></div>
+      </div>
+    </div>
+
+    <!-- DEFINITIONS -->
+    <div class="mandate-section" id="definitionsSection">
+      <div class="mandate-header" onclick="toggleDefinitionsSection()">
+        <div class="mandate-header-left">
+          <span class="mandate-title">Definitions</span>
+          <span class="mandate-sub">How every metric on this dashboard is calculated — exclusions and edge cases included, A to Z</span>
+        </div>
+        <span class="mandate-chevron">&#9654;</span>
+      </div>
+      <div class="mandate-body">
+        <dl class="definitions-list">
+          <div class="definition-item"><dt>Active Pipeline</dt><dd>Leads whose Sales status isn't Closed, Disqualified, Lost, Deposit refund, or blank — i.e. still open. Shown as a snapshot of the last day in the selected range, not summed across it.</dd></div>
+          <div class="definition-item"><dt>AE Baseline</dt><dd>A frozen, one-time export from before SDRs existed, when Account Executives ran full-cycle deals themselves. Uses the same qualification and meeting logic as SDR data, with one exception: a Closed deal with a blank Meeting Status still counts as a completed meeting, since roughly two-thirds of the AE-era Closed rows never got Meeting Status filled in and would otherwise read as artificially deflated next to SDR-era numbers.</dd></div>
+          <div class="definition-item"><dt>AE Disqualified Rate (Handoff Quality)</dt><dd>Leads the AE bounced back as wrongly qualified (Sales status contains "Disqualified AE"). Shown with two different denominators depending on where you look: the Disqualified Rate chart divides by lead volume, so it can stack with SDR Disqualified into one Total DQ rate; the Mandate Scoreboard's "Handoff quality" row divides by qualified leads instead — the AE's judgment on what the team actually handed off. Both are correct for their own purpose; they're not meant to match.</dd></div>
+          <div class="definition-item"><dt>B2B Lead (Business Lead)</dt><dd>A lead whose <code>is_business_lead</code> field is checked in the source data. Everything else counts as B2C.</dd></div>
+          <div class="definition-item"><dt>B2C Lead (Consumer Lead)</dt><dd>Any lead that isn't B2B. There's no third category.</dd></div>
+          <div class="definition-item"><dt>Cadence Adherence</dt><dd>Not yet computed by the dashboard — reserved as a manually-entered score.</dd></div>
+          <div class="definition-item"><dt>Closed Deal</dt><dd>A lead whose Sales status is Closed. Counted two different ways depending on section: the Mandate Scoreboard and Sales Funnel count by the lead's creation-date cohort — of the leads that arrived in a given period, how many are closed as of today, regardless of when they actually closed — so recent periods always read low until those leads have had time to close. Commission instead counts by the deal's actual Closed date — what got paid out in a given calendar month, regardless of when the lead or meeting happened. Deliberately different questions, not an inconsistency.</dd></div>
+          <div class="definition-item"><dt>Commission — Meeting Quality Multiplier</dt><dd>Scales the Qualified Leads and Meeting incentives (never New Sales) by an SDR's rejection/no-show rate over a trailing 30-day window ending one week ago, B2B booked meetings only: 0–10% → ×1.00, 10–20% → ×0.85, 20–30% → ×0.60, 30–40% → ×0.30, 40%+ → ×0.</dd></div>
+          <div class="definition-item"><dt>Commission — Meetings Incentive</dt><dd>Meetings booked (commission's own definition, which excludes instant closes) as a % of that SDR's B2B leads, from last calendar month's leads by creation date: &lt;20% → $0, 20–25% → $300, 25–30% → $400, 30–35% → $600, 35–40% → $800, 40%+ → $1,000.</dd></div>
+          <div class="definition-item"><dt>Commission — New Sales Incentive</dt><dd>A flat 0.25% of closed-deal revenue (USD-equivalent), no minimum, no cap, and not scaled by the Meeting Quality Multiplier. Counted by a deal's Closed date falling in last calendar month, regardless of when the lead or meeting happened.</dd></div>
+          <div class="definition-item"><dt>Commission — Payout Timing</dt><dd>Commission always looks at last calendar month's performance, independent of the Range: picker elsewhere on the dashboard — the brackets need a fully completed month to mean anything.</dd></div>
+          <div class="definition-item"><dt>Commission — Qualified Leads Incentive</dt><dd>Qualified leads (B2B + B2C combined) as a % of that SDR's B2B leads, from last calendar month's leads by creation date: &lt;40% → $0, 40–50% → $150, 50–55% → $200, 55–60% → $250, 60%+ → $400.</dd></div>
+          <div class="definition-item"><dt>Coverage (Lead Coverage)</dt><dd>Share of the team's B2B leads that got worked at all — any Sales status set, any Meeting Status set, or a matched first call. Leads younger than 4 days are excluded from both sides of the ratio, so brand-new leads still being worked don't read as leakage.</dd></div>
+          <div class="definition-item"><dt>Data Hygiene — Marking Laws</dt><dd>The 7 rules the score is built from, weighted 1–3 by how badly they corrupt the dashboard's numbers: (3) a meeting on a lead whose Sales status isn't qualified; (3) a Sales status the dashboard doesn't recognize; (2) "Meeting Scheduled" still set 21+ days after creation; (1) Disqualified with no reason given; (1) a Disqualified reason present on a live or won lead (Lost is exempt — the team routinely files its reason under either field); (1) "Non respondant" status with a Disqualified reason that isn't "Not responsive"/"Stopped responding"; (1) blank Sales status on a lead more than 3 days old.</dd></div>
+          <div class="definition-item"><dt>Data Hygiene Score</dt><dd>Per SDR, per week: 100 − (that week's total violation weight ÷ leads handled that week) × 100, floored at 0. Checks every lead — all SDRs, B2B and B2C, regardless of any filter — against the 7 marking laws above.</dd></div>
+          <div class="definition-item"><dt>Dubai Day-Key</dt><dd>The fixed UTC+4, no-DST timezone every date on this dashboard is bucketed into — "today," month/week boundaries, and each lead's creation day are all computed in Dubai time, regardless of where you're actually viewing from. Unrelated to each SDR's On-Hours/Off-Hours, which use their own personal timezone instead.</dd></div>
+          <div class="definition-item"><dt>Hiring Milestones (Mandate Gates)</dt><dd>Active Coordinator headcount vs. each month's cumulative team-size target — editable, defaults to 4 by June, 5 by July, 6 by August (the onboarding doc's gates, dated June 30 / July 31 / August 31, 2026). There's no historical headcount data, so every month compares against today's live count.</dd></div>
+          <div class="definition-item"><dt>Instant Close</dt><dd>A deal that went from lead creation to Closed within 2 hours. Counts as a completed meeting everywhere except commission's own meeting count, where it doesn't — an instant/self-serve close isn't a real SDR-run meeting for payout purposes.</dd></div>
+          <div class="definition-item"><dt>Lead</dt><dd>Any Bookings CSV row with a recognized SDR Owner and a non-blank Creation Date. Rows that don't match either are dropped before anything else on the dashboard is computed.</dd></div>
+          <div class="definition-item"><dt>Lead → Closed Rate</dt><dd>Closed deals ÷ all leads from the same creation-date cohort. Recent periods always read low — a lead created this week hasn't had time to close yet — this is a running tally that rises as those leads close later, not a same-period conversion rate.</dd></div>
+          <div class="definition-item"><dt>Meeting → Closed Rate</dt><dd>Closed deals ÷ meetings done from the same creation-date cohort. Same "reads low until leads catch up" caveat as the other cohort rates. Only exists in the Sales Funnel — the Mandate Scoreboard doesn't have this row.</dd></div>
+          <div class="definition-item"><dt>Meeting Booked</dt><dd>Meeting Status is Scheduled, Done, Rejected, or Not Atended, or the deal was an instant close. "Meeting Requested" doesn't count on its own — roughly three-quarters of those end up disqualified, so it means "asked for," not "confirmed."</dd></div>
+          <div class="definition-item"><dt>Meeting Held (Meetings Done)</dt><dd>Meeting Status is Meeting Done, or an instant close. Narrower than Meeting Booked, which also counts still-upcoming Scheduled meetings.</dd></div>
+          <div class="definition-item"><dt>Meeting Not Attended (No-Show)</dt><dd>Meeting Status = Meeting Not Atended, as a share of that period's booked meetings (Scheduled + Done + Not Atended + Rejected, minus instant closes). Rejected counts in the denominator but not the numerator — a rejection is the AE declining the meeting, which isn't the same as the client not showing up.</dd></div>
+          <div class="definition-item"><dt>Meeting Rejected</dt><dd>The AE declining a booked meeting — a qualification call, not a client no-show. Counts toward Meeting Booked and the no-show rate's denominator, but never its numerator; tracked separately as AE Disqualified / Handoff Quality.</dd></div>
+          <div class="definition-item"><dt>MTD / WTD</dt><dd>"Month/week to date" — marks whichever column is the still-in-progress current calendar month or week. Its raw counts are naturally lower than a full period's, simply because the period isn't over yet.</dd></div>
+          <div class="definition-item"><dt>Non-Responsive Rate</dt><dd>Two versions in use. Broad (Summary Card and its chart): Disqualified reason is "Not responsive," or Sales status is "Non respondant" — includes leads still mid-cadence, not yet given up on. Terminal (Mandate Scoreboard only, to match the strategic briefing's 29% baseline): Disqualified reason = "Not responsive" alone — leads permanently given up on as unreachable, excluding the transient mid-cadence status.</dd></div>
+          <div class="definition-item"><dt>On-Hours / Off-Hours</dt><dd>Whether a lead arrived during an SDR's own working shift (their solo shift plus the team's overlap window), computed in that SDR's own personal timezone — EST for MJ and Gospel, CET for Mark and Levi — not Dubai time. Weekends are always off-hours for everyone, regardless of clock time.</dd></div>
+          <div class="definition-item"><dt>Qualified → Closed Rate</dt><dd>Closed deals ÷ qualified leads from the same creation-date cohort. Same "reads low until leads catch up" caveat as the other cohort rates.</dd></div>
+          <div class="definition-item"><dt>Qualified Lead</dt><dd>Sales status is on an allowlist of statuses (Hot, Warm, Pending, Closed, Lost, the refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need a scheduled follow-up, Qualified SDR, or anything starting with "Disqualified AE"). If Sales status is blank, an explicit SQL status = Qualified still counts — a legacy fallback that mostly applies to AE Baseline data — but it never overrides a filled-in status. A booked meeting no longer auto-qualifies a lead on its own; a meeting on a non-qualified status is instead flagged as a Data Hygiene violation.</dd></div>
+          <div class="definition-item"><dt>SDR Disqualified</dt><dd>Sales status is exactly "Disqualified" — the SDR's own screening call. Distinct from AE Disqualified, which is the AE overruling a qualification after handoff.</dd></div>
+          <div class="definition-item"><dt>Speed-to-Lead</dt><dd>Median (not mean) minutes from a lead's creation to that SDR's first outbound call, matched by phone number against the Aircall call log. A lead created before the call log's own earliest call is excluded as ineligible to measure; a match found more than 48 hours later is treated as unreliable and discarded rather than counted as a real (very slow) response.</dd></div>
+          <div class="definition-item"><dt>Work Week (Saturday–Friday)</dt><dd>The 7-day week every "Weekly" view on this dashboard uses, running Saturday through Friday rather than the Monday-start Western convention — matches the team's actual working week.</dd></div>
+        </dl>
       </div>
     </div>
 
@@ -3368,7 +3428,7 @@ const ACTIVITY_METRICS = {
   meetings: {
     label: 'Meetings Booked', field: 'meetings',
     singleSpec: (d, ae) => ({ type: 'count', field: 'meetings', goal: d.goalMeetings, pace: true, aeBaseline: ae ? ae.meetingsPerDay : null }),
-    info: 'Meeting Status = Scheduled, Done, Rejected, or Not Atended, per bucket — excludes instant closes (closed within 2h of lead creation, not a real SDR meeting) and Closed deals with no Meeting Status. Dashed Target = Lead Volume goal × Meeting Booked Rate target; dashed Pace = trailing 3-bucket rolling rate.'
+    info: 'Meeting Status = Scheduled, Done, Rejected, or Not Atended, or an instant close (closed within 2h of lead creation, counted as a meeting) — a Closed deal past 2h with no Meeting Status doesn\'t count alone. Dashed Target = Lead Volume goal × Meeting Booked Rate target; dashed Pace = trailing 3-bucket rolling rate.'
   },
   meetingsHeld: {
     label: 'Meetings Held', field: 'meetings_held',
@@ -4404,10 +4464,13 @@ function renderMandateSection() {
 // rates). Has its own period picker and lead-type filter, independent of the
 // global Range / Lead-type controls. Closed deals count by lead CREATION date
 // (same cohort semantics as mandateClosedCount, but lead-type-filterable).
-const FUNNEL_DEFAULTS = { mode: 'mom', leadType: 'all' };
+const FUNNEL_DEFAULTS = { mode: 'mom', leadType: 'all', excludeCurrent: false };
 function funnelState() {
-  try { return { ...FUNNEL_DEFAULTS, ...JSON.parse(localStorage.getItem('sdr_funnel') || '{}') }; }
-  catch (e) { return { ...FUNNEL_DEFAULTS }; }
+  try {
+    const s = { ...FUNNEL_DEFAULTS, ...JSON.parse(localStorage.getItem('sdr_funnel') || '{}') };
+    if (s.mode === 't15') s.mode = 't14'; // migrate old saved state after the 15d→14d rename
+    return s;
+  } catch (e) { return { ...FUNNEL_DEFAULTS }; }
 }
 function saveFunnelState(patch) {
   try { localStorage.setItem('sdr_funnel', JSON.stringify({ ...funnelState(), ...patch })); } catch (e) {}
@@ -4416,39 +4479,54 @@ function saveFunnelState(patch) {
 function toggleFunnelSection() {
   document.getElementById('funnelSection').classList.toggle('expanded');
 }
+function toggleDefinitionsSection() {
+  document.getElementById('definitionsSection').classList.toggle('expanded');
+}
 
 function funnelShortDate(dayKey) {
   const [y, m, d] = dayKey.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d)).toLocaleString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 // Columns for each comparison mode, oldest → newest so deltas read left to
-// right. partial marks a period still in progress (MTD/WTD); the trailing
-// windows are equal-length by construction so neither column is partial.
+// right — always exactly 6, so the table's shape/position never changes when
+// switching modes (per Chase's ask: no more columns shifting around).
+// `current: true` marks the rightmost (most recent) column — used for accent
+// styling and as the "Exclude current period" toggle's target. `partial` is
+// narrower: true only when that current column is a still-in-progress
+// calendar period (MTD/WTD) with fewer days counted than a full one —
+// trailing N-day windows are always complete, so their current column is
+// `current` but never `partial`.
 function funnelPeriods(mode, todayKey) {
   if (mode === 'mom') {
-    return [-2, -1, 0].map(off => {
+    return [-5, -4, -3, -2, -1, 0].map(off => {
       const prefix = dubaiYearMonth(off);
       const [y, m] = prefix.split('-').map(Number);
       const dim = new Date(Date.UTC(y, m, 0)).getUTCDate();
-      const partial = prefix === todayKey.slice(0, 7);
+      const current = off === 0;
+      const partial = current && prefix === todayKey.slice(0, 7);
       const monthName = new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
-      return { label: partial ? `${monthName} (MTD)` : monthName, dayKeys: dayKeySpan(`${prefix}-01`, dim).filter(d => d <= todayKey), partial };
+      return { label: partial ? `${monthName} (MTD)` : monthName, dayKeys: dayKeySpan(`${prefix}-01`, dim).filter(d => d <= todayKey), current, partial };
     });
   }
   if (mode === 'wow') {
     const ws = dubaiWeekStart(todayKey); // Sat–Fri work week, like the rest of the dashboard
-    return [-21, -14, -7, 0].map(off => {
+    return [-35, -28, -21, -14, -7, 0].map(off => {
       const start = dayKeyOffsetFrom(ws, off);
-      const partial = off === 0;
-      const label = `${funnelShortDate(start)} – ${funnelShortDate(dayKeyOffsetFrom(start, 6))}${partial ? ' (WTD)' : ''}`;
-      return { label, dayKeys: dayKeySpan(start, 7).filter(d => d <= todayKey), partial };
+      const current = off === 0;
+      const label = `${funnelShortDate(start)} – ${funnelShortDate(dayKeyOffsetFrom(start, 6))}${current ? ' (WTD)' : ''}`;
+      return { label, dayKeys: dayKeySpan(start, 7).filter(d => d <= todayKey), current, partial: current };
     });
   }
-  const n = mode === 't15' ? 15 : 30;
-  return [
-    { label: `Prev ${n}d`, dayKeys: dayKeySpan(dayKeyOffsetFrom(todayKey, -(2 * n - 1)), n), partial: false },
-    { label: `Last ${n}d`, dayKeys: dayKeySpan(dayKeyOffsetFrom(todayKey, -(n - 1)), n), partial: false }
-  ];
+  // Trailing modes: 6 consecutive, non-overlapping N-day windows ending
+  // today, oldest to newest. Each window is always a full N days (never
+  // partial) — the rightmost is just the most recent one.
+  const n = mode === 't14' ? 14 : 30;
+  return [5, 4, 3, 2, 1, 0].map(k => {
+    const start = dayKeyOffsetFrom(todayKey, -(n * (k + 1) - 1));
+    const current = k === 0;
+    const label = `${funnelShortDate(start)} – ${funnelShortDate(dayKeyOffsetFrom(start, n - 1))}`;
+    return { label, dayKeys: dayKeySpan(start, n), current, partial: false };
+  });
 }
 
 function funnelLeadPred(leadType) {
@@ -4491,7 +4569,8 @@ function funnelDelta(current, prev, isPct) {
 // static generic explanation — same idea as chartViewContext for charts.
 function funnelViewContext(st, cols, MODE_NAMES, TYPE_NAMES) {
   const partialNote = cols.some(c => c.partial) ? ', current period still in progress' : '';
-  return ` Currently showing: ${TYPE_NAMES[st.leadType]}, ${MODE_NAMES[st.mode]}${partialNote}.`;
+  const excludedNote = st.excludeCurrent ? ', current period excluded' : '';
+  return ` Currently showing: ${TYPE_NAMES[st.leadType]}, ${MODE_NAMES[st.mode]}${partialNote}${excludedNote}.`;
 }
 
 function renderFunnelSection() {
@@ -4504,24 +4583,31 @@ function renderFunnelSection() {
   const st = funnelState();
   const modeEl = document.getElementById('funnelMode');
   const typeEl = document.getElementById('funnelLeadType');
+  const excludeEl = document.getElementById('funnelExcludeCurrent');
   if (modeEl) modeEl.value = st.mode;
   if (typeEl) typeEl.value = st.leadType;
+  if (excludeEl) excludeEl.checked = !!st.excludeCurrent;
 
   const periods = funnelPeriods(st.mode, dubaiTodayKey());
   const pred = funnelLeadPred(st.leadType);
   const earliest = Object.keys(rawByDay).sort()[0];
-  // A period that ends before the loaded data gets "no data" cells and is
-  // skipped as a delta baseline, instead of reading as a misleading ±100%.
+  // Always exactly 6 columns, same positions regardless of mode/toggle state.
+  // A period that ends before the loaded data gets "no data" cells (skipped
+  // as a delta baseline). "Exclude current period" blanks the rightmost
+  // (current) column's numbers instead of dropping/reflowing the column —
+  // the header stays in place, only its values disappear.
   const cols = periods.map(p => {
-    const hasData = p.dayKeys.length > 0 && p.dayKeys[p.dayKeys.length - 1] >= earliest;
-    return { ...p, hasData, stats: hasData ? funnelPeriodStats(p.dayKeys, pred) : null };
+    const excluded = p.current && st.excludeCurrent;
+    const hasData = !excluded && p.dayKeys.length > 0 && p.dayKeys[p.dayKeys.length - 1] >= earliest;
+    return { ...p, hasData, excluded, stats: hasData ? funnelPeriodStats(p.dayKeys, pred) : null };
   });
 
-  const MODE_NAMES = { mom: 'Month over Month', wow: 'Week over Week', t30: 'Trailing 30 days', t15: 'Trailing 15 days' };
+  const MODE_NAMES = { mom: 'Month over Month', wow: 'Week over Week', t30: 'Trailing 30 days', t14: 'Trailing 14 days' };
   const TYPE_NAMES = { all: 'All leads', b2b: 'B2B leads', b2c: 'B2C leads' };
   document.getElementById('funnelHeading').textContent = MODE_NAMES[st.mode] || '';
   const partialNote = cols.some(c => c.partial) ? ' — current period is still in progress, so its raw counts trail full periods' : '';
-  document.getElementById('funnelHeaderNote').textContent = `${TYPE_NAMES[st.leadType]}: leads → qualified → meetings done → closed${partialNote}`;
+  const excludedNote = st.excludeCurrent ? ' — current period excluded from the numbers' : '';
+  document.getElementById('funnelHeaderNote').textContent = `${TYPE_NAMES[st.leadType]}: leads → qualified → meetings done → closed${partialNote}${excludedNote}`;
 
   // Live "Currently showing: ..." context appended to every ⓘ in this section,
   // same convention as chartViewContext/updateChartInfoTooltip for chart cards.
@@ -4544,10 +4630,11 @@ function renderFunnelSection() {
   ];
 
   table.innerHTML = `
-    <thead><tr><th>Metric</th>${cols.map(c => `<th class="mandate-month-cell${c.partial ? ' current' : ''}">${escapeHtml(c.label)}</th>`).join('')}</tr></thead>
+    <thead><tr><th>Metric</th>${cols.map(c => `<th class="mandate-month-cell${c.current ? ' current' : ''}">${escapeHtml(c.label)}</th>`).join('')}</tr></thead>
     <tbody>${rows.map(row => `<tr>
       <td class="mandate-kpi-name">${row.label} <span class="goal-info" title="${escapeHtml(row.info)}">ⓘ</span></td>
       ${cols.map((c, i) => {
+        if (c.excluded) return '<td><span class="mandate-status na">excluded</span></td>';
         if (!c.hasData) return '<td><span class="mandate-status na">no data</span></td>';
         const v = row.get(c.stats);
         const text = v == null ? '—' : row.isPct ? v.toFixed(1) + '%' : String(v);
