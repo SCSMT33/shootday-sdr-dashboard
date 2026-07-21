@@ -742,6 +742,21 @@
   #funnelSection.funnel-zoomed .mandate-title { font-size: 17px; }
   #funnelSection.funnel-zoomed .funnel-sdr-table-label { font-size: 16px; }
 
+  .funnel-viz-section { margin-bottom: 18px; }
+  .funnel-viz-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; gap: 12px; }
+  .funnel-viz-header .mandate-chevron { transition: transform 0.15s; }
+  .funnel-viz-section.expanded .funnel-viz-header .mandate-chevron { transform: rotate(90deg); }
+  .funnel-viz-body { display: none; margin-top: 14px; }
+  .funnel-viz-section.expanded .funnel-viz-body { display: block; }
+  .funnel-viz-legend { display: flex; gap: 20px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .funnel-viz-legend-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
+  .funnel-viz-stage-label { font-size: 12px; font-weight: 700; fill: var(--text); }
+  .funnel-viz-stage-value { font-size: 15px; font-weight: 800; fill: var(--text); }
+  .funnel-viz-stage-prev { font-size: 11px; font-weight: 600; fill: var(--muted); }
+  #funnelSection.funnel-zoomed .funnel-viz-stage-label { font-size: 16px; }
+  #funnelSection.funnel-zoomed .funnel-viz-stage-value { font-size: 22px; }
+  #funnelSection.funnel-zoomed .funnel-viz-stage-prev { font-size: 15px; }
+
   .funnel-sdr-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
   .funnel-sdr-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; gap: 12px; }
   .funnel-sdr-header .mandate-chevron { transition: transform 0.15s; }
@@ -977,6 +992,16 @@
               <span class="toggle-text">Exclude current period</span>
             </label>
             <button class="chart-expand-btn" onclick="toggleFunnelZoom()" title="Expand for presenting">&#10530;</button>
+          </div>
+        </div>
+        <div class="funnel-viz-section" id="funnelVizSection">
+          <div class="funnel-viz-header" onclick="toggleFunnelVizSection()">
+            <span class="mandate-subheading" style="margin:0">Funnel Visual <span class="goal-info" id="funnelVizInfo" title="Leads → Qualified → Meetings Done → Closed, drawn as a horizontal funnel: current period solid, previous period translucent behind it, both scaled to the same axis so relative size is honest. Always the current mode's rightmost 2 columns — the same numbers as the table below, just drawn as shapes.">ⓘ</span></span>
+            <span class="mandate-chevron">&#9654;</span>
+          </div>
+          <div class="funnel-viz-body">
+            <div class="funnel-viz-legend" id="funnelVizLegend"></div>
+            <div id="funnelVizSvgWrap"></div>
           </div>
         </div>
         <div style="overflow-x:auto"><table class="mandate-kpi-table" id="funnelTable"></table></div>
@@ -4593,6 +4618,18 @@ function toggleFunnelZoom() {
 function toggleDefinitionsSection() {
   document.getElementById('definitionsSection').classList.toggle('expanded');
 }
+// Collapsed by default (matches the Per-SDR Breakdown's own default) — synced
+// from localStorage on every renderFunnelSection() pass, not just on click,
+// so the expanded state survives a re-render triggered by anything else.
+function funnelVizExpanded() {
+  try { return localStorage.getItem('sdr_funnel_viz_expanded') === '1'; } catch (e) { return false; }
+}
+function toggleFunnelVizSection() {
+  const next = !funnelVizExpanded();
+  try { localStorage.setItem('sdr_funnel_viz_expanded', next ? '1' : '0'); } catch (e) {}
+  const el = document.getElementById('funnelVizSection');
+  if (el) el.classList.toggle('expanded', next);
+}
 
 function funnelShortDate(dayKey) {
   const [y, m, d] = dayKey.split('-').map(Number);
@@ -4887,6 +4924,82 @@ function buildFunnelTableHTML(cols, aeStats, opts) {
     <tbody>${bodyRows}${payRow}</tbody>`;
 }
 
+// ─── SALES FUNNEL: VISUAL (horizontal funnel, current vs previous overlay) ────
+// Always the rightmost 2 hasData/non-excluded columns of whatever's already
+// on screen (same mode/leadType/compare state as the table below) — no
+// separate period picker, deliberately, so this is never out of sync with
+// the numbers directly underneath it. 4 stages, drawn as 3 trapezoids
+// (Leads->Qualified->Meetings Done->Closed), both periods on one shared
+// vertical scale so relative size is honest, not two independently-scaled
+// funnels that would lie about growth/shrinkage.
+const FUNNEL_VIZ_STAGES = [
+  { key: 'leads', label: 'Leads' },
+  { key: 'qualified', label: 'Qualified' },
+  { key: 'meetingsDone', label: 'Meetings Done' },
+  { key: 'closed', label: 'Closed' }
+];
+function renderFunnelViz(cols) {
+  const wrap = document.getElementById('funnelVizSvgWrap');
+  const legend = document.getElementById('funnelVizLegend');
+  if (!wrap || !legend) return;
+  const dataCols = cols.filter(c => c.hasData && !c.excluded);
+  if (!dataCols.length) {
+    wrap.innerHTML = '<div class="mandate-kpi-note">Not enough data yet for a funnel visual.</div>';
+    legend.innerHTML = '';
+    return;
+  }
+  const current = dataCols[dataCols.length - 1];
+  const prev = dataCols.length > 1 ? dataCols[dataCols.length - 2] : null;
+  const curVals = FUNNEL_VIZ_STAGES.map(s => current.stats[s.key] || 0);
+  const prevVals = prev ? FUNNEL_VIZ_STAGES.map(s => prev.stats[s.key] || 0) : null;
+  const maxVal = Math.max(...curVals, ...(prevVals || [0]), 1);
+
+  const W = 820, H = 210, padTop = 36, padBottom = 44;
+  const midY = padTop + (H - padTop - padBottom) / 2;
+  const usableH = H - padTop - padBottom;
+  const stageW = W / FUNNEL_VIZ_STAGES.length;
+  // Non-zero stages still get a thin sliver (6px) so they don't visually
+  // vanish into the axis line and read as "no data" instead of "small".
+  const heightFor = v => v > 0 ? Math.max((v / maxVal) * usableH, 6) : 0;
+
+  const trapezoidPath = vals => {
+    const heights = vals.map(heightFor);
+    let d = '';
+    for (let i = 0; i < heights.length - 1; i++) {
+      const x0 = i * stageW, x1 = (i + 1) * stageW;
+      const h0 = heights[i] / 2, h1 = heights[i + 1] / 2;
+      d += `M ${x0} ${midY - h0} L ${x1} ${midY - h1} L ${x1} ${midY + h1} L ${x0} ${midY + h0} Z `;
+    }
+    return d;
+  };
+
+  const prevPath = prevVals ? trapezoidPath(prevVals) : '';
+  const curPath = trapezoidPath(curVals);
+
+  const labels = FUNNEL_VIZ_STAGES.map((s, i) => {
+    const x = i * stageW + stageW / 2;
+    const curV = curVals[i];
+    const prevV = prevVals ? prevVals[i] : null;
+    const prevTspan = prevV != null ? `<tspan x="${x}" dy="15" class="funnel-viz-stage-prev">was ${prevV.toLocaleString()}</tspan>` : '';
+    return `<text x="${x}" y="${padTop - 16}" text-anchor="middle" class="funnel-viz-stage-label">${escapeHtml(s.label)}</text>
+      <text x="${x}" y="${H - padBottom + 22}" text-anchor="middle">
+        <tspan x="${x}" class="funnel-viz-stage-value">${curV.toLocaleString()}</tspan>
+        ${prevTspan}
+      </text>`;
+  }).join('');
+
+  wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-height:260px;display:block" preserveAspectRatio="xMidYMid meet">
+    ${prevPath ? `<path d="${prevPath}" style="fill:var(--muted);fill-opacity:0.25;stroke:var(--muted);stroke-opacity:0.5;stroke-width:1"></path>` : ''}
+    <path d="${curPath}" style="fill:var(--accent);fill-opacity:0.55;stroke:var(--accent);stroke-width:2"></path>
+    ${labels}
+  </svg>`;
+
+  legend.innerHTML = `
+    <span><span class="funnel-viz-legend-swatch" style="background:var(--accent)"></span>${escapeHtml(current.label)} (current)</span>
+    ${prev ? `<span><span class="funnel-viz-legend-swatch" style="background:var(--muted);opacity:0.5"></span>${escapeHtml(prev.label)} (previous)</span>` : ''}
+  `;
+}
+
 function renderFunnelSection() {
   const table = document.getElementById('funnelTable');
   if (!table) return;
@@ -4925,6 +5038,10 @@ function renderFunnelSection() {
   const aeStats = funnelAeBaselineForCols(pred, cols);
   const aePerCol = st.compare === 'baseline' ? funnelAeBaselinePerCol(pred, cols) : null;
   table.innerHTML = buildFunnelTableHTML(cols, aeStats, { withInfo: true, context, compareMode: st.compare, aePerCol });
+
+  const vizEl = document.getElementById('funnelVizSection');
+  if (vizEl) vizEl.classList.toggle('expanded', funnelVizExpanded());
+  renderFunnelViz(cols);
 
   renderFunnelSdrBreakdown();
 }
