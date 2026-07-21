@@ -709,6 +709,41 @@
   .funnel-delta.bad { color: var(--red); }
   .funnel-delta.flat { color: var(--muted); }
   .funnel-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .funnel-ae-cell { border-left: 2px solid var(--border); }
+  th.funnel-ae-cell { color: var(--muted); }
+
+  /* Presentation-zoom: doubles text size (and, as a consequence, row height)
+     across the Sales Funnel table(s) — separate from the section's own
+     open/close 'expanded' class, so it needs its own class + selector root
+     (scoped to #funnelSection only, since .mandate-section is shared with
+     the Mandate Scoreboard). Cascades into the nested per-SDR tables too,
+     since they reuse the same classes. Same idea as .chart-card.expanded. */
+  #funnelSection.funnel-zoomed .mandate-kpi-table { font-size: 22px; }
+  #funnelSection.funnel-zoomed .mandate-kpi-table th { font-size: 15px; padding: 10px 12px; }
+  #funnelSection.funnel-zoomed .mandate-kpi-table td { padding: 14px 12px; }
+  #funnelSection.funnel-zoomed .mandate-kpi-name { font-size: 15px; }
+  #funnelSection.funnel-zoomed .funnel-cell-value { font-size: 24px; }
+  #funnelSection.funnel-zoomed .funnel-delta { font-size: 16px; }
+  #funnelSection.funnel-zoomed .mandate-status { font-size: 16px; }
+  #funnelSection.funnel-zoomed .mandate-subheading { font-size: 18px; }
+  #funnelSection.funnel-zoomed .mandate-title { font-size: 17px; }
+  #funnelSection.funnel-zoomed .funnel-sdr-table-label { font-size: 16px; }
+
+  .funnel-sdr-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .funnel-sdr-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; gap: 12px; }
+  .funnel-sdr-header .mandate-chevron { transition: transform 0.15s; }
+  .funnel-sdr-section.expanded .funnel-sdr-header .mandate-chevron { transform: rotate(90deg); }
+  .funnel-sdr-body { display: none; margin-top: 14px; }
+  .funnel-sdr-section.expanded .funnel-sdr-body { display: block; }
+  .funnel-sdr-toggles { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-bottom: 18px; }
+  .funnel-sdr-toggle-group { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .funnel-sdr-all-btn { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 4px 10px; font-size: 11px; cursor: pointer; }
+  .funnel-sdr-all-btn:hover { background: var(--surface2); color: var(--text); }
+  .funnel-sdr-table-block { margin-bottom: 26px; }
+  .funnel-sdr-table-block:last-child { margin-bottom: 0; }
+  .funnel-sdr-table-label { font-size: 12px; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .funnel-sdr-color-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .funnel-sdr-empty { color: var(--muted); font-size: 12px; }
 
   /* DEFINITIONS */
   .definitions-list { columns: 1; margin: 0; }
@@ -919,10 +954,20 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">Exclude current period</span>
             </label>
+            <button class="chart-expand-btn" onclick="toggleFunnelZoom()" title="Expand for presenting">&#10530;</button>
           </div>
         </div>
         <div style="overflow-x:auto"><table class="mandate-kpi-table" id="funnelTable"></table></div>
-        <div id="funnelSdrBreakdown"></div>
+        <div class="funnel-sdr-section" id="funnelSdrSection">
+          <div class="funnel-sdr-header" onclick="toggleFunnelSdrSection()">
+            <span class="mandate-subheading" style="margin:0">Per-SDR Breakdown</span>
+            <span class="mandate-chevron">&#9654;</span>
+          </div>
+          <div class="funnel-sdr-body">
+            <div class="funnel-sdr-toggles" id="funnelSdrToggles"></div>
+            <div id="funnelSdrTables"></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1477,8 +1522,8 @@
           <div class="definition-item"><dt>Commission — Payout Timing</dt><dd>Commission always looks at last calendar month's performance, independent of the Range: picker elsewhere on the dashboard — the brackets need a fully completed month to mean anything.</dd></div>
           <div class="definition-item"><dt>Commission — Qualified Leads Incentive</dt><dd>Qualified leads (B2B + B2C combined) as a % of that SDR's B2B leads, from last calendar month's leads by creation date: &lt;40% → $0, 40–50% → $150, 50–55% → $200, 55–60% → $250, 60%+ → $400.</dd></div>
           <div class="definition-item"><dt>Coverage (Lead Coverage)</dt><dd>Share of the team's B2B leads that got worked at all — any Sales status set, any Meeting Status set, or a matched first call. Leads younger than 4 days are excluded from both sides of the ratio, so brand-new leads still being worked don't read as leakage.</dd></div>
-          <div class="definition-item"><dt>Data Hygiene — Marking Laws</dt><dd>The 7 rules the score is built from, weighted 1–3 by how badly they corrupt the dashboard's numbers: (3) a meeting on a lead whose Sales status isn't qualified; (3) a Sales status the dashboard doesn't recognize; (2) "Meeting Scheduled" still set 21+ days after creation; (1) Disqualified with no reason given; (1) a Disqualified reason present on a live or won lead (Lost is exempt — the team routinely files its reason under either field); (1) "Non respondant" status with a Disqualified reason that isn't "Not responsive"/"Stopped responding"; (1) blank Sales status on a lead more than 3 days old.</dd></div>
-          <div class="definition-item"><dt>Data Hygiene Score</dt><dd>Per SDR, per week: 100 − (that week's total violation weight ÷ leads handled that week) × 100, floored at 0. Checks every lead — all SDRs, B2B and B2C, regardless of any filter — against the 7 marking laws above.</dd></div>
+          <div class="definition-item"><dt>Data Hygiene — Marking Laws (under construction — not finalized)</dt><dd>The 7 rules the score is built from, weighted 1–3 by how badly they corrupt the dashboard's numbers: (3) a meeting on a lead whose Sales status isn't qualified; (3) a Sales status the dashboard doesn't recognize; (2) "Meeting Scheduled" still set 21+ days after creation; (1) Disqualified with no reason given; (1) a Disqualified reason present on a live or won lead (Lost is exempt — the team routinely files its reason under either field); (1) "Non respondant" status with a Disqualified reason that isn't "Not responsive"/"Stopped responding"; (1) blank Sales status on a lead more than 3 days old.</dd></div>
+          <div class="definition-item"><dt>Data Hygiene Score (under construction — not finalized)</dt><dd>Per SDR, per week: 100 − (that week's total violation weight ÷ leads handled that week) × 100, floored at 0. Checks every lead — all SDRs, B2B and B2C, regardless of any filter — against the 7 marking laws above.</dd></div>
           <div class="definition-item"><dt>Dubai Day-Key</dt><dd>The fixed UTC+4, no-DST timezone every date on this dashboard is bucketed into — "today," month/week boundaries, and each lead's creation day are all computed in Dubai time, regardless of where you're actually viewing from. Unrelated to each SDR's On-Hours/Off-Hours, which use their own personal timezone instead.</dd></div>
           <div class="definition-item"><dt>Hiring Milestones (Mandate Gates)</dt><dd>Active Coordinator headcount vs. each month's cumulative team-size target — editable, defaults to 4 by June, 5 by July, 6 by August (the onboarding doc's gates, dated June 30 / July 31 / August 31, 2026). There's no historical headcount data, so every month compares against today's live count.</dd></div>
           <div class="definition-item"><dt>Instant Close</dt><dd>A deal that went from lead creation to Closed within 2 hours. Counts as a completed meeting everywhere except commission's own meeting count, where it doesn't — an instant/self-serve close isn't a real SDR-run meeting for payout purposes.</dd></div>
@@ -4465,6 +4510,8 @@ function renderMandateSection() {
 // global Range / Lead-type controls. Closed deals count by lead CREATION date
 // (same cohort semantics as mandateClosedCount, but lead-type-filterable).
 const FUNNEL_DEFAULTS = { mode: 'mom', leadType: 'all', excludeCurrent: false };
+const FUNNEL_MODE_NAMES = { mom: 'Month over Month', wow: 'Week over Week', t30: 'Trailing 30 days', t14: 'Trailing 14 days' };
+const FUNNEL_TYPE_NAMES = { all: 'All leads', b2b: 'B2B leads', b2c: 'B2C leads' };
 function funnelState() {
   try {
     const s = { ...FUNNEL_DEFAULTS, ...JSON.parse(localStorage.getItem('sdr_funnel') || '{}') };
@@ -4478,6 +4525,12 @@ function saveFunnelState(patch) {
 }
 function toggleFunnelSection() {
   document.getElementById('funnelSection').classList.toggle('expanded');
+}
+// Presentation-zoom (screen-share mode): pure CSS class toggle, no data
+// changes, so no re-render needed — see the #funnelSection.funnel-zoomed
+// rules. Independent of toggleFunnelSection's open/close state.
+function toggleFunnelZoom() {
+  document.getElementById('funnelSection').classList.toggle('funnel-zoomed');
 }
 function toggleDefinitionsSection() {
   document.getElementById('definitionsSection').classList.toggle('expanded');
@@ -4567,10 +4620,104 @@ function funnelDelta(current, prev, isPct) {
 // Live view-state sentence appended to every ⓘ in this section, so the
 // tooltip always names the mode/lead-type actually on screen instead of a
 // static generic explanation — same idea as chartViewContext for charts.
-function funnelViewContext(st, cols, MODE_NAMES, TYPE_NAMES) {
+function funnelViewContext(st, cols) {
   const partialNote = cols.some(c => c.partial) ? ', current period still in progress' : '';
   const excludedNote = st.excludeCurrent ? ', current period excluded' : '';
-  return ` Currently showing: ${TYPE_NAMES[st.leadType]}, ${MODE_NAMES[st.mode]}${partialNote}${excludedNote}.`;
+  return ` Currently showing: ${FUNNEL_TYPE_NAMES[st.leadType]}, ${FUNNEL_MODE_NAMES[st.mode]}${partialNote}${excludedNote}.`;
+}
+
+// Enriches funnelPeriods() output with hasData/excluded/stats — shared by the
+// main table and every per-SDR/team table in the breakdown below, so "no
+// data"/"excluded" cells and delta baselines stay consistent everywhere.
+function funnelBuildCols(st, pred, sdrKeys) {
+  const periods = funnelPeriods(st.mode, dubaiTodayKey());
+  const earliest = Object.keys(rawByDay).sort()[0];
+  return periods.map(p => {
+    const excluded = p.current && st.excludeCurrent;
+    const hasData = !excluded && p.dayKeys.length > 0 && p.dayKeys[p.dayKeys.length - 1] >= earliest;
+    return { ...p, hasData, excluded, stats: hasData ? funnelPeriodStats(p.dayKeys, pred, sdrKeys) : null };
+  });
+}
+
+// Company-wide AE Baseline reference for the trailing column on every funnel
+// table. Uses the funnel's OWN lead-type predicate — never the global Leads:
+// filter, which this whole section deliberately ignores — and the same
+// "Closed with blank Meeting Status still counts" rule computeAEBaselineMetrics
+// uses (see its comment), so Meetings Done stays comparable to the SDR side.
+// There's no per-SDR AE breakdown to show (the AE Baseline predates SDRs
+// entirely), so every table — team-wide and every per-SDR/team view — shows
+// this same reference. Returns raw totals + spanDays; renderers scale counts
+// to match whatever period length is currently on screen (rates are
+// scale-invariant so they're used as-is).
+function funnelAeBaselineStats(pred) {
+  if (!rawAEBaseline || !rawAEBaseline.length) return null;
+  const rows = rawAEBaseline.filter(r => pred(r) && !excludedAEBaselineOwners.has(r['Owner']));
+  if (!rows.length) return null;
+  const dayKeys = Array.from(new Set(rows.map(r => toDubaiDayKey(r['Creation Date'])).filter(Boolean))).sort();
+  const spanDays = calendarSpanDays(dayKeys) || 1;
+  let leads = 0, qualified = 0, meetingsDone = 0, closed = 0;
+  rows.forEach(r => {
+    leads++;
+    if (isQualifiedLead(r)) qualified++;
+    if (r['Meeting Status'] === 'Meeting Done' || isInstantClose(r) || (r['Sales status'] === 'Closed' && !(r['Meeting Status'] || '').trim())) meetingsDone++;
+    if (normalizeSalesStatus(r['Sales status']) === 'closed') closed++;
+  });
+  return { leads, qualified, meetingsDone, closed, spanDays };
+}
+// Scales the AE Baseline's raw totals to match the average length of the
+// currently-displayed periods (e.g. Week over Week → a typical week's worth
+// of AE-era pace) — all four counts scaled by the same factor, so ratios fed
+// through the same row.get() as the real columns come out unchanged.
+function funnelAeBaselineForCols(pred, cols) {
+  const raw = funnelAeBaselineStats(pred);
+  if (!raw) return null;
+  const avgPeriodDays = cols.length ? cols.reduce((a, c) => a + c.dayKeys.length, 0) / cols.length : 0;
+  const k = avgPeriodDays / raw.spanDays;
+  return { leads: Math.round(raw.leads * k), qualified: Math.round(raw.qualified * k), meetingsDone: Math.round(raw.meetingsDone * k), closed: raw.closed * k };
+}
+
+const FUNNEL_COHORT_NOTE = 'Closed deals are counted by lead creation date (cohort), so recent periods read low until their leads have had time to close — the rate keeps rising as they do.';
+function funnelRows(context) {
+  const rate = (num, den) => den ? num / den * 100 : null;
+  return [
+    { label: 'Leads', isPct: false, get: s => s.leads, info: 'Leads created in the period, after the lead-type filter above.' + context },
+    { label: 'Qualified leads', isPct: false, get: s => s.qualified, info: 'Leads whose Sales status marks them qualified — same definition as the % Qualified card and the Mandate Scoreboard.' + context },
+    { label: 'Meetings done', isPct: false, get: s => s.meetingsDone, info: 'Meeting Status = Meeting Done, or an instant close (deal closed right after creation) — same as Meetings Held on the cards, excludes still-upcoming Scheduled meetings.' + context },
+    { label: 'Qualified → closed rate', isPct: true, get: s => rate(s.closed, s.qualified), info: 'Closed (won) deals ÷ qualified leads from the same period. ' + FUNNEL_COHORT_NOTE + context },
+    { label: 'Meeting → closed rate', isPct: true, get: s => rate(s.closed, s.meetingsDone), info: 'Closed (won) deals ÷ meetings done from the same period. ' + FUNNEL_COHORT_NOTE + context },
+    { label: 'Lead → closed rate', isPct: true, get: s => rate(s.closed, s.leads), info: 'Closed (won) deals ÷ all leads from the same period. ' + FUNNEL_COHORT_NOTE + context }
+  ];
+}
+// Shared table-body builder for the main funnel table and every per-SDR/team
+// table in the breakdown — same 6 columns + a trailing static AE Baseline
+// reference column (not part of the delta chain: its cell never feeds
+// funnelDelta, and cols itself stays exactly 6 entries throughout).
+// opts.withInfo renders the row ⓘ tooltips (main table only — repeating the
+// full tooltip text on every stacked per-SDR table would be a lot of noise).
+function buildFunnelTableHTML(cols, aeStats, opts) {
+  opts = opts || {};
+  const rows = funnelRows(opts.context || '');
+  const aeCell = row => {
+    if (!aeStats) return '<td class="funnel-ae-cell"><span class="mandate-status na">no data</span></td>';
+    const v = row.get(aeStats);
+    const text = v == null ? '—' : row.isPct ? v.toFixed(1) + '%' : Math.round(v).toLocaleString();
+    return `<td class="funnel-ae-cell"><span class="funnel-cell-value">${text}</span></td>`;
+  };
+  return `
+    <thead><tr><th>Metric</th>${cols.map(c => `<th class="mandate-month-cell${c.current ? ' current' : ''}">${escapeHtml(c.label)}</th>`).join('')}<th class="funnel-ae-cell">AE Baseline${opts.withInfo ? ' <span class="goal-info" title="The AE Baseline\'s historical daily average (before SDRs existed), scaled to match the length of the periods shown — a rough \'how did the old AE-only process pace\' reference, not a specific period. Same lead-type filter as the columns to its left; Meetings Done uses the AE-era meeting rule (a Closed deal with blank Meeting Status still counts).">ⓘ</span>' : ''}</th></tr></thead>
+    <tbody>${rows.map(row => `<tr>
+      <td class="mandate-kpi-name">${row.label}${opts.withInfo ? ` <span class="goal-info" title="${escapeHtml(row.info)}">ⓘ</span>` : ''}</td>
+      ${cols.map((c, i) => {
+        if (c.excluded) return '<td><span class="mandate-status na">excluded</span></td>';
+        if (!c.hasData) return '<td><span class="mandate-status na">no data</span></td>';
+        const v = row.get(c.stats);
+        const text = v == null ? '—' : row.isPct ? v.toFixed(1) + '%' : String(v);
+        const prevCol = i > 0 ? cols[i - 1] : null;
+        const prev = prevCol && prevCol.hasData ? row.get(prevCol.stats) : null;
+        return `<td><span class="funnel-cell-value">${text}</span>${funnelDelta(v, prev, row.isPct)}</td>`;
+      }).join('')}
+      ${aeCell(row)}
+    </tr>`).join('')}</tbody>`;
 }
 
 function renderFunnelSection() {
@@ -4588,61 +4735,86 @@ function renderFunnelSection() {
   if (typeEl) typeEl.value = st.leadType;
   if (excludeEl) excludeEl.checked = !!st.excludeCurrent;
 
-  const periods = funnelPeriods(st.mode, dubaiTodayKey());
   const pred = funnelLeadPred(st.leadType);
-  const earliest = Object.keys(rawByDay).sort()[0];
-  // Always exactly 6 columns, same positions regardless of mode/toggle state.
-  // A period that ends before the loaded data gets "no data" cells (skipped
-  // as a delta baseline). "Exclude current period" blanks the rightmost
-  // (current) column's numbers instead of dropping/reflowing the column —
-  // the header stays in place, only its values disappear.
-  const cols = periods.map(p => {
-    const excluded = p.current && st.excludeCurrent;
-    const hasData = !excluded && p.dayKeys.length > 0 && p.dayKeys[p.dayKeys.length - 1] >= earliest;
-    return { ...p, hasData, excluded, stats: hasData ? funnelPeriodStats(p.dayKeys, pred) : null };
-  });
+  const cols = funnelBuildCols(st, pred);
 
-  const MODE_NAMES = { mom: 'Month over Month', wow: 'Week over Week', t30: 'Trailing 30 days', t14: 'Trailing 14 days' };
-  const TYPE_NAMES = { all: 'All leads', b2b: 'B2B leads', b2c: 'B2C leads' };
-  document.getElementById('funnelHeading').textContent = MODE_NAMES[st.mode] || '';
+  document.getElementById('funnelHeading').textContent = FUNNEL_MODE_NAMES[st.mode] || '';
   const partialNote = cols.some(c => c.partial) ? ' — current period is still in progress, so its raw counts trail full periods' : '';
   const excludedNote = st.excludeCurrent ? ' — current period excluded from the numbers' : '';
-  document.getElementById('funnelHeaderNote').textContent = `${TYPE_NAMES[st.leadType]}: leads → qualified → meetings done → closed${partialNote}${excludedNote}`;
+  document.getElementById('funnelHeaderNote').textContent = `${FUNNEL_TYPE_NAMES[st.leadType]}: leads → qualified → meetings done → closed${partialNote}${excludedNote}`;
 
   // Live "Currently showing: ..." context appended to every ⓘ in this section,
   // same convention as chartViewContext/updateChartInfoTooltip for chart cards.
-  const context = funnelViewContext(st, cols, MODE_NAMES, TYPE_NAMES);
+  const context = funnelViewContext(st, cols);
   const infoEl = document.getElementById('funnelSectionInfo');
   if (infoEl) {
     if (infoEl.dataset.base === undefined) infoEl.dataset.base = infoEl.title;
     infoEl.title = infoEl.dataset.base + context;
   }
 
-  const rate = (num, den) => den ? num / den * 100 : null;
-  const cohortNote = 'Closed deals are counted by lead creation date (cohort), so recent periods read low until their leads have had time to close — the rate keeps rising as they do.';
-  const rows = [
-    { label: 'Leads', isPct: false, get: s => s.leads, info: 'Leads created in the period, after the lead-type filter above.' + context },
-    { label: 'Qualified leads', isPct: false, get: s => s.qualified, info: 'Leads whose Sales status marks them qualified — same definition as the % Qualified card and the Mandate Scoreboard.' + context },
-    { label: 'Meetings done', isPct: false, get: s => s.meetingsDone, info: 'Meeting Status = Meeting Done, or an instant close (deal closed right after creation) — same as Meetings Held on the cards, excludes still-upcoming Scheduled meetings.' + context },
-    { label: 'Qualified → closed rate', isPct: true, get: s => rate(s.closed, s.qualified), info: 'Closed (won) deals ÷ qualified leads from the same period. ' + cohortNote + context },
-    { label: 'Meeting → closed rate', isPct: true, get: s => rate(s.closed, s.meetingsDone), info: 'Closed (won) deals ÷ meetings done from the same period. ' + cohortNote + context },
-    { label: 'Lead → closed rate', isPct: true, get: s => rate(s.closed, s.leads), info: 'Closed (won) deals ÷ all leads from the same period. ' + cohortNote + context }
-  ];
+  const aeStats = funnelAeBaselineForCols(pred, cols);
+  table.innerHTML = buildFunnelTableHTML(cols, aeStats, { withInfo: true, context });
 
-  table.innerHTML = `
-    <thead><tr><th>Metric</th>${cols.map(c => `<th class="mandate-month-cell${c.current ? ' current' : ''}">${escapeHtml(c.label)}</th>`).join('')}</tr></thead>
-    <tbody>${rows.map(row => `<tr>
-      <td class="mandate-kpi-name">${row.label} <span class="goal-info" title="${escapeHtml(row.info)}">ⓘ</span></td>
-      ${cols.map((c, i) => {
-        if (c.excluded) return '<td><span class="mandate-status na">excluded</span></td>';
-        if (!c.hasData) return '<td><span class="mandate-status na">no data</span></td>';
-        const v = row.get(c.stats);
-        const text = v == null ? '—' : row.isPct ? v.toFixed(1) + '%' : String(v);
-        const prevCol = i > 0 ? cols[i - 1] : null;
-        const prev = prevCol && prevCol.hasData ? row.get(prevCol.stats) : null;
-        return `<td><span class="funnel-cell-value">${text}</span>${funnelDelta(v, prev, row.isPct)}</td>`;
-      }).join('')}
-    </tr>`).join('')}</tbody>`;
+  renderFunnelSdrBreakdown();
+}
+
+// ─── SALES FUNNEL: PER-SDR BREAKDOWN ───────────────────────────────────────────
+// Nested sub-section sharing the parent funnel's mode/lead-type/exclude-
+// current state (never the global top-of-dashboard filters — same
+// independence as the main table). Its own toggle selection (which SDRs/
+// teams to show, each rendered as its own stacked table) persists separately.
+const FUNNEL_SDR_DEFAULTS = { expanded: false, MJ: false, Gospel: false, Mark: false, Levi: false, US: true, OUS: true };
+function funnelSdrState() {
+  try { return { ...FUNNEL_SDR_DEFAULTS, ...JSON.parse(localStorage.getItem('sdr_funnel_breakdown') || '{}') }; }
+  catch (e) { return { ...FUNNEL_SDR_DEFAULTS }; }
+}
+function saveFunnelSdrState(patch) {
+  try { localStorage.setItem('sdr_funnel_breakdown', JSON.stringify({ ...funnelSdrState(), ...patch })); } catch (e) {}
+  renderFunnelSdrBreakdown();
+}
+function toggleFunnelSdrSection() {
+  saveFunnelSdrState({ expanded: !funnelSdrState().expanded });
+}
+function funnelSdrToggleAll() {
+  saveFunnelSdrState({ MJ: true, Gospel: true, Mark: true, Levi: true, US: true, OUS: true });
+}
+function renderFunnelSdrBreakdown() {
+  const section = document.getElementById('funnelSdrSection');
+  const togglesEl = document.getElementById('funnelSdrToggles');
+  const tablesEl = document.getElementById('funnelSdrTables');
+  if (!section || !togglesEl || !tablesEl) return;
+  if (!rawByDay || !Object.keys(rawByDay).length) { togglesEl.innerHTML = ''; tablesEl.innerHTML = ''; return; }
+
+  const sdrSt = funnelSdrState();
+  section.classList.toggle('expanded', !!sdrSt.expanded);
+
+  togglesEl.innerHTML = `
+    <div class="funnel-sdr-toggle-group">
+      ${SDRS.map(s => `<label class="chart-cumulative-toggle"><input type="checkbox" ${sdrSt[s.key] ? 'checked' : ''} onchange="saveFunnelSdrState({ ${s.key}: this.checked })"><span class="toggle-track"></span><span class="toggle-text">${escapeHtml(s.label)}</span></label>`).join('')}
+    </div>
+    <div class="funnel-sdr-toggle-group">
+      ${TEAM_GROUPS.map(g => `<label class="chart-cumulative-toggle"><input type="checkbox" ${sdrSt[g.key] ? 'checked' : ''} onchange="saveFunnelSdrState({ ${g.key}: this.checked })"><span class="toggle-track"></span><span class="toggle-text">${escapeHtml(g.label)}</span></label>`).join('')}
+    </div>
+    <button class="funnel-sdr-all-btn" onclick="funnelSdrToggleAll()">All</button>`;
+
+  const st = funnelState();
+  const pred = funnelLeadPred(st.leadType);
+  const views = [
+    ...SDRS.filter(s => sdrSt[s.key]).map(s => ({ label: s.name, color: s.color, sdrKeys: [s.key] })),
+    ...TEAM_GROUPS.filter(g => sdrSt[g.key]).map(g => ({ label: g.label, color: g.color, sdrKeys: g.members }))
+  ];
+  if (!views.length) {
+    tablesEl.innerHTML = '<div class="funnel-sdr-empty">No SDRs or teams selected above.</div>';
+    return;
+  }
+  tablesEl.innerHTML = views.map(v => {
+    const cols = funnelBuildCols(st, pred, v.sdrKeys);
+    const aeStats = funnelAeBaselineForCols(pred, cols);
+    return `<div class="funnel-sdr-table-block">
+      <div class="funnel-sdr-table-label"><span class="funnel-sdr-color-dot" style="background:${v.color}"></span>${escapeHtml(v.label)}</div>
+      <div style="overflow-x:auto"><table class="mandate-kpi-table">${buildFunnelTableHTML(cols, aeStats, {})}</table></div>
+    </div>`;
+  }).join('');
 }
 
 // Draws the % (not-attended/rejected ÷ total resolved meetings) inside the
