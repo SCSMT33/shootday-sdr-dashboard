@@ -1051,7 +1051,7 @@
       </div>
       <div class="chart-card full" data-chart-id="chartQualPct">
         <div class="chart-header">
-          <span class="chart-title">% Leads Qualified <span class="goal-info" id="info-chartQualPct" title="Qualified leads ÷ Lead Volume per bucket (summed first, not averaged). Qualified = Sales status Hot, Warm, Pending, Closed, Lost, refund, Quote sent, Potential deal, Pending to quote/contact, Need follow-up, Qualified SDR, or Disqualified AE; blank/Disqualified/Cold/Non respondant don't count (legacy blank-status rows with SQL status = Qualified still do). Dashed Target = your % Qualified goal; dashed Pace = trailing 3-bucket rolling rate.">ⓘ</span></span>
+          <span class="chart-title">% Leads Qualified <span class="goal-info" id="info-chartQualPct" title="Qualified leads ÷ Lead Volume per bucket (summed first, not averaged). Qualified = Sales status on the allowlist (Hot, Warm, Pending, Closed, Lost, refund, Quote sent, Potential deal, Pending to quote/contact, Need follow-up, Qualified SDR, or Disqualified AE) OR a meeting was ever booked, regardless of what Sales status says now — the CSV is a snapshot, so a later AE-side status change doesn't undo an SDR-qualified lead (legacy blank-status rows with SQL status = Qualified still count too). Dashed Target = your % Qualified goal; dashed Pace = trailing 3-bucket rolling rate.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartQualPct"></div>
             <select class="chart-granularity" id="teamsComparison-chartQualPct" onchange="renderCharts(getFilteredDays())">
@@ -1537,7 +1537,7 @@
           <div class="definition-item"><dt>Non-Responsive Rate</dt><dd>Two versions in use. Broad (Summary Card and its chart): Disqualified reason is "Not responsive," or Sales status is "Non respondant" — includes leads still mid-cadence, not yet given up on. Terminal (Mandate Scoreboard only, to match the strategic briefing's 29% baseline): Disqualified reason = "Not responsive" alone — leads permanently given up on as unreachable, excluding the transient mid-cadence status.</dd></div>
           <div class="definition-item"><dt>On-Hours / Off-Hours</dt><dd>Whether a lead arrived during an SDR's own working shift (their solo shift plus the team's overlap window), computed in that SDR's own personal timezone — EST for MJ and Gospel, CET for Mark and Levi — not Dubai time. Weekends are always off-hours for everyone, regardless of clock time.</dd></div>
           <div class="definition-item"><dt>Qualified → Closed Rate</dt><dd>Closed deals ÷ qualified leads from the same creation-date cohort. Same "reads low until leads catch up" caveat as the other cohort rates.</dd></div>
-          <div class="definition-item"><dt>Qualified Lead</dt><dd>Sales status is on an allowlist of statuses (Hot, Warm, Pending, Closed, Lost, the refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need a scheduled follow-up, Qualified SDR, or anything starting with "Disqualified AE"). If Sales status is blank, an explicit SQL status = Qualified still counts — a legacy fallback that mostly applies to AE Baseline data — but it never overrides a filled-in status. A booked meeting no longer auto-qualifies a lead on its own; a meeting on a non-qualified status is instead flagged as a Data Hygiene violation.</dd></div>
+          <div class="definition-item"><dt>Qualified Lead</dt><dd>Qualified by the SDR (not by what the AE later did with it) — a lead counts as qualified if EITHER is true: Sales status is on an allowlist (Hot, Warm, Pending, Closed, Lost, the refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need a scheduled follow-up, Qualified SDR, or anything starting with "Disqualified AE"), OR a meeting was ever booked on it (Meeting Status is Scheduled, Done, Rejected, or Not Atended) — regardless of what Sales status says now. The CSV is only a snapshot: an AE moving Sales status to Cold/Disqualified after the fact doesn't erase that the SDR already did their job. If Sales status is blank and no meeting was booked, an explicit SQL status = Qualified still counts — a legacy fallback that mostly applies to AE Baseline data.</dd></div>
           <div class="definition-item"><dt>SDR Disqualified</dt><dd>Sales status is exactly "Disqualified" — the SDR's own screening call. Distinct from AE Disqualified, which is the AE overruling a qualification after handoff.</dd></div>
           <div class="definition-item"><dt>Speed-to-Lead</dt><dd>Median (not mean) minutes from a lead's creation to that SDR's first outbound call, matched by phone number against the Aircall call log. A lead created before the call log's own earliest call is excluded as ineligible to measure; a match found more than 48 hours later is treated as unreliable and discarded rather than counted as a real (very slow) response.</dd></div>
           <div class="definition-item"><dt>Work Week (Saturday–Friday)</dt><dd>The 7-day week every "Weekly" view on this dashboard uses, running Saturday through Friday rather than the Monday-start Western convention — matches the team's actual working week.</dd></div>
@@ -2508,16 +2508,23 @@ function isMeetingResolved(r) {
   if (isInstantClose(r)) return true;
   return MEETING_RESOLVED_STATUSES.includes(r['Meeting Status']);
 }
-// Sales status is the single source of truth for qualification — a lead is
-// qualified iff its status is on the allowlist. The old booked-meeting
-// override (meeting implies qualified even when status says Disqualified/
-// Cold) is gone on purpose: those rows are contradictions, and the Hygiene
-// Report now flags them instead of silently counting them as qualified.
-// One legacy fallback remains: when Sales status is BLANK, an explicit
-// SQL status = Qualified still counts — that's the only qualification
-// signal that exists on rows from the pre-Sales-status era (mostly the AE
-// Baseline export); it never overrides a filled-in status.
+// This dashboard tracks SDR performance, not AE performance — and the CSV is
+// only a point-in-time snapshot, not a history. A lead the SDR booked a
+// meeting on was qualified by the SDR the moment that meeting happened, full
+// stop; if an AE later moves Sales status to Cold/Disqualified, that's an
+// AE-side outcome recorded afterward, not evidence the SDR's work wasn't
+// qualified. So a lead counts as qualified if EITHER is true:
+//   - Sales status is on the allowlist (includes Pending on purpose — see
+//     QUALIFIED_SALES_STATUSES above), OR
+//   - Meeting Status shows a meeting was booked at all (Scheduled, Done,
+//     Rejected, or Not Atended) — MEETING_BOOKED_STATUSES, regardless of
+//     what Sales status currently says.
+// One legacy fallback remains: when Sales status is BLANK and no meeting was
+// booked, an explicit SQL status = Qualified still counts — the only
+// qualification signal on rows from the pre-Sales-status era (mostly the AE
+// Baseline export).
 function isQualifiedLead(r) {
+  if (MEETING_BOOKED_STATUSES.includes(r['Meeting Status'])) return true;
   const status = (r['Sales status'] || '').trim();
   if (status) return isQualifiedStatus(status);
   return (r['SQL status'] || '').trim().toLowerCase() === 'qualified';
@@ -3065,10 +3072,10 @@ function renderSummaryCards(days) {
   const infoMeetingRate = isCommission
     ? `Meetings Booked (B2B+B2C combined) ÷ B2B-only Lead Volume — Commission View judges the combined meeting count against the B2B lead denominator.${aeNote}`
     : `Meetings Booked ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
-  const infoQualified = `Sales status on the qualified list: Hot, Warm, Pending, Closed, Lost, refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need follow-up, Qualified SDR, Disqualified AE. Blank/Disqualified/Cold/Non respondant don't count — a booked meeting no longer overrides the status (contradictions show in Hygiene Report instead); legacy blank-status rows with SQL status = Qualified still do. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
+  const infoQualified = `Qualified by the SDR: Sales status on the qualified list (Hot, Warm, Pending, Closed, Lost, refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need follow-up, Qualified SDR, Disqualified AE) OR a meeting was ever booked (Meeting Status Scheduled/Done/Rejected/Not Atended) — a later AE-side status change doesn't undo it, since the CSV is only a snapshot. Legacy blank-status rows with SQL status = Qualified still count too. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
   const infoPctQualified = isCommission
     ? `Leads Qualified (B2B+B2C combined) ÷ B2B-only Lead Volume.${aeNote}`
-    : `Leads Qualified ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Qualified = status allowlist; blank/Disqualified/Cold/Non respondant don't count regardless of meeting status.${aeNote}`;
+    : `Leads Qualified ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Qualified = status allowlist OR a meeting was ever booked.${aeNote}`;
   const infoNR = isCommission
     ? `Non-Responsive leads (B2B+B2C) ÷ B2B-only Lead Volume. Non-responsive = Disqualified reason "Not responsive" or Sales status "Non respondant" (includes leads still mid-cadence). Lower is better. The Mandate Scoreboard's version is narrower — terminal Not-responsive only, matching the strategic briefing's baseline.${aeNote}`
     : `Sales status = Non respondant or Disqualified reason = Not responsive (includes leads still mid-cadence) ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Lower is better. The Mandate Scoreboard's version is narrower — terminal Not-responsive only, matching the strategic briefing's baseline.${aeNote}`;
@@ -3080,7 +3087,7 @@ function renderSummaryCards(days) {
     ${countCard('Meetings Booked', totalMeetings, perSDR.map(s => ({ ...s, value: s.meetings, goal: s.meetingsGoal })), elapsed, daysInMo, showProjection, undefined, d.goalMeetings, ae ? ae.meetingsPerDay : null, infoMeetingsBooked, deltas.meetings)}
     ${rateCard('Meeting Booked Rate', meetingRate, perSDR.map(s => ({ ...s, value: s.meetingRate })), isCommission ? meanRateCommission(days, v, 'meetings') : meanMetric(days, v, 'meeting_rate'), isCommission ? 'meetings (B2B+B2C) ÷ B2B leads' : 'meetings ÷ total leads', d.goalMeetingRate, false, ae ? ae.overall.meeting_rate : null, infoMeetingRate, deltas.meetingRate)}
     ${countCard('Leads Qualified', totalQualified, perSDR.map(s => ({ ...s, value: s.qualified, goal: s.qualifiedGoal })), elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified, ae ? ae.qualifiedPerDay : null, infoQualified, deltas.qualified)}
-    ${rateCard('% Leads Qualified', pctQual, perSDR.map(s => ({ ...s, value: s.pctQual })), isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'status-based: blank/DQ/cold/non-respondant excluded', d.goalPctQual, false, ae ? ae.overall.pct_qualified : null, infoPctQualified, deltas.pctQual)}
+    ${rateCard('% Leads Qualified', pctQual, perSDR.map(s => ({ ...s, value: s.pctQual })), isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'status allowlist or meeting ever booked', d.goalPctQual, false, ae ? ae.overall.pct_qualified : null, infoPctQualified, deltas.pctQual)}
     ${rateCard('Non-Responsive Rate', nrRate, perSDR.map(s => ({ ...s, value: s.nrRate })), isCommission ? meanRateCommission(days, v, 'non_responsive') : meanMetric(days, v, 'nr_rate'), `${totalNR} leads`, d.goalNRRate, true, ae ? ae.overall.nr_rate : null, infoNR, deltas.nrRate)}
     ${rateCard('No-Show Rate', noShowRate, perSDR.map(s => ({ ...s, value: s.noShowRate })), null, `${totalNoShow} no-show${totalNoShow === 1 ? '' : 's'} of ${totalResolved} resolved meetings`, d.goalNoShowRate, true, null, infoNoShow, deltas.noShowRate)}
     ${rawCalls ? speedToLeadCard('Speed-to-Lead', stlMedian, totalSTLMatched, totalSTLEligible, totalSTLMismatch, perSDR, d.goalSpeedToLead,
@@ -4415,7 +4422,7 @@ function renderMandateSection() {
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.meetingRatePct != null ? `${r.meetingRatePct.toFixed(1)}% (${r.meetings})` : null, r.meetingsOk))
     },
     {
-      label: '% of leads qualified', info: 'Qualified ÷ B2B leads for that month, explicit status allowlist. Company-wide 41% of all business leads qualify; your team works the sub-$1k/incomplete tier.',
+      label: '% of leads qualified', info: 'Qualified ÷ B2B leads for that month. Qualified = status allowlist OR a meeting was ever booked (the CSV is a snapshot — a later AE-side status change doesn\'t undo an SDR-qualified lead). Company-wide 41% of all business leads qualify; your team works the sub-$1k/incomplete tier.',
       target: d.goalPctQual ? d.goalPctQual + '% (company: ' + MANDATE_REF.qualifyRate + '%)' : 'set % Qualified target',
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.qualPct != null ? r.qualPct.toFixed(1) + '%' : null, r.qualOk))
     },
@@ -4677,7 +4684,7 @@ function funnelRows(context) {
   const rate = (num, den) => den ? num / den * 100 : null;
   return [
     { label: 'Leads', isPct: false, get: s => s.leads, info: 'Leads created in the period, after the lead-type filter above.' + context },
-    { label: 'Qualified leads', isPct: false, get: s => s.qualified, info: 'Leads whose Sales status marks them qualified — same definition as the % Qualified card and the Mandate Scoreboard.' + context },
+    { label: 'Qualified leads', isPct: false, get: s => s.qualified, info: 'Sales status on the allowlist OR a meeting was ever booked — same definition as the % Qualified card and the Mandate Scoreboard.' + context },
     { label: 'Meetings done', isPct: false, get: s => s.meetingsDone, info: 'Meeting Status = Meeting Done, or an instant close (deal closed right after creation) — same as Meetings Held on the cards, excludes still-upcoming Scheduled meetings.' + context },
     { label: 'Qualified → closed rate', isPct: true, get: s => rate(s.closed, s.qualified), info: 'Closed (won) deals ÷ qualified leads from the same period. ' + FUNNEL_COHORT_NOTE + context },
     { label: 'Meeting → closed rate', isPct: true, get: s => rate(s.closed, s.meetingsDone), info: 'Closed (won) deals ÷ meetings done from the same period. ' + FUNNEL_COHORT_NOTE + context },
@@ -6084,7 +6091,7 @@ function commissionCard(sdr, days, monthKey) {
         <div class="commission-stat-value">${m.b2cLeads}</div>
       </div>
       <div class="commission-stat">
-        <div class="commission-stat-label">Qualified Leads <span class="goal-info" title="Counted from ALL of this SDR's leads — B2B and B2C combined, not B2B-only — using the same qualified-status allowlist as the rest of the dashboard. The rate below divides that count by B2B leads only (incentive brackets are judged against B2B volume), so a B2C qualification can push the rate above 100% in an unusual month.">ⓘ</span></div>
+        <div class="commission-stat-label">Qualified Leads <span class="goal-info" title="Counted from ALL of this SDR's leads — B2B and B2C combined, not B2B-only — using the same qualified definition as the rest of the dashboard (status allowlist OR a meeting was ever booked). The rate below divides that count by B2B leads only (incentive brackets are judged against B2B volume), so a B2C qualification can push the rate above 100% in an unusual month.">ⓘ</span></div>
         <div class="commission-stat-value">${m.qualified}</div>
         <div class="commission-stat-sub">${m.qualifiedRate.toFixed(1)}% of B2B leads</div>
       </div>
