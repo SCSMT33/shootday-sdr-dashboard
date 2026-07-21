@@ -1062,7 +1062,12 @@
         <div style="overflow-x:auto"><table class="mandate-kpi-table" id="capacitySdrTable"></table></div>
 
         <div class="mandate-subheading-row" style="margin-top:24px">
-          <div class="mandate-subheading">SDR Cost Efficiency <span class="goal-info" title="Total Compensation = Base + Bonus + Qualified Leads Incentive + Meeting Incentive + New Sales Incentive, exactly as computed on that SDR's Commission Calculator card (same saved Base/Bonus inputs, same Meeting Quality Multiplier) — edit an SDR's Base/Bonus on their Commission card below and it updates here too. Cost per Qualified Lead = Total Compensation ÷ Qualified Leads. AOV = closed revenue ÷ closed deals for that SDR's leads created last month — often \'—\' in a low-volume month, same caveat as the Commission card's own Closed Deals figure.">ⓘ</span></div>
+          <div class="mandate-subheading">SDR Cost Efficiency <span class="goal-info" title="Cost per SDR prefers the actual reported monthly pay (same figures entered in the Sales Funnel's Pay ÷ Revenue row) when one exists for the month; otherwise it falls back to the Commission Calculator's computed Total Compensation (Base + Bonus + incentives, marked with * when this happens). Cost per Qualified Lead = that cost ÷ Qualified Leads. AOV = closed revenue ÷ closed deals for that SDR's leads created last month — often '—' in a low-volume month, same caveat as the Commission card's own Closed Deals figure.">ⓘ</span></div>
+          <label class="chart-cumulative-toggle" title="Off by default so this table can be shared with the SDR team without exposing each other's pay. Cost ÷ Revenue and AOV aren't personal income, so those stay visible either way.">
+            <input type="checkbox" id="capacityShowPayToggle" onchange="toggleCapacityShowPay()">
+            <span class="toggle-track"></span>
+            <span class="toggle-text">Show $ figures</span>
+          </label>
         </div>
         <div id="capacityCostSummary" class="capacity-cost-summary"></div>
         <div style="overflow-x:auto"><table class="mandate-kpi-table" id="capacityCostTable"></table></div>
@@ -6546,44 +6551,81 @@ function renderCapacitySdrTable() {
   }).join('');
   table.innerHTML = `<thead><tr><th>SDR</th><th>Leads (B2B)</th><th>Qualified</th><th>Meetings Booked</th><th>Closed</th><th>Capacity target /mo</th></tr></thead><tbody>${bodyRows}</tbody>`;
 }
+// Show $ figures off by default so this table can be shared/screen-shared
+// with the SDR team without exposing each other's pay — Cost ÷ Revenue and
+// AOV aren't personal income, so those stay visible either way; only the
+// columns/tiles that reveal or nearly reveal an individual's pay are gated.
+function capacityShowPay() {
+  try { return localStorage.getItem('sdr_capacity_show_pay') === '1'; } catch (e) { return false; }
+}
+function toggleCapacityShowPay() {
+  try { localStorage.setItem('sdr_capacity_show_pay', capacityShowPay() ? '0' : '1'); } catch (e) {}
+  renderCapacityCostTable();
+}
+// Cost per SDR: prefers the actual reported monthly pay (sdrMonthlyPayData —
+// the same figures already entered in the Sales Funnel's Pay ÷ Revenue row,
+// e.g. MJ's $1,500 for June) when it exists for this exact month, since a
+// real reported number beats a formula estimate. Falls back to the
+// Commission Calculator's own computed Total Compensation (Base + Bonus +
+// incentives, using whatever's saved on that SDR's Commission card) only
+// when nothing's been reported for that month yet — so this table needs
+// zero manual clicking for any month that's already been reported.
+function sdrCostForMonth(days, sdrKey, monthKey) {
+  const payData = sdrMonthlyPayData();
+  const reported = payData[sdrKey] && payData[sdrKey][monthKey];
+  const comp = sdrTotalCompensation(days, sdrKey);
+  if (reported != null) return { total: reported, source: 'reported', metrics: comp.metrics };
+  return { total: comp.total, source: 'estimated', metrics: comp.metrics };
+}
 function renderCapacityCostTable() {
   const table = document.getElementById('capacityCostTable');
   const summary = document.getElementById('capacityCostSummary');
+  const toggleEl = document.getElementById('capacityShowPayToggle');
   if (!table || !summary) return;
+  const showPay = capacityShowPay();
+  if (toggleEl) toggleEl.checked = showPay;
   if (!rawByDay || !Object.keys(rawByDay).length) {
     table.innerHTML = '<tbody><tr><td class="mandate-kpi-note">Upload a leads CSV to see cost efficiency.</td></tr></tbody>';
     summary.innerHTML = '';
     return;
   }
   const days = priorMonthDayKeys();
+  const monthKey = priorMonthKey();
   const perSdr = SDRS.map(s => {
-    const comp = sdrTotalCompensation(days, s.key);
-    const costPerQualified = comp.metrics.qualified ? comp.total / comp.metrics.qualified : null;
-    const aov = comp.metrics.closedDeals ? comp.metrics.closedRevenueUSD / comp.metrics.closedDeals : null;
-    return { sdr: s, comp, costPerQualified, aov };
+    const cost = sdrCostForMonth(days, s.key, monthKey);
+    const costPerQualified = cost.metrics.qualified ? cost.total / cost.metrics.qualified : null;
+    const aov = cost.metrics.closedDeals ? cost.metrics.closedRevenueUSD / cost.metrics.closedDeals : null;
+    return { sdr: s, cost, costPerQualified, aov };
   });
-  const bodyRows = perSdr.map(({ sdr, comp, costPerQualified, aov }) => `<tr>
-      <td class="mandate-kpi-name">${escapeHtml(sdr.name)}</td>
-      <td>$${Math.round(comp.total).toLocaleString()}</td>
-      <td>${comp.metrics.qualified.toLocaleString()}</td>
-      <td>${costPerQualified != null ? '$' + Math.round(costPerQualified).toLocaleString() : '—'}</td>
-      <td>${aov != null ? '$' + Math.round(aov).toLocaleString() : '—'}</td>
-    </tr>`).join('');
-  table.innerHTML = `<thead><tr><th>SDR</th><th>Total Compensation</th><th>Qualified Leads</th><th>Cost / Qualified Lead</th><th>AOV</th></tr></thead><tbody>${bodyRows}</tbody>`;
 
-  const teamTotalComp = perSdr.reduce((sum, p) => sum + p.comp.total, 0);
-  const teamQualified = perSdr.reduce((sum, p) => sum + p.comp.metrics.qualified, 0);
-  const teamRevenue = perSdr.reduce((sum, p) => sum + p.comp.metrics.closedRevenueUSD, 0);
-  const teamCostPerQualified = teamQualified ? teamTotalComp / teamQualified : null;
+  const payCols = showPay ? '<th>Total Compensation</th><th>Cost / Qualified Lead</th>' : '';
+  const bodyRows = perSdr.map(({ sdr, cost, costPerQualified, aov }) => {
+    const payCells = showPay
+      ? `<td>$${Math.round(cost.total).toLocaleString()}${cost.source === 'estimated' ? ' <span class="goal-info" title="No reported pay for this month yet — estimated from the Commission Calculator\'s Base/Bonus/incentive formula instead.">*</span>' : ''}</td>
+         <td>${costPerQualified != null ? '$' + Math.round(costPerQualified).toLocaleString() : '—'}</td>`
+      : '';
+    return `<tr>
+      <td class="mandate-kpi-name">${escapeHtml(sdr.name)}</td>
+      ${payCells}
+      <td>${cost.metrics.qualified.toLocaleString()}</td>
+      <td>${aov != null ? '$' + Math.round(aov).toLocaleString() : '—'}</td>
+    </tr>`;
+  }).join('');
+  table.innerHTML = `<thead><tr><th>SDR</th>${payCols}<th>Qualified Leads</th><th>AOV</th></tr></thead><tbody>${bodyRows}</tbody>`;
+
+  const teamTotalComp = perSdr.reduce((sum, p) => sum + p.cost.total, 0);
+  const teamQualified = perSdr.reduce((sum, p) => sum + p.cost.metrics.qualified, 0);
+  const teamRevenue = perSdr.reduce((sum, p) => sum + p.cost.metrics.closedRevenueUSD, 0);
   const teamCostToRevenuePct = teamRevenue ? (teamTotalComp / teamRevenue * 100) : null;
+  const teamCostPerQualified = teamQualified ? teamTotalComp / teamQualified : null;
   const avgCostPerSdr = perSdr.length ? teamTotalComp / perSdr.length : null;
   const tile = (label, value) => `<div class="capacity-cost-tile"><div class="capacity-cost-tile-label">${label}</div><div class="capacity-cost-tile-value">${value}</div></div>`;
   summary.innerHTML =
-    tile('Team SDR cost', '$' + Math.round(teamTotalComp).toLocaleString()) +
+    (showPay ? tile('Team SDR cost', '$' + Math.round(teamTotalComp).toLocaleString()) : '') +
     tile('Team revenue (closed)', '$' + Math.round(teamRevenue).toLocaleString()) +
     tile('Cost ÷ revenue', teamCostToRevenuePct != null ? teamCostToRevenuePct.toFixed(1) + '%' : '—') +
-    tile('Cost / qualified lead (team)', teamCostPerQualified != null ? '$' + Math.round(teamCostPerQualified).toLocaleString() : '—') +
-    tile('Avg cost per SDR', avgCostPerSdr != null ? '$' + Math.round(avgCostPerSdr).toLocaleString() : '—');
+    (showPay ? tile('Cost / qualified lead (team)', teamCostPerQualified != null ? '$' + Math.round(teamCostPerQualified).toLocaleString() : '—') : '') +
+    (showPay ? tile('Avg cost per SDR', avgCostPerSdr != null ? '$' + Math.round(avgCostPerSdr).toLocaleString() : '—') : '');
 }
 function renderCapacitySection() {
   const section = document.getElementById('capacitySection');
