@@ -711,6 +711,7 @@
   .funnel-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .funnel-ae-cell { border-left: 2px solid var(--border); }
   th.funnel-ae-cell { color: var(--muted); }
+  .funnel-ae-benchmark { font-style: italic; color: var(--muted); cursor: help; }
 
   /* Presentation-zoom: doubles text size (and, as a consequence, row height)
      across the Sales Funnel table(s) — separate from the section's own
@@ -1528,7 +1529,7 @@
           <div class="definition-item"><dt>Instant Close</dt><dd>A deal that went from lead creation to Closed within 2 hours. Counts as a completed meeting everywhere except commission, where it earns neither meeting nor revenue credit — an instant/self-serve close isn't something the SDR actually sold or met with.</dd></div>
           <div class="definition-item"><dt>Lead</dt><dd>Any Bookings CSV row with a recognized SDR Owner and a non-blank Creation Date. Rows that don't match either are dropped before anything else on the dashboard is computed.</dd></div>
           <div class="definition-item"><dt>Lead → Closed Rate</dt><dd>Closed deals ÷ all leads from the same creation-date cohort. Recent periods always read low — a lead created this week hasn't had time to close yet — this is a running tally that rises as those leads close later, not a same-period conversion rate.</dd></div>
-          <div class="definition-item"><dt>Meeting → Closed Rate</dt><dd>Closed deals ÷ meetings done from the same creation-date cohort. Same "reads low until leads catch up" caveat as the other cohort rates. Only exists in the Sales Funnel — the Mandate Scoreboard doesn't have this row.</dd></div>
+          <div class="definition-item"><dt>Meeting → Closed Rate</dt><dd>Closed deals ÷ meetings done from the same creation-date cohort. Same "reads low until leads catch up" caveat as the other cohort rates. Only exists in the Sales Funnel — the Mandate Scoreboard doesn't have this row. AE Baseline column shows the playbook's static ~50% benchmark ("Online meetings convert at approximately 50%") instead of a computed number — 66% of the AE-era's closed deals have a blank Meeting Status, so a computed ratio here comes out to either ~93-96% or 266%+ depending on how those blanks are treated, neither of which is trustworthy.</dd></div>
           <div class="definition-item"><dt>Meeting Booked</dt><dd>Meeting Status is Scheduled, Done, Rejected, or Not Atended, or the deal was an instant close. "Meeting Requested" doesn't count on its own — roughly three-quarters of those end up disqualified, so it means "asked for," not "confirmed."</dd></div>
           <div class="definition-item"><dt>Meeting Held (Meetings Done)</dt><dd>Meeting Status is Meeting Done, or an instant close. Narrower than Meeting Booked, which also counts still-upcoming Scheduled meetings.</dd></div>
           <div class="definition-item"><dt>Meeting Not Attended (No-Show)</dt><dd>Meeting Status = Meeting Not Atended, as a share of that period's booked meetings (Scheduled + Done + Not Atended + Rejected, minus instant closes). Rejected counts in the denominator but not the numerator — a rejection is the AE declining the meeting, which isn't the same as the client not showing up.</dd></div>
@@ -4687,7 +4688,8 @@ function funnelRows(context) {
     { label: 'Qualified leads', isPct: false, get: s => s.qualified, info: 'Sales status on the allowlist OR a meeting was ever booked — same definition as the % Qualified card and the Mandate Scoreboard.' + context },
     { label: 'Meetings done', isPct: false, get: s => s.meetingsDone, info: 'Meeting Status = Meeting Done, or an instant close (deal closed right after creation) — same as Meetings Held on the cards, excludes still-upcoming Scheduled meetings.' + context },
     { label: 'Qualified → closed rate', isPct: true, get: s => rate(s.closed, s.qualified), info: 'Closed (won) deals ÷ qualified leads from the same period. ' + FUNNEL_COHORT_NOTE + context },
-    { label: 'Meeting → closed rate', isPct: true, get: s => rate(s.closed, s.meetingsDone), info: 'Closed (won) deals ÷ meetings done from the same period. ' + FUNNEL_COHORT_NOTE + context },
+    { label: 'Meeting → closed rate', isPct: true, get: s => rate(s.closed, s.meetingsDone), info: 'Closed (won) deals ÷ meetings done from the same period. ' + FUNNEL_COHORT_NOTE + context,
+      aeStatic: '~50%', aeStaticTitle: 'Playbook benchmark ("Online meetings convert at approximately 50%") — not computed from the AE Baseline export. 66% of its closed deals have a blank Meeting Status, so a computed ratio here is unreliable (comes out to either ~93-96% or 266%+ depending on how blank rows are treated).' },
     { label: 'Lead → closed rate', isPct: true, get: s => rate(s.closed, s.leads), info: 'Closed (won) deals ÷ all leads from the same period. ' + FUNNEL_COHORT_NOTE + context }
   ];
 }
@@ -4701,13 +4703,14 @@ function buildFunnelTableHTML(cols, aeStats, opts) {
   opts = opts || {};
   const rows = funnelRows(opts.context || '');
   const aeCell = row => {
+    if (row.aeStatic) return `<td class="funnel-ae-cell"><span class="funnel-cell-value funnel-ae-benchmark" title="${escapeHtml(row.aeStaticTitle || '')}">${row.aeStatic}</span></td>`;
     if (!aeStats) return '<td class="funnel-ae-cell"><span class="mandate-status na">no data</span></td>';
     const v = row.get(aeStats);
     const text = v == null ? '—' : row.isPct ? v.toFixed(1) + '%' : Math.round(v).toLocaleString();
     return `<td class="funnel-ae-cell"><span class="funnel-cell-value">${text}</span></td>`;
   };
   return `
-    <thead><tr><th>Metric</th>${cols.map(c => `<th class="mandate-month-cell${c.current ? ' current' : ''}">${escapeHtml(c.label)}</th>`).join('')}<th class="funnel-ae-cell">AE Baseline${opts.withInfo ? ' <span class="goal-info" title="The AE Baseline\'s historical daily average (before SDRs existed), scaled to match the length of the periods shown — a rough \'how did the old AE-only process pace\' reference, not a specific period. Same lead-type filter as the columns to its left; Meetings Done uses the AE-era meeting rule (a Closed deal with blank Meeting Status still counts).">ⓘ</span>' : ''}</th></tr></thead>
+    <thead><tr><th>Metric</th>${cols.map(c => `<th class="mandate-month-cell${c.current ? ' current' : ''}">${escapeHtml(c.label)}</th>`).join('')}<th class="funnel-ae-cell">AE Baseline${opts.withInfo ? ' <span class="goal-info" title="The AE Baseline\'s historical daily average (before SDRs existed), scaled to match the length of the periods shown — a rough \'how did the old AE-only process pace\' reference, not a specific period. Same lead-type filter as the columns to its left; Meetings Done uses the AE-era meeting rule (a Closed deal with blank Meeting Status still counts). Exception: Meeting → closed rate shows the playbook\'s static ~50% benchmark instead of a computed number — see that row\'s own ⓘ for why.">ⓘ</span>' : ''}</th></tr></thead>
     <tbody>${rows.map(row => `<tr>
       <td class="mandate-kpi-name">${row.label}${opts.withInfo ? ` <span class="goal-info" title="${escapeHtml(row.info)}">ⓘ</span>` : ''}</td>
       ${cols.map((c, i) => {
