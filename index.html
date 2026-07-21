@@ -754,19 +754,19 @@
   .funnel-viz-legend { display: flex; gap: 20px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
   .funnel-viz-legend-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
   .funnel-viz-stage-label { font-size: 12px; font-weight: 700; fill: var(--text); }
-  .funnel-viz-rate-label { font-size: 12px; font-weight: 700; fill: var(--accent-dark); }
   .funnel-viz-value-current { font-size: 17px; font-weight: 800; fill: var(--text); }
-  .funnel-viz-value-prev { font-size: 13px; font-weight: 700; fill: var(--text); fill-opacity: 0.78; }
-  .funnel-viz-value-older { font-size: 10px; font-weight: 600; fill: var(--muted); }
+  .funnel-viz-value-mid { font-size: 13px; font-weight: 700; fill: var(--text); fill-opacity: 0.82; }
+  .funnel-viz-rate-current { font-size: 15px; font-weight: 800; fill: var(--accent-dark); }
+  .funnel-viz-rate-mid { font-size: 12px; font-weight: 700; fill: var(--accent-dark); fill-opacity: 0.75; }
   .funnel-viz-delta-current { font-size: 11px; font-weight: 700; }
-  .funnel-viz-delta-prev { font-size: 10px; font-weight: 700; }
+  .funnel-viz-delta-mid { font-size: 10px; font-weight: 700; }
   #funnelSection.funnel-zoomed .funnel-viz-stage-label { font-size: 16px; }
-  #funnelSection.funnel-zoomed .funnel-viz-rate-label { font-size: 16px; }
   #funnelSection.funnel-zoomed .funnel-viz-value-current { font-size: 24px; }
-  #funnelSection.funnel-zoomed .funnel-viz-value-prev { font-size: 18px; }
-  #funnelSection.funnel-zoomed .funnel-viz-value-older { font-size: 14px; }
+  #funnelSection.funnel-zoomed .funnel-viz-value-mid { font-size: 18px; }
+  #funnelSection.funnel-zoomed .funnel-viz-rate-current { font-size: 21px; }
+  #funnelSection.funnel-zoomed .funnel-viz-rate-mid { font-size: 17px; }
   #funnelSection.funnel-zoomed .funnel-viz-delta-current { font-size: 15px; }
-  #funnelSection.funnel-zoomed .funnel-viz-delta-prev { font-size: 13px; }
+  #funnelSection.funnel-zoomed .funnel-viz-delta-mid { font-size: 13px; }
 
   .funnel-sdr-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
   .funnel-sdr-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; gap: 12px; }
@@ -4970,12 +4970,10 @@ function renderFunnelViz(cols) {
   }
   // Oldest -> newest, up to 3: current, previous, and 2-periods-back.
   const layers = dataCols.slice(-3).map(c => ({ col: c, vals: FUNNEL_VIZ_STAGES.map(s => c.stats[s.key] || 0) }));
-  const current = layers[layers.length - 1];
-  const prevLayer = layers.length > 1 ? layers[layers.length - 2] : null;
   const allVals = layers.flatMap(l => l.vals);
   const maxVal = Math.max(...allVals, 1);
 
-  const W = 820, H = 270, padTop = 66, padBottom = 74, padX = 52;
+  const W = 820, H = 246, padTop = 42, padBottom = 74, padX = 52;
   const midY = padTop + (H - padTop - padBottom) / 2;
   const usableH = H - padTop - padBottom;
   // 4 stages = 3 trapezoid segments spanning the full plot width, so each
@@ -5012,20 +5010,22 @@ function renderFunnelViz(cols) {
     return `<path d="${d}" style="fill:${style.fill};fill-opacity:${style.fillOpacity};stroke:${style.stroke};stroke-opacity:${style.strokeOpacity};stroke-width:${style.strokeWidth};${dashAttr}"></path>`;
   }).join('');
 
-  // Every period's whole number lives at the bottom now, one row per
-  // period, sized by recency (current largest/boldest, oldest smallest) —
-  // all 3 rows sit at the same fixed y per row across all 4 stage columns,
-  // so they read as a level 3-row grid, not per-stage floating stacks.
-  // Each number stays perfectly centered on its stage's boundary line (its
-  // own <text>, anchor=middle, x=boundary) with the ▲/▼% delta vs the row
-  // below it as a SEPARATE floating annotation just to the right (its own
-  // <text>, anchor=start) — so adding the delta never nudges the number
-  // itself off the line it's meant to mark.
+  // Nothing above the shape now except the plain stage-name labels — every
+  // number (both whole counts AND conversion rates) lives below, as a level
+  // grid: one row per period (current largest/boldest; previous and
+  // 2-periods-back share one "medium" size — no longer tiered down to
+  // tiny), reading left to right as count, rate, count, rate, count, rate,
+  // count — counts sit on the boundary (seam) x-positions, rates sit on
+  // each segment's midpoint, exactly matching the shape's own geometry
+  // below. Only counts carry a ▲/▼% delta vs the row beneath them (as a
+  // separate floating <text> so it never nudges the number off its mark);
+  // rates don't need one since all 3 periods' actual rates are already
+  // sitting right there in their own row, column-aligned for a direct read.
   const layersDesc = layers.slice().reverse(); // current, previous?, oldest?
-  const VALUE_ROW_STYLES = [
-    { y: H - padBottom + 20, valueClass: 'funnel-viz-value-current', deltaClass: 'funnel-viz-delta-current', deltaDx: 34 },
-    { y: H - padBottom + 38, valueClass: 'funnel-viz-value-prev', deltaClass: 'funnel-viz-delta-prev', deltaDx: 27 },
-    { y: H - padBottom + 53, valueClass: 'funnel-viz-value-older', deltaClass: null, deltaDx: 21 }
+  const ROW_STYLES = [
+    { y: H - padBottom + 22, valueClass: 'funnel-viz-value-current', rateClass: 'funnel-viz-rate-current', deltaClass: 'funnel-viz-delta-current', deltaDx: 34 },
+    { y: H - padBottom + 42, valueClass: 'funnel-viz-value-mid', rateClass: 'funnel-viz-rate-mid', deltaClass: 'funnel-viz-delta-mid', deltaDx: 27 },
+    { y: H - padBottom + 60, valueClass: 'funnel-viz-value-mid', rateClass: 'funnel-viz-rate-mid', deltaClass: null, deltaDx: 27 }
   ];
   const svgCountDelta = (cur, prev) => {
     if (cur == null || prev == null || !prev) return null;
@@ -5034,56 +5034,36 @@ function renderFunnelViz(cols) {
     const up = diff > 0;
     return { text: `${up ? '▲' : '▼'} ${Math.abs(diff).toFixed(1)}%`, colorVar: up ? '--green' : '--red' };
   };
+  const rateAt = (layer, i) => layer.vals[i] ? (layer.vals[i + 1] / layer.vals[i] * 100) : null;
 
-  const stageLabels = FUNNEL_VIZ_STAGES.map((s, i) => {
-    const x = boundaryX(i);
-    const nameLabel = `<text x="${x}" y="18" text-anchor="middle" class="funnel-viz-stage-label">${escapeHtml(s.label)}</text>`;
-    const valueRows = layersDesc.map((layer, rowIdx) => {
-      const style = VALUE_ROW_STYLES[rowIdx];
+  const stageNameLabels = FUNNEL_VIZ_STAGES.map((s, i) => `<text x="${boundaryX(i)}" y="18" text-anchor="middle" class="funnel-viz-stage-label">${escapeHtml(s.label)}</text>`).join('');
+
+  const gridRows = layersDesc.map((layer, rowIdx) => {
+    const style = ROW_STYLES[rowIdx];
+    const compareTo = layersDesc[rowIdx + 1];
+    // Counts, at each boundary.
+    const countCells = FUNNEL_VIZ_STAGES.map((s, i) => {
+      const x = boundaryX(i);
       const v = layer.vals[i];
-      const compareTo = layersDesc[rowIdx + 1];
       const delta = (compareTo && style.deltaClass) ? svgCountDelta(v, compareTo.vals[i]) : null;
       const numText = `<text x="${x}" y="${style.y}" text-anchor="middle" class="${style.valueClass}">${v.toLocaleString()}</text>`;
       const deltaText = delta ? `<text x="${x + style.deltaDx}" y="${style.y}" text-anchor="start" class="${style.deltaClass}" style="fill:var(${delta.colorVar})">${delta.text}</text>` : '';
       return numText + deltaText;
     }).join('');
-    return nameLabel + valueRows;
+    // Rates, at each segment midpoint, same row/size tier as the counts.
+    const rateCells = [];
+    for (let i = 0; i < segments; i++) {
+      const rate = rateAt(layer, i);
+      const rateText = rate != null ? rate.toFixed(0) + '%' : '—';
+      rateCells.push(`<text x="${midX(i)}" y="${style.y}" text-anchor="middle" class="${style.rateClass}">${rateText}</text>`);
+    }
+    return countCells + rateCells.join('');
   }).join('');
 
-  // Conversion-rate row, one per transition (3 of them), centered over each
-  // segment's midpoint — a dedicated row between the stage names and the
-  // funnel shape itself, deliberately never overlapping the (possibly
-  // 3-layer-deep) shape below it. Current period's rate is the headline;
-  // a small ▲/▼pp delta against the immediately-previous period's same
-  // transition sits right next to it — the "previous rate" the user asked
-  // for, without a second full row of numbers.
-  const rateLabels = [];
-  for (let i = 0; i < segments; i++) {
-    const x = midX(i);
-    const curFrom = current.vals[i], curTo = current.vals[i + 1];
-    const curRate = curFrom ? (curTo / curFrom * 100) : null;
-    const rateText = curRate != null ? curRate.toFixed(0) + '%' : '—';
-    let deltaSpan = '';
-    if (prevLayer && curRate != null) {
-      const prevFrom = prevLayer.vals[i], prevTo = prevLayer.vals[i + 1];
-      const prevRate = prevFrom ? (prevTo / prevFrom * 100) : null;
-      if (prevRate != null) {
-        const diff = curRate - prevRate;
-        if (Math.abs(diff) < 0.5) {
-          deltaSpan = `<tspan style="fill:var(--muted)" dx="6">—</tspan>`;
-        } else {
-          const up = diff > 0;
-          deltaSpan = `<tspan style="fill:${up ? 'var(--green)' : 'var(--red)'}" dx="6">${up ? '▲' : '▼'} ${Math.abs(diff).toFixed(0)}pp</tspan>`;
-        }
-      }
-    }
-    rateLabels.push(`<text x="${x}" y="46" text-anchor="middle" class="funnel-viz-rate-label">${rateText}${deltaSpan}</text>`);
-  }
-
-  wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-height:290px;display:block" preserveAspectRatio="xMidYMid meet">
+  wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-height:280px;display:block" preserveAspectRatio="xMidYMid meet">
     ${shapePaths}
-    ${stageLabels}
-    ${rateLabels.join('')}
+    ${stageNameLabels}
+    ${gridRows}
   </svg>`;
 
   const legendItems = layers.slice().reverse().map((layer, idx) => {
