@@ -12,6 +12,8 @@
     --surface2: #f1f2f6;
     --border: #e3e5ec;
     --accent: #4285f4;
+    --accent-light: #cfe0fb;
+    --accent-dark: #1e4fa8;
     --team: #4285f4;
     --goal: rgba(0,0,0,0.35);
     --text: #20232b;
@@ -4954,10 +4956,18 @@ function renderFunnelViz(cols) {
   const prevVals = prev ? FUNNEL_VIZ_STAGES.map(s => prev.stats[s.key] || 0) : null;
   const maxVal = Math.max(...curVals, ...(prevVals || [0]), 1);
 
-  const W = 820, H = 210, padTop = 36, padBottom = 44;
+  const W = 820, H = 210, padTop = 36, padBottom = 44, padX = 52;
   const midY = padTop + (H - padTop - padBottom) / 2;
   const usableH = H - padTop - padBottom;
-  const stageW = W / FUNNEL_VIZ_STAGES.length;
+  // 4 stages = 3 trapezoid segments spanning the full plot width, so the
+  // funnel's right tip lands exactly under the last label instead of a
+  // quarter-width short of it. Boundary x-positions (padX, padX+stageW, …)
+  // are both where each trapezoid segment starts/ends AND where its label
+  // and value sit — per Chase's ask, labels mark the start of their segment
+  // (the vertical seam line), not the segment's center.
+  const segments = FUNNEL_VIZ_STAGES.length - 1;
+  const stageW = (W - padX * 2) / segments;
+  const boundaryX = i => padX + i * stageW;
   // Non-zero stages still get a thin sliver (6px) so they don't visually
   // vanish into the axis line and read as "no data" instead of "small".
   const heightFor = v => v > 0 ? Math.max((v / maxVal) * usableH, 6) : 0;
@@ -4966,7 +4976,7 @@ function renderFunnelViz(cols) {
     const heights = vals.map(heightFor);
     let d = '';
     for (let i = 0; i < heights.length - 1; i++) {
-      const x0 = i * stageW, x1 = (i + 1) * stageW;
+      const x0 = boundaryX(i), x1 = boundaryX(i + 1);
       const h0 = heights[i] / 2, h1 = heights[i + 1] / 2;
       d += `M ${x0} ${midY - h0} L ${x1} ${midY - h1} L ${x1} ${midY + h1} L ${x0} ${midY + h0} Z `;
     }
@@ -4977,7 +4987,7 @@ function renderFunnelViz(cols) {
   const curPath = trapezoidPath(curVals);
 
   const labels = FUNNEL_VIZ_STAGES.map((s, i) => {
-    const x = i * stageW + stageW / 2;
+    const x = boundaryX(i);
     const curV = curVals[i];
     const prevV = prevVals ? prevVals[i] : null;
     const prevTspan = prevV != null ? `<tspan x="${x}" dy="15" class="funnel-viz-stage-prev">was ${prevV.toLocaleString()}</tspan>` : '';
@@ -4988,15 +4998,20 @@ function renderFunnelViz(cols) {
       </text>`;
   }).join('');
 
+  // Three-tone progression in one hue family (light -> solid -> dark outline)
+  // so "which one is more recent" reads at a glance without relying on the
+  // legend text: previous is a pale, dashed-outline tint (further back =
+  // fainter); current is the full solid accent fill with a darker, crisper
+  // outline on top (closer/now = clearest, most solid shape on the page).
   wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-height:260px;display:block" preserveAspectRatio="xMidYMid meet">
-    ${prevPath ? `<path d="${prevPath}" style="fill:var(--muted);fill-opacity:0.25;stroke:var(--muted);stroke-opacity:0.5;stroke-width:1"></path>` : ''}
-    <path d="${curPath}" style="fill:var(--accent);fill-opacity:0.55;stroke:var(--accent);stroke-width:2"></path>
+    ${prevPath ? `<path d="${prevPath}" style="fill:var(--accent-light);fill-opacity:0.55;stroke:var(--accent);stroke-opacity:0.55;stroke-width:1.5;stroke-dasharray:5,3"></path>` : ''}
+    <path d="${curPath}" style="fill:var(--accent);fill-opacity:0.65;stroke:var(--accent-dark);stroke-width:2.5"></path>
     ${labels}
   </svg>`;
 
   legend.innerHTML = `
-    <span><span class="funnel-viz-legend-swatch" style="background:var(--accent)"></span>${escapeHtml(current.label)} (current)</span>
-    ${prev ? `<span><span class="funnel-viz-legend-swatch" style="background:var(--muted);opacity:0.5"></span>${escapeHtml(prev.label)} (previous)</span>` : ''}
+    <span><span class="funnel-viz-legend-swatch" style="background:var(--accent);border:1.5px solid var(--accent-dark)"></span>${escapeHtml(current.label)} (current)</span>
+    ${prev ? `<span><span class="funnel-viz-legend-swatch" style="background:var(--accent-light);border:1.5px dashed var(--accent)"></span>${escapeHtml(prev.label)} (previous)</span>` : ''}
   `;
 }
 
