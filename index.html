@@ -754,13 +754,19 @@
   .funnel-viz-legend { display: flex; gap: 20px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
   .funnel-viz-legend-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
   .funnel-viz-stage-label { font-size: 12px; font-weight: 700; fill: var(--text); }
-  .funnel-viz-stage-value { font-size: 15px; font-weight: 800; fill: var(--text); }
-  .funnel-viz-stage-prev { font-size: 11px; font-weight: 600; fill: var(--muted); }
   .funnel-viz-rate-label { font-size: 12px; font-weight: 700; fill: var(--accent-dark); }
+  .funnel-viz-value-current { font-size: 17px; font-weight: 800; fill: var(--text); }
+  .funnel-viz-value-prev { font-size: 13px; font-weight: 700; fill: var(--text); fill-opacity: 0.78; }
+  .funnel-viz-value-older { font-size: 10px; font-weight: 600; fill: var(--muted); }
+  .funnel-viz-delta-current { font-size: 11px; font-weight: 700; }
+  .funnel-viz-delta-prev { font-size: 10px; font-weight: 700; }
   #funnelSection.funnel-zoomed .funnel-viz-stage-label { font-size: 16px; }
-  #funnelSection.funnel-zoomed .funnel-viz-stage-value { font-size: 22px; }
-  #funnelSection.funnel-zoomed .funnel-viz-stage-prev { font-size: 15px; }
   #funnelSection.funnel-zoomed .funnel-viz-rate-label { font-size: 16px; }
+  #funnelSection.funnel-zoomed .funnel-viz-value-current { font-size: 24px; }
+  #funnelSection.funnel-zoomed .funnel-viz-value-prev { font-size: 18px; }
+  #funnelSection.funnel-zoomed .funnel-viz-value-older { font-size: 14px; }
+  #funnelSection.funnel-zoomed .funnel-viz-delta-current { font-size: 15px; }
+  #funnelSection.funnel-zoomed .funnel-viz-delta-prev { font-size: 13px; }
 
   .funnel-sdr-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
   .funnel-sdr-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; gap: 12px; }
@@ -4969,7 +4975,7 @@ function renderFunnelViz(cols) {
   const allVals = layers.flatMap(l => l.vals);
   const maxVal = Math.max(...allVals, 1);
 
-  const W = 820, H = 240, padTop = 66, padBottom = 44, padX = 52;
+  const W = 820, H = 270, padTop = 66, padBottom = 74, padX = 52;
   const midY = padTop + (H - padTop - padBottom) / 2;
   const usableH = H - padTop - padBottom;
   // 4 stages = 3 trapezoid segments spanning the full plot width, so each
@@ -5006,21 +5012,42 @@ function renderFunnelViz(cols) {
     return `<path d="${d}" style="fill:${style.fill};fill-opacity:${style.fillOpacity};stroke:${style.stroke};stroke-opacity:${style.strokeOpacity};stroke-width:${style.strokeWidth};${dashAttr}"></path>`;
   }).join('');
 
-  // Stage name + value labels, at each of the 4 boundaries. Only current
-  // (bold) and the immediately-previous period (small "was X") get numbers
-  // here — the 2-periods-back layer is represented by its shape + legend
-  // only, so 3 overlaid stacks of numbers never compete for the same spot;
-  // its exact figures are always one glance away in the table below.
+  // Every period's whole number lives at the bottom now, one row per
+  // period, sized by recency (current largest/boldest, oldest smallest) —
+  // all 3 rows sit at the same fixed y per row across all 4 stage columns,
+  // so they read as a level 3-row grid, not per-stage floating stacks.
+  // Each number stays perfectly centered on its stage's boundary line (its
+  // own <text>, anchor=middle, x=boundary) with the ▲/▼% delta vs the row
+  // below it as a SEPARATE floating annotation just to the right (its own
+  // <text>, anchor=start) — so adding the delta never nudges the number
+  // itself off the line it's meant to mark.
+  const layersDesc = layers.slice().reverse(); // current, previous?, oldest?
+  const VALUE_ROW_STYLES = [
+    { y: H - padBottom + 20, valueClass: 'funnel-viz-value-current', deltaClass: 'funnel-viz-delta-current', deltaDx: 34 },
+    { y: H - padBottom + 38, valueClass: 'funnel-viz-value-prev', deltaClass: 'funnel-viz-delta-prev', deltaDx: 27 },
+    { y: H - padBottom + 53, valueClass: 'funnel-viz-value-older', deltaClass: null, deltaDx: 21 }
+  ];
+  const svgCountDelta = (cur, prev) => {
+    if (cur == null || prev == null || !prev) return null;
+    const diff = (cur - prev) / prev * 100;
+    if (Math.abs(diff) < 0.05) return { text: '—', colorVar: '--muted' };
+    const up = diff > 0;
+    return { text: `${up ? '▲' : '▼'} ${Math.abs(diff).toFixed(1)}%`, colorVar: up ? '--green' : '--red' };
+  };
+
   const stageLabels = FUNNEL_VIZ_STAGES.map((s, i) => {
     const x = boundaryX(i);
-    const curV = current.vals[i];
-    const prevV = prevLayer ? prevLayer.vals[i] : null;
-    const prevTspan = prevV != null ? `<tspan x="${x}" dy="15" class="funnel-viz-stage-prev">was ${prevV.toLocaleString()}</tspan>` : '';
-    return `<text x="${x}" y="18" text-anchor="middle" class="funnel-viz-stage-label">${escapeHtml(s.label)}</text>
-      <text x="${x}" y="${H - padBottom + 22}" text-anchor="middle">
-        <tspan x="${x}" class="funnel-viz-stage-value">${curV.toLocaleString()}</tspan>
-        ${prevTspan}
-      </text>`;
+    const nameLabel = `<text x="${x}" y="18" text-anchor="middle" class="funnel-viz-stage-label">${escapeHtml(s.label)}</text>`;
+    const valueRows = layersDesc.map((layer, rowIdx) => {
+      const style = VALUE_ROW_STYLES[rowIdx];
+      const v = layer.vals[i];
+      const compareTo = layersDesc[rowIdx + 1];
+      const delta = (compareTo && style.deltaClass) ? svgCountDelta(v, compareTo.vals[i]) : null;
+      const numText = `<text x="${x}" y="${style.y}" text-anchor="middle" class="${style.valueClass}">${v.toLocaleString()}</text>`;
+      const deltaText = delta ? `<text x="${x + style.deltaDx}" y="${style.y}" text-anchor="start" class="${style.deltaClass}" style="fill:var(${delta.colorVar})">${delta.text}</text>` : '';
+      return numText + deltaText;
+    }).join('');
+    return nameLabel + valueRows;
   }).join('');
 
   // Conversion-rate row, one per transition (3 of them), centered over each
