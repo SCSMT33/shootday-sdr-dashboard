@@ -6784,12 +6784,12 @@ function commissionCard(sdr, days, monthKey) {
       <div class="commission-stat">
         <div class="commission-stat-label">Qualified Leads <span class="goal-info" title="Counted from ALL of this SDR's leads — B2B and B2C combined, not B2B-only — based on Sales status (the qualifying-status allowlist: Hot, Warm, Pending, Closed, Lost, refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need follow-up, Qualified SDR, Disqualified AE). The rate below divides that count by B2B leads only (incentive brackets are judged against B2B volume), so a B2C qualification can push the rate above 100% in an unusual month.">ⓘ</span></div>
         <div class="commission-stat-value">${m.qualified}</div>
-        <div class="commission-stat-sub">${m.qualifiedRate.toFixed(1)}% of B2B leads</div>
+        <div class="commission-stat-sub">${m.qualifiedRate.toFixed(1)}% of B2B leads (B2B+B2C qualified &divide; B2B leads)</div>
       </div>
       <div class="commission-stat">
         <div class="commission-stat-label">Meetings <span class="goal-info" title="Counted from ALL of this SDR's leads — B2B and B2C combined. Meeting Status = Scheduled, Done, Rejected, or Not Attended. A Closed deal with blank Meeting Status doesn't count alone — a Sales status isn't evidence a meeting happened; it still counts toward Qualified Leads/New Sales Incentive, just not here. Also excluded: a deal closed within 2h of lead creation (an instant/auto-deposit close, not a real SDR meeting). The rate below divides by B2B leads only, so B2C meetings can push it above 100% in an unusual month.">ⓘ</span></div>
         <div class="commission-stat-value">${m.meetings}</div>
-        <div class="commission-stat-sub">${m.meetingRate.toFixed(1)}% of B2B leads</div>
+        <div class="commission-stat-sub">${m.meetingRate.toFixed(1)}% of B2B leads (B2B+B2C meetings &divide; B2B leads)</div>
       </div>
       <div class="commission-stat" style="grid-column: 1 / -1;">
         <div class="commission-stat-label">Closed Deals (${monthLabelFromKey(monthKey)}) <span class="goal-info" title="Deals from leads CREATED in this calendar month whose Sales status is Closed as of right now, excluding instant closes (an automatic/self-serve close within 2h of lead creation isn't the SDR's doing, so it earns no revenue credit). Includes both B2B and B2C. A lead from this month that hasn't closed yet by the time commission is calculated simply doesn't count — there's no later top-up if it closes after the fact.">ⓘ</span></div>
@@ -7052,8 +7052,8 @@ function reportCommissionSummaryHtml(sdr, monthKey, commissionDays) {
         <div class="report-summary-stat wide total"><span>Total Compensation</span><strong>$${total.toLocaleString()}</strong></div>
       </div>
       <div class="report-summary-sub">
-        Qualified leads: ${m.qualified} (${m.qualifiedRate.toFixed(1)}% of B2B) &middot;
-        Meetings: ${m.meetings} (${m.meetingRate.toFixed(1)}% of B2B) &middot;
+        Qualified leads: ${m.qualified} (${m.qualifiedRate.toFixed(1)}% of B2B leads, B2B+B2C qualified &divide; B2B leads) &middot;
+        Meetings: ${m.meetings} (${m.meetingRate.toFixed(1)}% of B2B leads, B2B+B2C meetings &divide; B2B leads) &middot;
         Closed deals: ${m.closedDeals} ($${Math.round(m.closedRevenueUSD).toLocaleString()} revenue, USD-equiv) &middot;
         Meeting Quality Multiplier: &times;${p.tier.multiplier.toFixed(2)} (${p.rate.toFixed(1)}% B2B rejection rate, trailing 30 days ending 1 week ago — applies to Qualified/Meeting only, not New Sales)
       </div>
