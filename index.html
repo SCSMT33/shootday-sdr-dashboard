@@ -1361,7 +1361,7 @@
       </div>
       <div class="chart-card full" data-chart-id="chartNoShowCount">
         <div class="chart-header">
-          <span class="chart-title">Meetings Not Attended — Raw Count <span class="goal-info" id="info-chartNoShowCount" title="Count of leads with Meeting Status = Meeting Not Atended, bucketed by when the LEAD was created — no percentages, just raw counts. Group dropdown: Combined, US vs OUS Teams, or Per SDR. Independent B2B/B2C/All dropdown, separate from the global Leads: filter.">ⓘ</span></span>
+          <span class="chart-title">Meetings Not Attended — Raw Count <span class="goal-info" id="info-chartNoShowCount" title="Count of leads with Meeting Status = Meeting Not Atended or Meeting Rejected, bucketed by when the LEAD was created — no percentages, just raw counts. Group dropdown: Combined, US vs OUS Teams, or Per SDR. Independent B2B/B2C/All dropdown, separate from the global Leads: filter.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartNoShowCount"></div>
             <select class="chart-granularity" id="teamsComparison-chartNoShowCount" onchange="renderCharts(getFilteredDays())">
@@ -1642,7 +1642,7 @@
           <div class="definition-item"><dt>Meeting → Closed Rate</dt><dd>Closed deals ÷ meetings done from the same creation-date cohort. Same "reads low until leads catch up" caveat as the other cohort rates. Only exists in the Sales Funnel — the Mandate Scoreboard doesn't have this row. AE Baseline column shows the playbook's static ~50% benchmark ("Online meetings convert at approximately 50%") instead of a computed number — 66% of the AE-era's closed deals have a blank Meeting Status, so a computed ratio here comes out to either ~93-96% or 266%+ depending on how those blanks are treated, neither of which is trustworthy.</dd></div>
           <div class="definition-item"><dt>Meeting Booked</dt><dd>Meeting Status is Scheduled, Done, Rejected, or Not Atended, or the deal was an instant close (unless the Auto-Booked Meetings Toggle is set to Excluded). "Meeting Requested" doesn't count on its own — roughly three-quarters of those end up disqualified, so it means "asked for," not "confirmed."</dd></div>
           <div class="definition-item"><dt>Meeting Held (Meetings Done)</dt><dd>Meeting Status is Meeting Done, or an instant close (unless the Auto-Booked Meetings Toggle is set to Excluded). Narrower than Meeting Booked, which also counts still-upcoming Scheduled meetings.</dd></div>
-          <div class="definition-item"><dt>Meeting Not Attended (No-Show)</dt><dd>Meeting Status = Meeting Not Atended, as a share of that period's booked meetings (Scheduled + Done + Not Atended + Rejected, minus instant closes). Rejected counts in the denominator but not the numerator — a rejection is the AE declining the meeting, which isn't the same as the client not showing up.</dd></div>
+          <div class="definition-item"><dt>Meeting Not Attended (No-Show)</dt><dd>Meeting Status = Meeting Not Atended or Meeting Rejected, as a share of that period's booked meetings (Scheduled + Done + Not Atended + Rejected, minus instant closes). Same combined numerator the commission Quality Multiplier uses — a rejected meeting is still a booked meeting that didn't happen as scheduled, same as a no-show.</dd></div>
           <div class="definition-item"><dt>Meeting Rejected</dt><dd>The AE declining a booked meeting — a qualification call, not a client no-show. Counts toward Meeting Booked and the no-show rate's denominator, but never its numerator; tracked separately as AE Disqualified / Handoff Quality.</dd></div>
           <div class="definition-item"><dt>MTD / WTD</dt><dd>"Month/week to date" — marks whichever column is the still-in-progress current calendar month or week. Its raw counts are naturally lower than a full period's, simply because the period isn't over yet.</dd></div>
           <div class="definition-item"><dt>Non-Responsive Rate</dt><dd>Two versions in use. Broad (Summary Card and its chart): Disqualified reason is "Not responsive," or Sales status is "Non respondant" — includes leads still mid-cadence, not yet given up on. Terminal (Mandate Scoreboard only, to match the strategic briefing's 29% baseline): Disqualified reason = "Not responsive" alone — leads permanently given up on as unreachable, excluding the transient mid-cadence status.</dd></div>
@@ -2703,7 +2703,11 @@ function computeMetrics(leads, opts) {
   // stale rows is going back and correcting Meeting Status, which the
   // Hygiene Report should flag separately.
   const meetings_no_show_denom = leads.filter(isMeetingBookedCommission).length;
-  const meetings_no_show = leads.filter(r => r['Meeting Status'] === 'Meeting Not Atended').length;
+  // Numerator counts both Not Atended and Rejected — same isMeetingNotAttended
+  // definition the commission Quality Multiplier has always used. A rejection
+  // still means the client's meeting didn't happen as booked, same bottom-line
+  // outcome as a no-show, so both counts against the rate and this raw count.
+  const meetings_no_show = leads.filter(isMeetingNotAttended).length;
   // Meetings that actually took place — Meeting Status = Meeting Done, an
   // instant close, or (AE Baseline only) a blank-status Closed deal — distinct
   // from "Booked", which also counts still-upcoming Scheduled meetings.
@@ -3226,7 +3230,7 @@ function renderSummaryCards(days) {
     : `Sales status = Non respondant or Disqualified reason = Not responsive (includes leads still mid-cadence) ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Lower is better. The Mandate Scoreboard's version is narrower — terminal Not-responsive only, matching the strategic briefing's baseline.${aeNote}`;
   const infoAEDQ = `Count of leads the AE bounced back as wrongly qualified (Sales status contains "Disqualified AE") — measures SDR hand-off quality, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
   const infoPipeline = `Snapshot as of the last day in range: leads whose Sales status is NOT Closed, Disqualified, Lost, Deposit refund, or blank — i.e. still open/in-progress, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
-  const infoNoShow = `Meeting Not Atended ÷ booked meetings (Scheduled + Done + Not Atended + Rejected, minus instant closes) in range — same booked definition commission uses. Scheduled is in the denominator so a lead whose deal resolved without Meeting Status being updated off Scheduled doesn't vanish from the math (this also means brand-new upcoming meetings count here, so the rate reads higher in the most recent week or two before they resolve). Rejected counts in the denominator but not the numerator — that's the AE's qualification call, not a client no-show. Lower is better. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Full breakdown in the "No-Show Rate by SDR" chart below.`;
+  const infoNoShow = `Meeting Not Atended or Rejected ÷ booked meetings (Scheduled + Done + Not Atended + Rejected, minus instant closes) in range — same booked definition commission uses, and the same combined numerator the Quality Multiplier has always used. Scheduled is in the denominator so a lead whose deal resolved without Meeting Status being updated off Scheduled doesn't vanish from the math (this also means brand-new upcoming meetings count here, so the rate reads higher in the most recent week or two before they resolve). Lower is better. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Full breakdown in the "No-Show Rate by SDR" chart below.`;
   document.getElementById('summaryCards').innerHTML = `
     ${countCard('Lead Volume', leadVolTotal, perSDR.map(s => ({ ...s, value: s.leadVol, goal: s.leadsGoal })), elapsed, daysInMo, showProjection, isCommission ? 'B2B leads only' : undefined, d.goalLeads, ae ? ae.leadsPerDay : null, infoLeadVolume, deltas.leadVol)}
     ${countCard('Meetings Booked', totalMeetings, perSDR.map(s => ({ ...s, value: s.meetings, goal: s.meetingsGoal })), elapsed, daysInMo, showProjection, undefined, d.goalMeetings, ae ? ae.meetingsPerDay : null, infoMeetingsBooked, deltas.meetings)}
@@ -4587,7 +4591,7 @@ function renderMandateSection() {
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.aeDqPct != null ? r.aeDqPct.toFixed(1) + '%' : null, r.aeDqOk))
     },
     {
-      label: 'Meeting no-show rate', info: 'Meeting Not Attended ÷ that month\'s booked meetings (Scheduled + Done + Not Attended + Rejected, minus instant closes — same booked definition commission uses). Scheduled is included so a lead whose deal resolved without Meeting Status being corrected off Scheduled still counts. A lead not showing up — distinct from Handoff quality above, which is the AE\'s judgment on qualification.',
+      label: 'Meeting no-show rate', info: 'Meeting Not Attended or Rejected ÷ that month\'s booked meetings (Scheduled + Done + Not Attended + Rejected, minus instant closes — same booked definition commission uses). Scheduled is included so a lead whose deal resolved without Meeting Status being corrected off Scheduled still counts. Distinct from Handoff quality above, which is the AE\'s judgment on qualification.',
       target: `≤ ${s.noShowMax}%`,
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.noShowPct != null ? r.noShowPct.toFixed(1) + '%' : null, r.noShowOk))
     },
