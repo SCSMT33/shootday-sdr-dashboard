@@ -1045,12 +1045,16 @@
     <div class="mandate-section" id="capacitySection">
       <div class="mandate-header" onclick="toggleCapacitySection()">
         <div class="mandate-header-left">
-          <span class="mandate-title">Capacity &amp; Cost <span class="goal-info" id="capacitySectionInfo" title="Workload and spend, all scoped to last calendar month (same cohort Commission uses, independent of the Range: picker above). AE Capacity is grouped by team, not by individual SDR — see its own ⓘ for why. SDR Cost Efficiency's Total Compensation reuses the exact same base+bonus+incentive math as the Commission Calculator below, including each SDR's saved Base/Bonus inputs and the Meeting Quality Multiplier.">ⓘ</span></span>
+          <span class="mandate-title">Capacity &amp; Cost <span class="goal-info" id="capacitySectionInfo" title="Workload and spend for a single chosen month, independent of the Range: picker above — pick any month with data, or the current in-progress month (reads as month-to-date). AE Capacity is grouped by team, not by individual SDR — see its own ⓘ for why. SDR Cost Efficiency's Total Compensation reuses the exact same base+bonus+incentive math as the Commission Calculator below (which is always pinned to last calendar month specifically, regardless of the month chosen here).">ⓘ</span></span>
           <span class="mandate-sub" id="capacityHeaderNote">AE and SDR workload, and what the SDR team costs vs. what it brings in</span>
         </div>
         <span class="mandate-chevron">&#9654;</span>
       </div>
       <div class="mandate-body">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px">
+          <span style="font-size:12px; color:var(--muted); font-weight:600">Month</span>
+          <select class="chart-granularity" id="capacityMonthSelect" onchange="saveCapacityMonth(this.value)"></select>
+        </div>
         <div class="mandate-subheading-row">
           <div class="mandate-subheading">AE Capacity, by team <span class="goal-info" title="Grouped by team (US Team / OUS Team), not by individual SDR: the data shows every AE on a regional team receives qualified leads from BOTH SDRs on the matching team, not one exclusively — e.g. Andrew Thomas gets leads from both MJ and Gospel. So there's no clean 1-to-1 SDR-to-AE line to draw; team-to-team is the honest grouping. Leads Routed = every lead assigned to that AE (via the Owner field), regardless of qualification status. No capacity target shown — there's no stated ceiling per AE in the data or docs yet.">ⓘ</span></div>
         </div>
@@ -6473,6 +6477,36 @@ function saveCapacityGoal(sdrKey, value) {
   try { localStorage.setItem('sdr_capacity_goals', JSON.stringify(goals)); } catch (e) {}
   renderCapacitySection();
 }
+// Month picker: every month present in the loaded data, plus the current
+// (possibly still-in-progress) month even if it has no rows yet — always
+// offered so you can check "how's this month looking so far." Defaults to
+// last calendar month (unchanged behavior) until a selection is saved.
+function capacityAvailableMonths() {
+  const months = new Set();
+  if (rawByDay) Object.keys(rawByDay).forEach(d => months.add(d.slice(0, 7)));
+  months.add(dubaiTodayKey().slice(0, 7));
+  return [...months].sort();
+}
+function capacitySelectedMonth() {
+  try {
+    const saved = localStorage.getItem('sdr_capacity_month');
+    if (saved) return saved;
+  } catch (e) {}
+  return priorMonthKey();
+}
+function saveCapacityMonth(value) {
+  try { localStorage.setItem('sdr_capacity_month', value); } catch (e) {}
+  renderCapacitySection();
+}
+// Same "cap at today" rule the Sales Funnel's Month-over-Month columns use,
+// so picking the current month naturally reads as month-to-date instead of
+// reaching into days that haven't happened yet.
+function capacityMonthDayKeys(monthKey) {
+  const [y, m] = monthKey.split('-').map(Number);
+  const dim = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const today = dubaiTodayKey();
+  return Array.from({ length: dim }, (_, i) => `${monthKey}-${String(i + 1).padStart(2, '0')}`).filter(d => d <= today);
+}
 function capacityMonthRows(days, sdrKeys) {
   const rows = [];
   days.forEach(d => {
@@ -6494,7 +6528,8 @@ function renderCapacityAeTables() {
     el.innerHTML = '<div class="funnel-sdr-empty">Upload a leads CSV to see AE capacity.</div>';
     return;
   }
-  const days = priorMonthDayKeys();
+  const monthKey = capacitySelectedMonth();
+  const days = capacityMonthDayKeys(monthKey);
   el.innerHTML = TEAM_GROUPS.map(g => {
     const rows = capacityMonthRows(days, g.members);
     const byOwner = {};
@@ -6514,7 +6549,7 @@ function renderCapacityAeTables() {
         <td>${byOwner[o].qualified.toLocaleString()}</td>
         <td>${byOwner[o].meetings.toLocaleString()}</td>
         <td>${byOwner[o].closed.toLocaleString()}</td>
-      </tr>`).join('') : `<tr><td colspan="5" class="mandate-kpi-note">No data for ${escapeHtml(g.label)} last month.</td></tr>`;
+      </tr>`).join('') : `<tr><td colspan="5" class="mandate-kpi-note">No data for ${escapeHtml(g.label)} in ${escapeHtml(monthLabelFromKey(monthKey))}.</td></tr>`;
     return `<div class="capacity-team-block">
       <div class="capacity-team-label"><span class="capacity-team-dot" style="background:${g.color}"></span>${escapeHtml(g.label)} (${g.members.map(k => SDR_BY_KEY[k].name).join(' & ')})</div>
       <div style="overflow-x:auto"><table class="mandate-kpi-table">
@@ -6531,7 +6566,7 @@ function renderCapacitySdrTable() {
     table.innerHTML = '<tbody><tr><td class="mandate-kpi-note">Upload a leads CSV to see SDR capacity.</td></tr></tbody>';
     return;
   }
-  const days = priorMonthDayKeys();
+  const days = capacityMonthDayKeys(capacitySelectedMonth());
   const goals = capacityGoals();
   const bodyRows = SDRS.map(s => {
     const rows = capacityMonthRows(days, [s.key]);
@@ -6590,8 +6625,8 @@ function renderCapacityCostTable() {
     summary.innerHTML = '';
     return;
   }
-  const days = priorMonthDayKeys();
-  const monthKey = priorMonthKey();
+  const monthKey = capacitySelectedMonth();
+  const days = capacityMonthDayKeys(monthKey);
   const perSdr = SDRS.map(s => {
     const cost = sdrCostForMonth(days, s.key, monthKey);
     const costPerQualified = cost.metrics.qualified ? cost.total / cost.metrics.qualified : null;
@@ -6614,7 +6649,7 @@ function renderCapacityCostTable() {
       ${payCells}
       <td>${cost.metrics.qualified.toLocaleString()}</td>
       <td>${aov != null ? '$' + Math.round(aov).toLocaleString() : '—'}</td>
-      <td>${payToRevenuePct != null ? payToRevenuePct.toFixed(1) + '%' : '—'}</td>
+      <td>${payToRevenuePct != null ? payToRevenuePct.toFixed(1) + '%' : '—'}${payToRevenuePct != null && cost.source === 'estimated' ? ' <span class="goal-info" title="No reported pay for this month yet — this ratio uses the Commission Calculator\'s estimated Total Compensation instead of a reported figure.">*</span>' : ''}</td>
     </tr>`;
   }).join('');
   table.innerHTML = `<thead><tr><th>SDR</th>${payCols}<th>Qualified Leads</th><th>AOV</th><th>Pay ÷ Revenue</th></tr></thead><tbody>${bodyRows}</tbody>`;
@@ -6636,9 +6671,22 @@ function renderCapacityCostTable() {
 function renderCapacitySection() {
   const section = document.getElementById('capacitySection');
   if (!section) return;
-  const monthKey = priorMonthKey();
+  const monthKey = capacitySelectedMonth();
+  const isCurrentMonth = monthKey === dubaiTodayKey().slice(0, 7);
+  const monthSelect = document.getElementById('capacityMonthSelect');
+  if (monthSelect) {
+    const months = capacityAvailableMonths();
+    monthSelect.innerHTML = months.map(mk => {
+      const current = mk === dubaiTodayKey().slice(0, 7);
+      return `<option value="${mk}">${escapeHtml(monthLabelFromKey(mk))}${current ? ' (MTD)' : ''}</option>`;
+    }).join('');
+    // The selected month might not be in the just-loaded data (e.g. a saved
+    // choice from a previous CSV) — fall back to last calendar month rather
+    // than silently selecting nothing.
+    monthSelect.value = months.includes(monthKey) ? monthKey : priorMonthKey();
+  }
   const note = document.getElementById('capacityHeaderNote');
-  if (note) note.textContent = `AE and SDR workload, and what the SDR team costs vs. what it brings in — ${monthLabelFromKey(monthKey)}`;
+  if (note) note.textContent = `AE and SDR workload, and what the SDR team costs vs. what it brings in — ${monthLabelFromKey(monthKey)}${isCurrentMonth ? ' (month to date — incomplete)' : ''}`;
   renderCapacityAeTables();
   renderCapacitySdrTable();
   renderCapacityCostTable();
