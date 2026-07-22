@@ -1062,7 +1062,7 @@
         <div style="overflow-x:auto"><table class="mandate-kpi-table" id="capacitySdrTable"></table></div>
 
         <div class="mandate-subheading-row" style="margin-top:24px">
-          <div class="mandate-subheading">SDR Cost Efficiency <span class="goal-info" title="Cost per SDR prefers the actual reported monthly pay (same figures entered in the Sales Funnel's Pay ÷ Revenue row) when one exists for the month; otherwise it falls back to the Commission Calculator's computed Total Compensation (Base + Bonus + incentives, marked with * when this happens). Cost per Qualified Lead = that cost ÷ Qualified Leads. AOV = closed revenue ÷ closed deals for that SDR's leads created last month — often '—' in a low-volume month, same caveat as the Commission card's own Closed Deals figure.">ⓘ</span></div>
+          <div class="mandate-subheading">SDR Cost Efficiency <span class="goal-info" title="Cost per SDR prefers the actual reported monthly pay (same figures entered in the Sales Funnel's Pay ÷ Revenue row) when one exists for the month; otherwise it falls back to the Commission Calculator's computed Total Compensation (Base + Bonus + incentives, marked with * when this happens). Cost per Qualified Lead = that cost ÷ Qualified Leads. AOV = closed revenue ÷ closed deals for that SDR's leads created last month — often '—' in a low-volume month, same caveat as the Commission card's own Closed Deals figure. Pay ÷ Revenue = that same cost ÷ closed revenue, per SDR — a ratio, not a raw dollar figure, so it stays visible regardless of the $ toggle, the same rule the team-wide Cost ÷ Revenue tile already follows.">ⓘ</span></div>
           <label class="chart-cumulative-toggle" title="Off by default so this table can be shared with the SDR team without exposing each other's pay. Cost ÷ Revenue and AOV aren't personal income, so those stay visible either way.">
             <input type="checkbox" id="capacityShowPayToggle" onchange="toggleCapacityShowPay()">
             <span class="toggle-track"></span>
@@ -1625,7 +1625,7 @@
           <div class="definition-item"><dt>Commission — New Sales Incentive</dt><dd>A flat 0.25% of closed-deal revenue (USD-equivalent — AED is treated at 1:1 parity with USD by policy, not real exchange rate), no minimum, no cap, and not scaled by the Meeting Quality Multiplier. Counted from leads created last calendar month that are Closed as of now, excluding Instant Closes (not the SDR's doing) — same cohort as Qualified Leads/Meetings, not by when the deal actually closed.</dd></div>
           <div class="definition-item"><dt>Commission — Payout Timing</dt><dd>Commission always looks at last calendar month's performance, independent of the Range: picker elsewhere on the dashboard — the brackets need a fully completed month to mean anything.</dd></div>
           <div class="definition-item"><dt>Commission — Qualified Leads Incentive</dt><dd>Qualified leads (B2B + B2C combined) as a % of that SDR's B2B leads, from last calendar month's leads by creation date: &lt;40% → $0, 40–50% → $150, 50–55% → $200, 55–60% → $250, 60%+ → $400.</dd></div>
-          <div class="definition-item"><dt>Cost per Qualified Lead (SDR)</dt><dd>Capacity &amp; Cost section, last calendar month. That SDR's Total Compensation (Base + Bonus + all three commission incentives, quality-multiplier applied — the exact same figure as their Commission Calculator card) ÷ their Qualified Leads count. Requires that SDR's Base/Bonus to be entered on their Commission card first, or it reads low (incentives only). The team-wide summary strip above the table also shows Cost ÷ Revenue and Avg Cost per SDR.</dd></div>
+          <div class="definition-item"><dt>Cost per Qualified Lead (SDR)</dt><dd>Capacity &amp; Cost section, last calendar month. That SDR's cost (see SDR Pay) ÷ their Qualified Leads count. The team-wide summary strip above the table also shows Cost ÷ Revenue and Avg Cost per SDR. Hidden behind the "Show $ figures" toggle (off by default) since it reveals individual pay.</dd></div>
           <div class="definition-item"><dt>Coverage (Lead Coverage)</dt><dd>Share of the team's B2B leads that got worked at all — any Sales status set, any Meeting Status set, or a matched first call. Leads younger than 4 days are excluded from both sides of the ratio, so brand-new leads still being worked don't read as leakage.</dd></div>
           <div class="definition-item"><dt>Sales Funnel Compare Mode</dt><dd>Compare: dropdown in the Sales Funnel controls. "vs Previous period" (default): each column's ▲/▼ is measured against the column before it — the first column never has one. "vs AE Baseline": each column's ▲/▼ is instead measured against that same column's own AE Baseline reference, scaled to its length — every column can have a delta, but only where AE Baseline data is loaded.</dd></div>
           <div class="definition-item"><dt>Data Hygiene — Marking Laws (under construction — not finalized)</dt><dd>The 7 rules the score is built from, weighted 1–3 by how badly they corrupt the dashboard's numbers: (3) a meeting on a lead whose Sales status isn't qualified; (3) a Sales status the dashboard doesn't recognize; (2) "Meeting Scheduled" still set 21+ days after creation; (1) Disqualified with no reason given; (1) a Disqualified reason present on a live or won lead (Lost is exempt — the team routinely files its reason under either field); (1) "Non respondant" status with a Disqualified reason that isn't "Not responsive"/"Stopped responding"; (1) blank Sales status on a lead more than 3 days old.</dd></div>
@@ -1648,6 +1648,7 @@
           <div class="definition-item"><dt>Qualified Lead</dt><dd>Qualified by the SDR (not by what the AE later did with it) — a lead counts as qualified if EITHER is true: Sales status is on an allowlist (Hot, Warm, Pending, Closed, Lost, the refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need a scheduled follow-up, Qualified SDR, or anything starting with "Disqualified AE"), OR a meeting was ever booked on it (Meeting Status is Scheduled, Done, Rejected, or Not Atended) — regardless of what Sales status says now. The CSV is only a snapshot: an AE moving Sales status to Cold/Disqualified after the fact doesn't erase that the SDR already did their job. If Sales status is blank and no meeting was booked, an explicit SQL status = Qualified still counts — a legacy fallback that mostly applies to AE Baseline data.</dd></div>
           <div class="definition-item"><dt>SDR Capacity</dt><dd>Capacity &amp; Cost section, last calendar month. Leads (B2B), Qualified, Meetings Booked, and Closed for that SDR, plus an editable Capacity target — defaults to 275/month, the onboarding brief's own steady-state target per Coordinator once the team reaches 6 people. Leads shown in red when they exceed the target.</dd></div>
           <div class="definition-item"><dt>SDR Disqualified</dt><dd>Sales status is exactly "Disqualified" — the SDR's own screening call. Distinct from AE Disqualified, which is the AE overruling a qualification after handoff.</dd></div>
+          <div class="definition-item"><dt>SDR Pay (Capacity &amp; Cost)</dt><dd>Prefers the actual reported monthly pay (the same figures entered in the Sales Funnel's Pay ÷ Revenue row) for that exact month when one exists; falls back to the Commission Calculator's computed Total Compensation (Base + Bonus + all three incentives, quality-multiplier applied — same figure as that SDR's Commission card) only when nothing's been reported yet, marked with * when this happens. Feeds Total Compensation, Cost per Qualified Lead, and Pay ÷ Revenue (that SDR's cost ÷ their closed revenue — a ratio, so it stays visible even with $ figures hidden).</dd></div>
           <div class="definition-item"><dt>Speed-to-Lead</dt><dd>Median (not mean) minutes from a lead's creation to that SDR's first outbound call, matched by phone number against the Aircall call log. A lead created before the call log's own earliest call is excluded as ineligible to measure; a match found more than 48 hours later is treated as unreliable and discarded rather than counted as a real (very slow) response.</dd></div>
           <div class="definition-item"><dt>Work Week (Saturday–Friday)</dt><dd>The 7-day week every "Weekly" view on this dashboard uses, running Saturday through Friday rather than the Monday-start Western convention — matches the team's actual working week.</dd></div>
         </dl>
@@ -6595,11 +6596,15 @@ function renderCapacityCostTable() {
     const cost = sdrCostForMonth(days, s.key, monthKey);
     const costPerQualified = cost.metrics.qualified ? cost.total / cost.metrics.qualified : null;
     const aov = cost.metrics.closedDeals ? cost.metrics.closedRevenueUSD / cost.metrics.closedDeals : null;
-    return { sdr: s, cost, costPerQualified, aov };
+    const payToRevenuePct = cost.metrics.closedRevenueUSD ? (cost.total / cost.metrics.closedRevenueUSD * 100) : null;
+    return { sdr: s, cost, costPerQualified, aov, payToRevenuePct };
   });
 
   const payCols = showPay ? '<th>Total Compensation</th><th>Cost / Qualified Lead</th>' : '';
-  const bodyRows = perSdr.map(({ sdr, cost, costPerQualified, aov }) => {
+  // Pay ÷ Revenue is a ratio, not a raw dollar figure — per the same rule
+  // Cost ÷ Revenue (team tile) already follows, it stays visible regardless
+  // of the $ toggle above.
+  const bodyRows = perSdr.map(({ sdr, cost, costPerQualified, aov, payToRevenuePct }) => {
     const payCells = showPay
       ? `<td>$${Math.round(cost.total).toLocaleString()}${cost.source === 'estimated' ? ' <span class="goal-info" title="No reported pay for this month yet — estimated from the Commission Calculator\'s Base/Bonus/incentive formula instead.">*</span>' : ''}</td>
          <td>${costPerQualified != null ? '$' + Math.round(costPerQualified).toLocaleString() : '—'}</td>`
@@ -6609,9 +6614,10 @@ function renderCapacityCostTable() {
       ${payCells}
       <td>${cost.metrics.qualified.toLocaleString()}</td>
       <td>${aov != null ? '$' + Math.round(aov).toLocaleString() : '—'}</td>
+      <td>${payToRevenuePct != null ? payToRevenuePct.toFixed(1) + '%' : '—'}</td>
     </tr>`;
   }).join('');
-  table.innerHTML = `<thead><tr><th>SDR</th>${payCols}<th>Qualified Leads</th><th>AOV</th></tr></thead><tbody>${bodyRows}</tbody>`;
+  table.innerHTML = `<thead><tr><th>SDR</th>${payCols}<th>Qualified Leads</th><th>AOV</th><th>Pay ÷ Revenue</th></tr></thead><tbody>${bodyRows}</tbody>`;
 
   const teamTotalComp = perSdr.reduce((sum, p) => sum + p.cost.total, 0);
   const teamQualified = perSdr.reduce((sum, p) => sum + p.cost.metrics.qualified, 0);
