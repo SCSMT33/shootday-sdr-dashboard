@@ -690,6 +690,7 @@
   .mandate-kpi-name { font-weight: 600; white-space: nowrap; }
   .mandate-kpi-value { font-size: 15px; font-weight: 700; white-space: nowrap; }
   .mandate-kpi-note { color: var(--muted); font-size: 11px; }
+  .mandate-kpi-total td { font-weight: 700; border-top: 2px solid var(--border); }
   .mandate-status { font-weight: 700; white-space: nowrap; }
   .mandate-status.on { color: var(--green); }
   .mandate-status.off { color: var(--red); }
@@ -1044,7 +1045,7 @@
     <div class="mandate-section" id="capacitySection">
       <div class="mandate-header" onclick="toggleCapacitySection()">
         <div class="mandate-header-left">
-          <span class="mandate-title">Capacity &amp; Cost <span class="goal-info" id="capacitySectionInfo" title="Workload and spend for a single chosen month, independent of the Range: picker above — pick any month with data, or the current in-progress month (reads as month-to-date). AE Capacity is grouped by team, not by individual SDR — see its own ⓘ for why. SDR Cost Efficiency's Total Compensation reuses the exact same base+bonus+incentive math as the Commission Calculator below (which is always pinned to last calendar month specifically, regardless of the month chosen here).">ⓘ</span></span>
+          <span class="mandate-title">Capacity &amp; Cost <span class="goal-info" id="capacitySectionInfo" title="Workload and spend for a single chosen month, independent of the Range: picker above — pick any month with data, or the current in-progress month (reads as month-to-date). AE Capacity is grouped by team, not by individual SDR — see its own ⓘ for why. QAL Funnel by SDR uses its own stricter Qualified definition, separate from the rest of this dashboard — see its own ⓘ and the Definitions section. SDR Cost Efficiency's Total Compensation reuses the exact same base+bonus+incentive math as the Commission Calculator below (which is always pinned to last calendar month specifically, regardless of the month chosen here).">ⓘ</span></span>
           <span class="mandate-sub" id="capacityHeaderNote">AE and SDR workload, and what the SDR team costs vs. what it brings in</span>
         </div>
         <span class="mandate-chevron">&#9654;</span>
@@ -1063,6 +1064,11 @@
           <div class="mandate-subheading">SDR Capacity <span class="goal-info" title="Leads (B2B) is measured against the editable Capacity target below — defaults to 275/month, the onboarding brief's own steady-state target per Coordinator once the team reaches 6 people. Qualified/Meetings Booked/Closed use the same all-leads (B2B+B2C) definitions as everywhere else on this dashboard.">ⓘ</span></div>
         </div>
         <div style="overflow-x:auto"><table class="mandate-kpi-table" id="capacitySdrTable"></table></div>
+
+        <div class="mandate-subheading-row" style="margin-top:24px">
+          <div class="mandate-subheading">QAL Funnel by SDR (B2B/B2C) <span class="goal-info" title="Same chosen month as the rest of this section. Uses its own stricter Qualified definition (see Definitions below) — QAL = Sales status Hot/Warm/Closed/Lost/Qualified_SDR/any refund status — deliberately narrower than the 'Qualified' column in the SDR Capacity table above. Duplicate-record and Wrong-info leads are dropped from every column here, including the B2B Leads count itself. Meeting/Meeting Rejected reuse the same Meeting Booked/Not-Attended definitions used everywhere else. QAL %, Meeting %, and Net Meeting % (Meeting − Rejected) are all a share of B2B Leads.">ⓘ</span></div>
+        </div>
+        <div style="overflow-x:auto"><table class="mandate-kpi-table" id="qalFunnelSdrTable"></table></div>
 
         <div class="mandate-subheading-row" style="margin-top:24px">
           <div class="mandate-subheading">SDR Cost Efficiency <span class="goal-info" title="Cost per SDR prefers the actual reported monthly pay (same figures entered in the Sales Funnel's Pay ÷ Revenue row) when one exists for the month; otherwise it falls back to the Commission Calculator's computed Total Compensation (Base + Bonus + incentives, marked with * when this happens). Cost per Qualified Lead = that cost ÷ Qualified Leads. AOV = closed revenue ÷ closed deals for that SDR's leads created last month — often '—' in a low-volume month, same caveat as the Commission card's own Closed Deals figure. Pay ÷ Revenue = that same cost ÷ closed revenue, per SDR — a ratio, not a raw dollar figure, so it stays visible regardless of the $ toggle, the same rule the team-wide Cost ÷ Revenue tile already follows.">ⓘ</span></div>
@@ -1647,8 +1653,9 @@
           <div class="definition-item"><dt>Non-Responsive Rate</dt><dd>Two versions in use. Broad (Summary Card and its chart): Disqualified reason is "Not responsive," or Sales status is "Non respondant" — includes leads still mid-cadence, not yet given up on. Terminal (Mandate Scoreboard only, to match the strategic briefing's 29% baseline): Disqualified reason = "Not responsive" alone — leads permanently given up on as unreachable, excluding the transient mid-cadence status.</dd></div>
           <div class="definition-item"><dt>On-Hours / Off-Hours</dt><dd>Whether a lead arrived during an SDR's own working shift (their solo shift plus the team's overlap window), computed in that SDR's own personal timezone — EST for MJ and Gospel, CET for Mark and Levi — not Dubai time. Weekends are always off-hours for everyone, regardless of clock time.</dd></div>
           <div class="definition-item"><dt>Pay ÷ Revenue</dt><dd>Sales Funnel row (Month over Month view, individual SDR tables only — behind the "Show pay ÷ revenue" toggle in the Per-SDR Breakdown, off by default so it's never accidentally visible while screen-sharing). That SDR's total pay for the calendar month ÷ USD-equivalent closed revenue from leads created that month — same creation-date cohort and Instant Close exclusion as commission's own revenue figure. Pay is entered by hand (click a value to set/edit it); lower is better, so the delta color is inverted from every other funnel row. No AE Baseline column — pay data doesn't exist for the pre-SDR era.</dd></div>
+          <div class="definition-item"><dt>QAL Funnel by SDR (B2B/B2C)</dt><dd>Capacity &amp; Cost section, same chosen month as the rest of that section. Reverse-engineered against a hand-counted "golden truth" export for June 2026 until every cell matched, so it uses its own stricter QAL definition instead of the dashboard-wide Qualified Lead below: Sales status is Hot, Warm, Closed, Lost, Qualified_SDR, or any refund status (Full/Deposit/Partial) — notably, Pending and Quote Sent do NOT count here even though they do for the main Qualified Lead metric. Duplicate-record and Wrong-info leads are dropped from every column, including the B2B Leads denominator itself, before the B2B/B2C split happens. Meeting and Meeting Rejected reuse the exact same Meeting Booked / Meeting Not Attended definitions as everywhere else on the dashboard. QAL %, Meeting %, and Net Meeting % (Meeting − Rejected) are each that count ÷ B2B Leads. Small (single-digit) drift against the golden-truth figures is expected — Creation Date is Romania-local and gets converted to Dubai time, so a handful of leads right at a month boundary can land in a different bucket than a manual read of the raw export.</dd></div>
           <div class="definition-item"><dt>Qualified → Closed Rate</dt><dd>Closed deals ÷ qualified leads from the same creation-date cohort. Same "reads low until leads catch up" caveat as the other cohort rates.</dd></div>
-          <div class="definition-item"><dt>Qualified Lead</dt><dd>Qualified by the SDR (not by what the AE later did with it) — a lead counts as qualified if EITHER is true: Sales status is on an allowlist (Hot, Warm, Pending, Closed, Lost, the refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need a scheduled follow-up, Qualified SDR, or anything starting with "Disqualified AE"), OR a meeting was ever booked on it (Meeting Status is Scheduled, Done, Rejected, or Not Atended) — regardless of what Sales status says now. The CSV is only a snapshot: an AE moving Sales status to Cold/Disqualified after the fact doesn't erase that the SDR already did their job. If Sales status is blank and no meeting was booked, an explicit SQL status = Qualified still counts — a legacy fallback that mostly applies to AE Baseline data.</dd></div>
+          <div class="definition-item"><dt>Qualified Lead</dt><dd>Qualified by the SDR (not by what the AE later did with it) — a lead counts as qualified if EITHER is true: Sales status is on an allowlist (Hot, Warm, Pending, Closed, Lost, the refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need a scheduled follow-up, Qualified SDR, or anything starting with "Disqualified AE"), OR a meeting was ever booked on it (Meeting Status is Scheduled, Done, Rejected, or Not Atended) — regardless of what Sales status says now. The CSV is only a snapshot: an AE moving Sales status to Cold/Disqualified after the fact doesn't erase that the SDR already did their job. If Sales status is blank and no meeting was booked, an explicit SQL status = Qualified still counts — a legacy fallback that mostly applies to AE Baseline data. Used everywhere on this dashboard EXCEPT the QAL Funnel by SDR table above, which uses its own narrower definition — see that entry.</dd></div>
           <div class="definition-item"><dt>SDR Capacity</dt><dd>Capacity &amp; Cost section, last calendar month. Leads (B2B), Qualified, Meetings Booked, and Closed for that SDR, plus an editable Capacity target — defaults to 275/month, the onboarding brief's own steady-state target per Coordinator once the team reaches 6 people. Leads shown in red when they exceed the target.</dd></div>
           <div class="definition-item"><dt>SDR Disqualified</dt><dd>Sales status is exactly "Disqualified" — the SDR's own screening call. Distinct from AE Disqualified, which is the AE overruling a qualification after handoff.</dd></div>
           <div class="definition-item"><dt>SDR Pay (Capacity &amp; Cost)</dt><dd>Prefers the actual reported monthly pay (the same figures entered in the Sales Funnel's Pay ÷ Revenue row) for that exact month when one exists; falls back to the Commission Calculator's computed Total Compensation (Base + Bonus + all three incentives, quality-multiplier applied — same figure as that SDR's Commission card) only when nothing's been reported yet, marked with * when this happens. Feeds Total Compensation, Cost per Qualified Lead, and Pay ÷ Revenue (that SDR's cost ÷ their closed revenue — a ratio, so it stays visible even with $ figures hidden).</dd></div>
@@ -2650,6 +2657,27 @@ const MEETING_RESOLVED_STATUSES = ['Meeting Done', 'Meeting Not Atended', 'Meeti
 function isMeetingResolved(r) {
   if (isInstantClose(r)) return !autoBookedExcluded();
   return MEETING_RESOLVED_STATUSES.includes(r['Meeting Status']);
+}
+// ─── QAL FUNNEL BY SDR (B2B/B2C) — A SEPARATE, STRICTER QUALIFIED DEFINITION ──
+// Used ONLY by the "QAL Funnel by SDR" table in Capacity & Cost. Reverse-
+// engineered against a hand-counted "golden truth" export for June 2026 (per
+// SDR, per B2B/B2C) until every cell matched — it is deliberately narrower
+// than isQualifiedLead() above, which also treats Pending, Quote Sent, and
+// any booked meeting alone as qualifying. This table's QAL means "the SDR
+// actually landed one of these terminal-ish sales outcomes":
+const QAL_FUNNEL_SALES_STATUSES = new Set([
+  'hot', 'warm', 'closed', 'lost', 'qualified_sdr',
+  'full refund', 'deposit refund', 'partial refund'
+]);
+function isQalFunnelQualified(r) {
+  return QAL_FUNNEL_SALES_STATUSES.has(normalizeSalesStatus(r['Sales status']));
+}
+// A duplicate contact record or a lead logged with materially wrong info
+// isn't a real lead — dropped from every column of the QAL Funnel table,
+// including the B2B Leads denominator itself, not just the QAL numerator.
+const QAL_FUNNEL_EXCLUDED_REASONS = new Set(['duplicate record', 'wrong info']);
+function isQalFunnelExcluded(r) {
+  return QAL_FUNNEL_EXCLUDED_REASONS.has((r['Disqualified reason'] || '').trim().toLowerCase());
 }
 // This dashboard tracks SDR performance, not AE performance — and the CSV is
 // only a point-in-time snapshot, not a history. A lead the SDR booked a
@@ -6590,6 +6618,81 @@ function renderCapacitySdrTable() {
   }).join('');
   table.innerHTML = `<thead><tr><th>SDR</th><th>Leads (B2B)</th><th>Qualified</th><th>Meetings Booked</th><th>Closed</th><th>Capacity target /mo</th></tr></thead><tbody>${bodyRows}</tbody>`;
 }
+// Per-SDR QAL/Meeting funnel split B2B vs B2C, for the same single chosen
+// month as the rest of Capacity & Cost. Uses the QAL Funnel's own stricter
+// definitions (isQalFunnelQualified / isQalFunnelExcluded above) — NOT
+// isQualifiedLead/isMeetingBooked, which are deliberately broader and used
+// everywhere else on this dashboard. Excluded (duplicate/wrong-info) rows
+// are dropped before the B2B/B2C split, so every column here — including the
+// B2B Leads count itself — already has them removed.
+function qalFunnelSdrRow(days, sdrKeys) {
+  const rows = capacityMonthRows(days, sdrKeys).filter(r => !isQalFunnelExcluded(r));
+  const b2b = rows.filter(isBusinessLead);
+  const b2c = rows.filter(r => !isBusinessLead(r));
+  const qalB2b = b2b.filter(isQalFunnelQualified).length;
+  const qalB2c = b2c.filter(isQalFunnelQualified).length;
+  const meetB2b = b2b.filter(r => MEETING_BOOKED_STATUSES.includes(r['Meeting Status'])).length;
+  const meetB2c = b2c.filter(r => MEETING_BOOKED_STATUSES.includes(r['Meeting Status'])).length;
+  const rejB2b = b2b.filter(r => MEETING_NOT_ATTENDED_STATUSES.includes(r['Meeting Status'])).length;
+  const rejB2c = b2c.filter(r => MEETING_NOT_ATTENDED_STATUSES.includes(r['Meeting Status'])).length;
+  const b2bLeads = b2b.length;
+  const totalQal = qalB2b + qalB2c;
+  const totalMeet = meetB2b + meetB2c;
+  const totalRej = rejB2b + rejB2c;
+  return {
+    qalB2b, qalB2c, totalQal, meetB2b, meetB2c, totalMeet, rejB2b, rejB2c, totalRej, b2bLeads,
+    qalPct: b2bLeads ? totalQal / b2bLeads * 100 : null,
+    meetPct: b2bLeads ? totalMeet / b2bLeads * 100 : null,
+    netMeetPct: b2bLeads ? (totalMeet - totalRej) / b2bLeads * 100 : null
+  };
+}
+function renderQalFunnelSdrTable() {
+  const table = document.getElementById('qalFunnelSdrTable');
+  if (!table) return;
+  if (!rawByDay || !Object.keys(rawByDay).length) {
+    table.innerHTML = '<tbody><tr><td class="mandate-kpi-note">Upload a leads CSV to see the QAL funnel.</td></tr></tbody>';
+    return;
+  }
+  const days = capacityMonthDayKeys(capacitySelectedMonth());
+  const pct = v => v == null ? '—' : v.toFixed(1) + '%';
+  const bodyRows = SDRS.map(s => {
+    const row = qalFunnelSdrRow(days, [s.key]);
+    return `<tr>
+      <td class="mandate-kpi-name">${escapeHtml(s.name)}</td>
+      <td>${row.qalB2b.toLocaleString()}</td>
+      <td>${row.qalB2c.toLocaleString()}</td>
+      <td>${row.totalQal.toLocaleString()}</td>
+      <td>${row.meetB2b.toLocaleString()}</td>
+      <td>${row.meetB2c.toLocaleString()}</td>
+      <td>${row.totalMeet.toLocaleString()}</td>
+      <td>${row.rejB2b.toLocaleString()}</td>
+      <td>${row.rejB2c.toLocaleString()}</td>
+      <td>${row.totalRej.toLocaleString()}</td>
+      <td>${row.b2bLeads.toLocaleString()}</td>
+      <td>${pct(row.qalPct)}</td>
+      <td>${pct(row.meetPct)}</td>
+      <td>${pct(row.netMeetPct)}</td>
+    </tr>`;
+  }).join('');
+  const totals = qalFunnelSdrRow(days, SDRS.map(s => s.key));
+  const totalRow = `<tr class="mandate-kpi-total">
+      <td class="mandate-kpi-name">Total</td>
+      <td>${totals.qalB2b.toLocaleString()}</td>
+      <td>${totals.qalB2c.toLocaleString()}</td>
+      <td>${totals.totalQal.toLocaleString()}</td>
+      <td>${totals.meetB2b.toLocaleString()}</td>
+      <td>${totals.meetB2c.toLocaleString()}</td>
+      <td>${totals.totalMeet.toLocaleString()}</td>
+      <td>${totals.rejB2b.toLocaleString()}</td>
+      <td>${totals.rejB2c.toLocaleString()}</td>
+      <td>${totals.totalRej.toLocaleString()}</td>
+      <td>${totals.b2bLeads.toLocaleString()}</td>
+      <td>${pct(totals.qalPct)}</td>
+      <td>${pct(totals.meetPct)}</td>
+      <td>${pct(totals.netMeetPct)}</td>
+    </tr>`;
+  table.innerHTML = `<thead><tr><th>SDR</th><th>B2B QAL</th><th>B2C QAL</th><th>Total QAL</th><th>B2B Meeting</th><th>B2C Meeting</th><th>Total Meeting</th><th>Meeting Rejected B2B</th><th>Meeting Rejected B2C</th><th>Total Meeting Rejected</th><th>B2B Leads</th><th>QAL %</th><th>Meeting %</th><th>Net Meeting %</th></tr></thead><tbody>${bodyRows}${totalRow}</tbody>`;
+}
 // Show $ figures off by default so this table can be shared/screen-shared
 // with the SDR team without exposing each other's pay — Cost ÷ Revenue and
 // AOV aren't personal income, so those stay visible either way; only the
@@ -6692,6 +6795,7 @@ function renderCapacitySection() {
   if (note) note.textContent = `AE and SDR workload, and what the SDR team costs vs. what it brings in — ${monthLabelFromKey(monthKey)}${isCurrentMonth ? ' (month to date — incomplete)' : ''}`;
   renderCapacityAeTables();
   renderCapacitySdrTable();
+  renderQalFunnelSdrTable();
   renderCapacityCostTable();
 }
 
