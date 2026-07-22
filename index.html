@@ -883,8 +883,7 @@
     .report-table { page-break-inside: auto; }
     .report-table tr { page-break-inside: avoid; }
     .report-sdr-heading { page-break-after: avoid; }
-    .report-summary-card { page-break-before: always; }
-    .report-summary-card:first-of-type { page-break-before: avoid; }
+    .report-page-break { page-break-before: always; }
     .report-explainer { page-break-before: always; }
   }
 </style>
@@ -7072,7 +7071,7 @@ function buildQualifiedReportHtml(selected) {
   const monthKey = priorMonthKey();
   const commissionDays = priorMonthDayKeys();
   const periodLabel = `${monthLabelFromKey(monthKey)} performance`;
-  const sections = selected.map(sdr => {
+  const sections = selected.map((sdr, i) => {
     const rows = [];
     commissionDays.forEach(d => {
       const dayRows = rawByDay[d] && rawByDay[d][sdr.key];
@@ -7082,6 +7081,7 @@ function buildQualifiedReportHtml(selected) {
     const qualifiedBooked = qualified.filter(isMeetingBookedCommission);
     const qualifiedNotBooked = qualified.filter(r => !isMeetingBookedCommission(r));
     return `
+      ${i > 0 ? '<div class="report-page-break"></div>' : ''}
       ${reportCommissionSummaryHtml(sdr, monthKey, commissionDays)}
       <div class="report-section-heading">Qualified &amp; Meeting Booked (${qualifiedBooked.length})</div>
       ${reportTable(qualifiedBooked)}
@@ -7154,6 +7154,14 @@ function closeReportPreview() {
   previewArea.style.display = 'none';
   previewArea.innerHTML = '';
 }
+// The browser's print header text and its suggested Save-as-PDF filename
+// both come from document.title — every export otherwise shares the
+// generic page title, so this makes each export self-identifying.
+function reportPrintTitle(selected, monthKey) {
+  const period = monthLabelFromKey(monthKey);
+  const who = selected.length === 1 ? selected[0].name : `${selected.length} SDRs`;
+  return `${who} - ${period} SDR Report`;
+}
 function exportQualifiedReport() {
   const sel = getReportSelection();
   const printArea = document.getElementById('reportPrintArea');
@@ -7162,6 +7170,10 @@ function exportQualifiedReport() {
     return;
   }
   printArea.innerHTML = buildQualifiedReportHtml(sel.selected);
+  const originalTitle = document.title;
+  document.title = reportPrintTitle(sel.selected, priorMonthKey());
+  const restoreTitle = () => { document.title = originalTitle; window.removeEventListener('afterprint', restoreTitle); };
+  window.addEventListener('afterprint', restoreTitle);
   window.print();
 }
 
