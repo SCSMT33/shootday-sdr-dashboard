@@ -1583,7 +1583,7 @@
           <div class="commission-explainer-body">
             <p><strong>1. Pay structure.</strong> Total pay = Base + Bonus (manual, discretionary) + Qualified Leads Incentive + Meeting Set Incentive + New Sales Incentive.</p>
             <p><strong>2. The one-month lag.</strong> Your base salary is paid on the normal schedule for the current month. The three incentives above, however, are always calculated from <strong>last calendar month's</strong> performance — so July's paycheck reflects June's numbers. Why: a deal booked late in a month often hasn't had time to close yet, so judging that same month's payout on its own numbers would unfairly penalize deals that just needed a few more days to land. The one-month lag gives every deal a full month (or more) to actually close before it counts.</p>
-            <p><strong>3. How the Qualified Leads and Meeting incentives are earned.</strong> Qualified Leads and Meetings are counted from all your leads (B2B + B2C), but both are judged as a percentage of your B2B leads only. A lead counts as Qualified based on its Sales status. Your percentage falls into a bracket; each bracket has a fixed dollar amount — the tables are shown on your card. AE disqualifications do NOT count against you.</p>
+            <p><strong>3. How the Qualified Leads and Meeting incentives are earned.</strong> Qualified Leads and Meetings are counted from all your leads (B2B + B2C), but both are judged as a percentage of your B2B leads only. Your percentage falls into a bracket; each bracket has a fixed dollar amount — the tables are shown on your card. AE disqualifications do NOT count against you.</p>
             <p><strong>4. How the New Sales Incentive is earned.</strong> This one is a flat rate, not a bracket: every deal that closed (Sales status = Closed) among the leads <strong>created</strong> last calendar month, converted to a common currency and summed up, &times; 0.25%. No minimum, no cap. A deal counts toward the month its lead was <strong>created</strong> in — if it hasn't closed by the time that month's commission is calculated, it doesn't count, even if it closes later. Instant closes (a deal that closed within 2 hours of the lead being created) don't count either — that's an automatic/self-serve close, not something you actually sold. This one is NOT affected by the Meeting Quality Multiplier below.</p>
             <p><strong>5. The Meeting Quality Multiplier.</strong> Booked meetings only create business value if they happen. Individual no-shows are not your fault and one bad week will not hurt you — the multiplier is based on a rolling 30-day window of your B2B rejection/no-show rate, so it only reacts to a sustained pattern, not a single rough patch. That window ends 1 week ago rather than today: meetings usually aren't scheduled more than a week out, so ending the window a week back means every lead counted has had a real chance to resolve (Done, Not Attended, or Rejected) instead of still sitting at "Scheduled." The rate = meetings rejected or not attended &divide; all B2B meetings you booked, in that window. The multiplier scales the Qualified Leads and Meeting incentives only (not New Sales):</p>
             <ul>
@@ -1627,7 +1627,7 @@
           <div class="definition-item"><dt>Commission — Meetings Incentive</dt><dd>Meetings booked (commission's own definition, which excludes instant closes) as a % of that SDR's B2B leads, from last calendar month's leads by creation date: &lt;20% → $0, 20–25% → $300, 25–30% → $400, 30–35% → $600, 35–40% → $800, 40%+ → $1,000.</dd></div>
           <div class="definition-item"><dt>Commission — New Sales Incentive</dt><dd>A flat 0.25% of closed-deal revenue (USD-equivalent — AED is treated at 1:1 parity with USD by policy, not real exchange rate), no minimum, no cap, and not scaled by the Meeting Quality Multiplier. Counted from leads created last calendar month that are Closed as of now, excluding Instant Closes (not the SDR's doing) — same cohort as Qualified Leads/Meetings, not by when the deal actually closed.</dd></div>
           <div class="definition-item"><dt>Commission — Payout Timing</dt><dd>Commission always looks at last calendar month's performance, independent of the Range: picker elsewhere on the dashboard — the brackets need a fully completed month to mean anything.</dd></div>
-          <div class="definition-item"><dt>Commission — Qualified Leads Incentive</dt><dd>Qualified leads (B2B + B2C combined, based on Sales status) as a % of that SDR's B2B leads, from last calendar month's leads by creation date: &lt;40% → $0, 40–50% → $150, 50–55% → $200, 55–60% → $250, 60%+ → $400.</dd></div>
+          <div class="definition-item"><dt>Commission — Qualified Leads Incentive</dt><dd>Qualified leads (B2B + B2C combined) as a % of that SDR's B2B leads, from last calendar month's leads by creation date: &lt;40% → $0, 40–50% → $150, 50–55% → $200, 55–60% → $250, 60%+ → $400.</dd></div>
           <div class="definition-item"><dt>Cost per Qualified Lead (SDR)</dt><dd>Capacity &amp; Cost section, last calendar month. That SDR's cost (see SDR Pay) ÷ their Qualified Leads count. The team-wide summary strip above the table also shows Cost ÷ Revenue and Avg Cost per SDR. Hidden behind the "Show $ figures" toggle (off by default) since it reveals individual pay.</dd></div>
           <div class="definition-item"><dt>Coverage (Lead Coverage)</dt><dd>Share of the team's B2B leads that got worked at all — any Sales status set, any Meeting Status set, or a matched first call. Leads younger than 4 days are excluded from both sides of the ratio, so brand-new leads still being worked don't read as leakage.</dd></div>
           <div class="definition-item"><dt>Sales Funnel Compare Mode</dt><dd>Compare: dropdown in the Sales Funnel controls. "vs Previous period" (default): each column's ▲/▼ is measured against the column before it — the first column never has one. "vs AE Baseline": each column's ▲/▼ is instead measured against that same column's own AE Baseline reference, scaled to its length — every column can have a delta, but only where AE Baseline data is loaded.</dd></div>
@@ -2668,16 +2668,6 @@ function isMeetingResolved(r) {
 // Baseline export).
 function isQualifiedLead(r) {
   if (MEETING_BOOKED_STATUSES.includes(r['Meeting Status'])) return true;
-  const status = (r['Sales status'] || '').trim();
-  if (status) return isQualifiedStatus(status);
-  return (r['SQL status'] || '').trim().toLowerCase() === 'qualified';
-}
-// COMMISSION ONLY (Qualified Leads Incentive bracket and the printable
-// report's "Qualified" lead listing): judges qualification by Sales status
-// alone, same as isQualifiedLead pre-492aae2 — the meeting-booked override
-// above doesn't apply here. Every chart/card/section outside Commission
-// keeps using the inclusive isQualifiedLead. Temporary, pending review.
-function isQualifiedLeadCommission(r) {
   const status = (r['Sales status'] || '').trim();
   if (status) return isQualifiedStatus(status);
   return (r['SQL status'] || '').trim().toLowerCase() === 'qualified';
@@ -6401,7 +6391,7 @@ function commissionMetricsForSDR(days, sdrKey) {
   });
   const b2bLeads = rows.filter(isBusinessLead).length;
   const b2cLeads = rows.filter(isB2CLead).length;
-  const qualified = rows.filter(isQualifiedLeadCommission).length;
+  const qualified = rows.filter(isQualifiedLead).length;
   const meetings = rows.filter(isMeetingBookedCommission).length;
   // Closed deals/revenue now follow the same creation-date cohort as every
   // other number here — a deal counts toward the month its LEAD was created
@@ -6781,7 +6771,7 @@ function commissionCard(sdr, days, monthKey) {
         <div class="commission-stat-value">${m.b2cLeads}</div>
       </div>
       <div class="commission-stat">
-        <div class="commission-stat-label">Qualified Leads <span class="goal-info" title="Counted from ALL of this SDR's leads — B2B and B2C combined, not B2B-only — based on Sales status (the qualifying-status allowlist: Hot, Warm, Pending, Closed, Lost, refund statuses, Quote sent, Potential deal, Pending to quote/contact, Need follow-up, Qualified SDR, Disqualified AE). The rate below divides that count by B2B leads only (incentive brackets are judged against B2B volume), so a B2C qualification can push the rate above 100% in an unusual month.">ⓘ</span></div>
+        <div class="commission-stat-label">Qualified Leads <span class="goal-info" title="Counted from ALL of this SDR's leads — B2B and B2C combined, not B2B-only — using the same qualified definition as the rest of the dashboard (status allowlist OR a meeting was ever booked). The rate below divides that count by B2B leads only (incentive brackets are judged against B2B volume), so a B2C qualification can push the rate above 100% in an unusual month.">ⓘ</span></div>
         <div class="commission-stat-value">${m.qualified}</div>
         <div class="commission-stat-sub">${m.qualifiedRate.toFixed(1)}% of B2B leads (B2B+B2C qualified &divide; B2B leads)</div>
       </div>
@@ -7077,7 +7067,7 @@ function buildQualifiedReportHtml(selected) {
       const dayRows = rawByDay[d] && rawByDay[d][sdr.key];
       if (dayRows) rows.push(...dayRows);
     });
-    const qualified = rows.filter(isQualifiedLeadCommission);
+    const qualified = rows.filter(isQualifiedLead);
     const qualifiedBooked = qualified.filter(isMeetingBookedCommission);
     const qualifiedNotBooked = qualified.filter(r => !isMeetingBookedCommission(r));
     return `
