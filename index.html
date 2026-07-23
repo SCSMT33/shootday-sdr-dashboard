@@ -949,6 +949,11 @@
         <option value="off" selected>Off</option>
         <option value="on">On</option>
       </select>
+      <span>Lead Rules:</span>
+      <select id="leadRulesSelect" title="Governs the Summary Cards only (Lead Volume, Meetings Booked, Meeting Booked Rate, Leads Qualified, % Leads Qualified, Non-Responsive Rate), for every Leads: filter below including Commission View. Strict (default): Duplicate-record/Wrong-info leads dropped from every count, and Meetings Booked no longer credits an Instant Close — matches a hand-counted golden-truth export. Loose: the older, broader counts (duplicates included, Instant Closes credited as meetings)." onchange="saveLeadRulesFilter(); renderDashboard()">
+        <option value="strict" selected>Strict</option>
+        <option value="loose">Loose</option>
+      </select>
       <span>Leads:</span>
       <select id="leadTypeSelect" onchange="saveLeadTypeFilter(); renderDashboard()">
         <option value="business">B2B leads only</option>
@@ -1644,6 +1649,7 @@
           <div class="definition-item"><dt>Instant Close</dt><dd>A deal that went from lead creation to Closed within 2 hours. Counts as a completed meeting everywhere except commission (never counts there) — subject to the Auto-Booked Meetings Toggle, which can turn that off everywhere else too. Never earns meeting or revenue credit in commission — an instant/self-serve close isn't something the SDR actually sold or met with.</dd></div>
           <div class="definition-item"><dt>Lead</dt><dd>Any Bookings CSV row with a recognized SDR Owner and a non-blank Creation Date. Rows that don't match either are dropped before anything else on the dashboard is computed.</dd></div>
           <div class="definition-item"><dt>Lead → Closed Rate</dt><dd>Closed deals ÷ all leads from the same creation-date cohort. Recent periods always read low — a lead created this week hasn't had time to close yet — this is a running tally that rises as those leads close later, not a same-period conversion rate.</dd></div>
+          <div class="definition-item"><dt>Lead Rules (Strict/Loose toggle)</dt><dd>Top controls bar, defaults to Strict. Governs the Summary Cards ONLY (Lead Volume, Meetings Booked, Meeting Booked Rate, Leads Qualified, % Leads Qualified, Non-Responsive Rate) — every other section (charts, Mandate Scoreboard, Sales Funnel, AE Baseline, Capacity &amp; Cost, Commission Calculator) is unaffected and always uses Strict-equivalent rules already. Strict: Duplicate-record and Wrong-info leads are dropped from every count (including Lead Volume itself), and Meetings Booked no longer credits an Instant Close — matches a hand-counted golden-truth export on every Leads: filter (B2B only, B2C only, All leads, Commission View). Loose: the older, broader counts (duplicates included, Instant Closes credited as meetings) — useful for comparing against how the dashboard used to read. One known exception either way: a small number of leads that are BOTH an Instant Close AND have a genuine Meeting Status set (e.g. "Meeting Done") still don't earn meeting credit under Strict, matching the Commission Calculator's real payout policy — this can leave Meetings Booked a couple of leads short of a pure golden-truth count in edge cases.</dd></div>
           <div class="definition-item"><dt>Meeting → Closed Rate</dt><dd>Closed deals ÷ meetings done from the same creation-date cohort. Same "reads low until leads catch up" caveat as the other cohort rates. Only exists in the Sales Funnel — the Mandate Scoreboard doesn't have this row. AE Baseline column shows the playbook's static ~50% benchmark ("Online meetings convert at approximately 50%") instead of a computed number — 66% of the AE-era's closed deals have a blank Meeting Status, so a computed ratio here comes out to either ~93-96% or 266%+ depending on how those blanks are treated, neither of which is trustworthy.</dd></div>
           <div class="definition-item"><dt>Meeting Booked</dt><dd>Meeting Status is Scheduled, Done, Rejected, or Not Atended, or the deal was an instant close (unless the Auto-Booked Meetings Toggle is set to Excluded). "Meeting Requested" doesn't count on its own — roughly three-quarters of those end up disqualified, so it means "asked for," not "confirmed."</dd></div>
           <div class="definition-item"><dt>Meeting Held (Meetings Done)</dt><dd>Meeting Status is Meeting Done, or an instant close (unless the Auto-Booked Meetings Toggle is set to Excluded). Narrower than Meeting Booked, which also counts still-upcoming Scheduled meetings.</dd></div>
@@ -1815,8 +1821,8 @@ let allData = null;   // { date: { <sdrKey>: metrics, Team: metrics } } — deri
 let allDataB2B = null;   // same shape, always business-leads-only — used by Commission View's Lead Volume card
 let allDataB2C = null;   // same shape, always b2c-leads-only — used by chart-local B2B/B2C/All toggles
 let allDataAll = null;   // same shape, always combined B2B+B2C regardless of the global lead-type filter — used by chart-local B2B/B2C/All toggles
-let allDataCommission = null;   // same shape, combined B2B+B2C, Duplicate-record/Wrong-info leads dropped, Instant Closes not credited as meetings — Commission View Summary Cards' numerator (Meetings Booked/Qualified/NR counts)
-let allDataCommissionB2B = null;   // same shape, business-leads-only, Duplicate-record/Wrong-info leads dropped — Commission View Summary Cards' B2B-leads denominator (replaces allDataB2B for Commission View specifically)
+let allDataStrict = null;   // same shape as allData (respects the Leads: dropdown), but Duplicate-record/Wrong-info leads dropped and Instant Closes not credited as meetings — used by the Summary Cards' numerator (Meetings/Qualified/NR) when the Lead Rules: toggle is Strict (default)
+let allDataStrictB2B = null;   // same shape, always business-leads-only regardless of the Leads: dropdown, same Strict exclusions — Commission View's B2B-leads denominator when Strict
 let rawByDay = null;   // { date: { <sdrKey>: [rows] } } — unfiltered raw rows, persisted
 let rawCalls = null;   // [{ phoneDigits, utcMs, sdrKey, durationSec }] from the Aircall call-history CSV, persisted
 let callsFilename = null;
@@ -1960,6 +1966,7 @@ function parseCSV(text, filename) {
   saveLoadedData(filename);
   loadGoals();
   loadLeadTypeFilter();
+  loadLeadRulesFilter();
   loadRangeFilter();
   loadSelectedSDRs();
   renderDashboard();
@@ -2336,6 +2343,28 @@ function leadTypeFilter() {
   const el = document.getElementById('leadTypeSelect');
   return el ? el.value : 'business';
 }
+// Governs the Summary Cards (Lead Volume, Meetings Booked, Meeting Booked
+// Rate, Leads Qualified, % Leads Qualified, Non-Responsive Rate) for every
+// Leads: filter, including Commission View. Defaults to Strict — Duplicate-
+// record/Wrong-info leads dropped everywhere, Instant Closes no longer
+// credited as a meeting — so B2B/B2C/All leads all read the same as a
+// hand-counted golden-truth export by default. Loose reverts to the older,
+// broader counts. Nothing outside the Summary Cards (charts, Mandate
+// Scoreboard, Sales Funnel, AE Baseline, Capacity & Cost) is affected by
+// this toggle.
+function strictRulesOn() {
+  const el = document.getElementById('leadRulesSelect');
+  return el ? el.value !== 'loose' : true;
+}
+function saveLeadRulesFilter() {
+  try { localStorage.setItem('sdr_lead_rules', document.getElementById('leadRulesSelect').value); } catch (e) {}
+}
+function loadLeadRulesFilter() {
+  try {
+    const saved = localStorage.getItem('sdr_lead_rules');
+    if (saved) document.getElementById('leadRulesSelect').value = saved;
+  } catch (e) {}
+}
 function applyLeadTypeFilter(rows) {
   const f = leadTypeFilter();
   if (f === 'business') return rows.filter(isBusinessLead);
@@ -2349,8 +2378,8 @@ function recomputeAllData() {
   allDataB2B = {};
   allDataB2C = {};
   allDataAll = {};
-  allDataCommission = {};
-  allDataCommissionB2B = {};
+  allDataStrict = {};
+  allDataStrictB2B = {};
   Object.keys(rawByDay).sort().forEach(day => {
     const filtered = {}, b2b = {}, b2c = {}, all = {};
     const commissionAll = {}, commissionB2B = {};
@@ -2361,8 +2390,15 @@ function recomputeAllData() {
       b2b[s.key] = raw.filter(isBusinessLead);
       b2c[s.key] = raw.filter(isB2CLead);
       all[s.key] = raw;
-      commissionAll[s.key] = raw.filter(r => !isLeadExcluded(r));
-      commissionB2B[s.key] = commissionAll[s.key].filter(isBusinessLead);
+      // Strict dataset respects whichever Leads: filter is active (same pool
+      // as `filtered`), just with Duplicate-record/Wrong-info leads dropped —
+      // so Strict + "B2B leads only" gives a B2B-only strict pool, Strict +
+      // "All leads" gives a combined strict pool, etc. The B2B-only variant
+      // below always stays B2B regardless of the Leads: dropdown — used for
+      // Commission View's denominator, which is always B2B leads no matter
+      // what the numerator's scope is.
+      commissionAll[s.key] = filtered[s.key].filter(r => !isLeadExcluded(r));
+      commissionB2B[s.key] = b2b[s.key].filter(r => !isLeadExcluded(r));
       allFiltered.push(...filtered[s.key]);
       allB2B.push(...b2b[s.key]);
       allB2C.push(...b2c[s.key]);
@@ -2374,15 +2410,15 @@ function recomputeAllData() {
     allDataB2B[day] = { Team: computeMetrics(allB2B) };
     allDataB2C[day] = { Team: computeMetrics(allB2C) };
     allDataAll[day] = { Team: computeMetrics(allAll) };
-    allDataCommission[day] = { Team: computeMetrics(allCommissionAll, { commissionMeetings: true }) };
-    allDataCommissionB2B[day] = { Team: computeMetrics(allCommissionB2B, { commissionMeetings: true }) };
+    allDataStrict[day] = { Team: computeMetrics(allCommissionAll, { commissionMeetings: true }) };
+    allDataStrictB2B[day] = { Team: computeMetrics(allCommissionB2B, { commissionMeetings: true }) };
     SDRS.forEach(s => {
       allData[day][s.key] = computeMetrics(filtered[s.key]);
       allDataB2B[day][s.key] = computeMetrics(b2b[s.key]);
       allDataB2C[day][s.key] = computeMetrics(b2c[s.key]);
       allDataAll[day][s.key] = computeMetrics(all[s.key]);
-      allDataCommission[day][s.key] = computeMetrics(commissionAll[s.key], { commissionMeetings: true });
-      allDataCommissionB2B[day][s.key] = computeMetrics(commissionB2B[s.key], { commissionMeetings: true });
+      allDataStrict[day][s.key] = computeMetrics(commissionAll[s.key], { commissionMeetings: true });
+      allDataStrictB2B[day][s.key] = computeMetrics(commissionB2B[s.key], { commissionMeetings: true });
     });
   });
   recomputeCallData();
@@ -2519,8 +2555,8 @@ function clearLoadedData() {
   rawByDay = null;
   allData = null;
   allDataB2B = null;
-  allDataCommission = null;
-  allDataCommissionB2B = null;
+  allDataStrict = null;
+  allDataStrictB2B = null;
   rawCalls = null;
   callsFilename = null;
   allCallsDataAll = null;
@@ -2544,6 +2580,7 @@ function restoreLoadedData() {
     callsFilename = saved.callsFilename || null;
     matchSpeedToLead();
     loadLeadTypeFilter();
+    loadLeadRulesFilter();
     loadRangeFilter();
     loadSelectedSDRs();
     const dates = Object.keys(allData).sort();
@@ -2725,7 +2762,7 @@ function computeMetrics(leads, opts) {
     speed_to_lead_on_matched: 0, speed_to_lead_on_eligible: 0,
     speed_to_lead_off_matched: 0, speed_to_lead_off_eligible: 0 };
   const isAEImpliedMeeting = r => opts.closedImpliesMeeting && r['Sales status'] === 'Closed' && !(r['Meeting Status'] || '').trim();
-  // opts.commissionMeetings: used ONLY by the allDataCommission/allDataCommissionB2B
+  // opts.commissionMeetings: used ONLY by the allDataStrict/allDataStrictB2B
   // datasets (Commission View's Summary Cards) — swaps in the same stricter,
   // no-Instant-Close-credit meeting rule the Commission Calculator itself
   // already uses (isMeetingBookedCommission), instead of the general
@@ -3152,24 +3189,28 @@ function renderSummaryCards(days) {
   const lastDay = days[days.length - 1];
   const ae = isAEBaselineOn() ? computeAEBaselineMetrics() : null;
 
-  // Commission View: every count/rate card (Meetings Booked, Meeting Booked
-  // Rate, Leads Qualified, % Qualified, Non-Responsive Rate) switches to the
-  // same stricter rules the Commission Calculator/payout math already use —
-  // Duplicate-record/Wrong-info leads dropped entirely (allDataCommission /
-  // allDataCommissionB2B, built in recomputeAllData), and Meetings Booked no
-  // longer credits an Instant Close (computeMetrics' commissionMeetings
-  // option, i.e. isMeetingBookedCommission instead of isMeetingBooked) — so
-  // these cards read the same numbers a paycheck would. Every rate/
-  // percentage card also keeps the combined B2B+B2C numerator but is judged
-  // against the B2B-only lead volume as its denominator. Outside Commission
-  // View none of this applies — Lead Volume, Meetings Booked, and Qualified
-  // stay the plain whole-number counts (Instant Closes included, duplicates
-  // included) on every other Leads: filter.
+  // Lead Rules: toggle (top bar, defaults to Strict) governs every count/
+  // rate card here (Lead Volume, Meetings Booked, Meeting Booked Rate, Leads
+  // Qualified, % Qualified, Non-Responsive Rate) on EVERY Leads: filter —
+  // B2B only, B2C only, All leads, and Commission View. Strict: Duplicate-
+  // record/Wrong-info leads dropped entirely (allDataStrict/allDataStrictB2B,
+  // built in recomputeAllData from whichever pool the Leads: dropdown
+  // already selects), and Meetings Booked no longer credits an Instant Close
+  // (computeMetrics' commissionMeetings option, i.e. isMeetingBookedCommission
+  // instead of isMeetingBooked) — so these cards match a hand-counted
+  // golden-truth export by default. Loose reverts to the older, broader
+  // counts. Commission View additionally always keeps the combined B2B+B2C
+  // numerator judged against the B2B-only lead volume as its denominator —
+  // that convention is unrelated to Strict/Loose and applies either way.
+  // Nothing outside the Summary Cards (charts, Mandate Scoreboard, Sales
+  // Funnel, AE Baseline, Capacity & Cost) is affected by this toggle.
   const isCommission = leadTypeFilter() === 'commission';
-  const numData = isCommission ? allDataCommission : allData;
+  const strict = strictRulesOn();
+  const numData = strict ? allDataStrict : allData;
+  const b2bDenomData = strict ? allDataStrictB2B : allDataB2B;
 
   // Totals for the current view
-  const totalLeads = sumMetric(days, v, 'leads');
+  const totalLeads = sumMetricFrom(numData, days, v, 'leads');
   const totalMeetings = sumMetricFrom(numData, days, v, 'meetings');
   const totalQualified = sumMetricFrom(numData, days, v, 'qualified');
   const totalNR = sumMetricFrom(numData, days, v, 'non_responsive');
@@ -3190,7 +3231,7 @@ function renderSummaryCards(days) {
   const totalResolved = sumMetric(days, v, 'meetings_no_show_denom');
   const noShowRate = totalResolved ? (totalNoShow / totalResolved * 100) : 0;
 
-  const leadVolTotal = isCommission ? sumMetricFrom(allDataCommissionB2B, days, v, 'leads') : totalLeads;
+  const leadVolTotal = isCommission ? sumMetricFrom(b2bDenomData, days, v, 'leads') : totalLeads;
 
   const pctQual = leadVolTotal ? (totalQualified / leadVolTotal * 100) : 0;
   const nrRate = leadVolTotal ? (totalNR / leadVolTotal * 100) : 0;
@@ -3206,7 +3247,7 @@ function renderSummaryCards(days) {
   if (prevPeriod) {
     const pd = prevPeriod.days;
     const pl = prevPeriod.label;
-    const prevLeadVol = isCommission ? sumMetricFrom(allDataCommissionB2B, pd, v, 'leads') : sumMetric(pd, v, 'leads');
+    const prevLeadVol = isCommission ? sumMetricFrom(b2bDenomData, pd, v, 'leads') : sumMetricFrom(numData, pd, v, 'leads');
     const prevMeetings = sumMetricFrom(numData, pd, v, 'meetings');
     const prevQualified = sumMetricFrom(numData, pd, v, 'qualified');
     const prevNR = sumMetricFrom(numData, pd, v, 'non_responsive');
@@ -3238,7 +3279,7 @@ function renderSummaryCards(days) {
   // applied to *their own* projected lead volume (not an even split of the
   // selection's total) — leads aren't split evenly.
   const perSDR = SDRS.filter(s => selectedSDRs.has(s.key)).map(s => {
-    const leads = sumMetric(days, s.key, 'leads');
+    const leads = sumMetricFrom(numData, days, s.key, 'leads');
     const meetings = sumMetricFrom(numData, days, s.key, 'meetings');
     const qualified = sumMetricFrom(numData, days, s.key, 'qualified');
     const nr = sumMetricFrom(numData, days, s.key, 'non_responsive');
@@ -3247,7 +3288,7 @@ function renderSummaryCards(days) {
     const matched = sumMetric(days, s.key, 'speed_to_lead_matched');
     const sPipelineBucket = lastDay ? metricsForSelection(allData, lastDay, s.key) : null;
     const pipeline = sPipelineBucket ? sPipelineBucket.active_pipeline : 0;
-    const leadVol = isCommission ? sumMetricFrom(allDataCommissionB2B, days, s.key, 'leads') : leads;
+    const leadVol = isCommission ? sumMetricFrom(b2bDenomData, days, s.key, 'leads') : leads;
     const leadsProjected = elapsed ? (leadVol / elapsed * daysInMo) : 0;
     const noShow = sumMetric(days, s.key, 'meetings_no_show');
     const resolved = sumMetric(days, s.key, 'meetings_no_show_denom');
@@ -3269,22 +3310,24 @@ function renderSummaryCards(days) {
   // right now, not a static description that could drift from reality.
   const leadTypeLabel = { business: 'B2B leads only', b2c: 'B2C leads only', all: 'All leads (B2B+B2C)', commission: 'Commission View' }[leadTypeFilter()] || 'B2B leads only';
   const aeNote = isAEBaselineOn() ? ' AE Baseline row shown = the same calculation run on the frozen pre-SDR AE export.' : '';
+  const strictNote = strict ? ' Lead Rules: Strict — Duplicate-record/Wrong-info leads excluded.' : ' Lead Rules: Loose — Duplicate-record/Wrong-info leads still counted.';
   const infoLeadVolume = isCommission
-    ? `Count of leads created in the selected range, currently filtered to B2B leads only (Commission View always uses B2B as the denominator regardless of the Leads: dropdown) — Duplicate-record and Wrong-info leads are excluded, same as they are from Qualified. Everywhere else on this dashboard, those leads still count toward Lead Volume.${aeNote}`
-    : `Count of leads created in the selected range, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
-  const infoMeetingsBooked = isCommission
-    ? `Commission View uses the same stricter rule the Commission Calculator pays out on: Meeting Status = Scheduled, Done, Rejected, or Not Atended — an Instant Close (closed within 2h of creation, no real Meeting Status) does NOT count as a meeting here, and Duplicate-record/Wrong-info leads are excluded entirely. Everywhere else on this dashboard, an Instant Close still counts as a meeting.${aeNote}`
-    : `Meeting Status = Scheduled, Done, Rejected, or Not Atended, or an instant close (closed within 2h of lead creation, counted as a meeting for consistency with Lead Volume/Qualified) — a Closed deal past 2h with no Meeting Status doesn't count alone. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Commission View uses the stricter payout rule instead (no Instant Close credit, duplicates excluded).${aeNote}`;
+    ? `Count of leads created in the selected range, currently filtered to B2B leads only (Commission View always uses B2B as the denominator regardless of the Leads: dropdown).${strictNote}${aeNote}`
+    : `Count of leads created in the selected range, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${strictNote}${aeNote}`;
+  const meetingRule = strict
+    ? 'Meeting Status = Scheduled, Done, Rejected, or Not Atended — an Instant Close (closed within 2h of creation, no real Meeting Status) does NOT count as a meeting under Strict rules.'
+    : 'Meeting Status = Scheduled, Done, Rejected, or Not Atended, or an Instant Close (closed within 2h of lead creation, counted as a meeting under Loose rules) — a Closed deal past 2h with no Meeting Status doesn\'t count alone.';
+  const infoMeetingsBooked = `${meetingRule} Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${strictNote}${aeNote}`;
   const infoMeetingRate = isCommission
-    ? `Meetings Booked (B2B+B2C combined) ÷ B2B-only Lead Volume — Commission View judges the combined meeting count against the B2B lead denominator.${aeNote}`
-    : `Meetings Booked ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
-  const infoQualified = `Sales status is Hot, Warm, Closed, Lost, Qualified SDR, or any refund status — Duplicate record and Wrong info leads never count. Legacy blank-status rows with SQL status = Qualified still count too. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
+    ? `Meetings Booked (B2B+B2C combined) ÷ B2B-only Lead Volume — Commission View judges the combined meeting count against the B2B lead denominator.${strictNote}${aeNote}`
+    : `Meetings Booked ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${strictNote}${aeNote}`;
+  const infoQualified = `Sales status is Hot, Warm, Closed, Lost, Qualified SDR, or any refund status — Duplicate record and Wrong info leads never count, regardless of the Lead Rules: toggle. Legacy blank-status rows with SQL status = Qualified still count too. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
   const infoPctQualified = isCommission
-    ? `Leads Qualified (B2B+B2C combined) ÷ B2B-only Lead Volume.${aeNote}`
-    : `Leads Qualified ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Qualified = Hot/Warm/Closed/Lost/Qualified SDR/refund status, excluding Duplicate record and Wrong info leads.${aeNote}`;
+    ? `Leads Qualified (B2B+B2C combined) ÷ B2B-only Lead Volume.${strictNote}${aeNote}`
+    : `Leads Qualified ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Qualified = Hot/Warm/Closed/Lost/Qualified SDR/refund status, excluding Duplicate record and Wrong info leads.${strictNote}${aeNote}`;
   const infoNR = isCommission
-    ? `Non-Responsive leads (B2B+B2C) ÷ B2B-only Lead Volume. Non-responsive = Disqualified reason "Not responsive" or Sales status "Non respondant" (includes leads still mid-cadence). Lower is better. The Mandate Scoreboard's version is narrower — terminal Not-responsive only, matching the strategic briefing's baseline.${aeNote}`
-    : `Sales status = Non respondant or Disqualified reason = Not responsive (includes leads still mid-cadence) ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Lower is better. The Mandate Scoreboard's version is narrower — terminal Not-responsive only, matching the strategic briefing's baseline.${aeNote}`;
+    ? `Non-Responsive leads (B2B+B2C) ÷ B2B-only Lead Volume. Non-responsive = Disqualified reason "Not responsive" or Sales status "Non respondant" (includes leads still mid-cadence). Lower is better. The Mandate Scoreboard's version is narrower — terminal Not-responsive only, matching the strategic briefing's baseline.${strictNote}${aeNote}`
+    : `Sales status = Non respondant or Disqualified reason = Not responsive (includes leads still mid-cadence) ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Lower is better. The Mandate Scoreboard's version is narrower — terminal Not-responsive only, matching the strategic briefing's baseline.${strictNote}${aeNote}`;
   const infoAEDQ = `Count of leads the AE bounced back as wrongly qualified (Sales status contains "Disqualified AE") — measures SDR hand-off quality, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
   const infoPipeline = `Snapshot as of the last day in range: leads whose Sales status is NOT Closed, Disqualified, Lost, Deposit refund, or blank — i.e. still open/in-progress, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
   const infoNoShow = `Meeting Not Atended or Rejected ÷ booked meetings (Scheduled + Done + Not Atended + Rejected, minus instant closes) in range — same booked definition commission uses, and the same combined numerator the Quality Multiplier has always used. Scheduled is in the denominator so a lead whose deal resolved without Meeting Status being updated off Scheduled doesn't vanish from the math (this also means brand-new upcoming meetings count here, so the rate reads higher in the most recent week or two before they resolve). Lower is better. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Full breakdown in the "No-Show Rate by SDR" chart below.`;
