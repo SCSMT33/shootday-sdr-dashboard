@@ -1635,7 +1635,7 @@
           <div class="definition-item"><dt>Cadence Adherence</dt><dd>Not yet computed by the dashboard — reserved as a manually-entered score.</dd></div>
           <div class="definition-item"><dt>Closed Deal</dt><dd>A lead whose Sales status is Closed. Counted the same way everywhere on this dashboard: by the lead's creation-date cohort — of the leads that arrived in a given period, how many are closed as of right now, regardless of when they actually closed. Recent periods always read low until those leads have had time to close. Commission uses this same cohort logic for revenue; in practice it's run once, roughly 3–4 weeks into the following month, and whatever hasn't closed by then just doesn't get counted — the dashboard itself doesn't lock the number, so re-checking a past month later would show more revenue if more of that cohort has since closed.</dd></div>
           <div class="definition-item"><dt>Commission — Meeting Quality Multiplier</dt><dd>Scales the Qualified Leads and Meeting incentives (never New Sales) by an SDR's rejection/no-show rate over a trailing 30-day window ending one week ago, B2B booked meetings only: 0–10% → ×1.00, 10–20% → ×0.85, 20–30% → ×0.60, 30–40% → ×0.30, 40%+ → ×0.</dd></div>
-          <div class="definition-item"><dt>Commission — Meetings Incentive</dt><dd>Meetings booked (the standard dashboard-wide definition — an Instant Close counts here too, as of 2026-07-23) as a % of that SDR's B2B leads, from last calendar month's leads by creation date: &lt;20% → $0, 20–25% → $300, 25–30% → $400, 30–35% → $600, 35–40% → $800, 40%+ → $1,000.</dd></div>
+          <div class="definition-item"><dt>Commission — Meetings Incentive</dt><dd>Meetings booked (commission's own stricter definition — a genuine Meeting Status only, isMeetingBookedStrict; an Instant Close never counts here, matching a hand-counted golden-truth export) as a % of that SDR's B2B leads, from last calendar month's leads by creation date: &lt;20% → $0, 20–25% → $300, 25–30% → $400, 30–35% → $600, 35–40% → $800, 40%+ → $1,000.</dd></div>
           <div class="definition-item"><dt>Commission — New Sales Incentive</dt><dd>A flat 0.25% of closed-deal revenue (USD-equivalent — AED is treated at 1:1 parity with USD by policy, not real exchange rate), no minimum, no cap, and not scaled by the Meeting Quality Multiplier. Counted from leads created last calendar month that are Closed as of now, excluding Instant Closes (not the SDR's doing) — same cohort as Qualified Leads/Meetings, not by when the deal actually closed.</dd></div>
           <div class="definition-item"><dt>Commission — Payout Timing</dt><dd>Commission always looks at last calendar month's performance, independent of the Range: picker elsewhere on the dashboard — the brackets need a fully completed month to mean anything.</dd></div>
           <div class="definition-item"><dt>Commission — Qualified Leads Incentive</dt><dd>Qualified leads (B2B + B2C combined) as a % of that SDR's B2B leads, from last calendar month's leads by creation date: &lt;40% → $0, 40–50% → $150, 50–55% → $200, 55–60% → $250, 60%+ → $400.</dd></div>
@@ -1646,12 +1646,12 @@
           <div class="definition-item"><dt>Data Hygiene Score (under construction — not finalized)</dt><dd>Per SDR, per week: 100 − (that week's total violation weight ÷ leads handled that week) × 100, floored at 0. Checks every lead — all SDRs, B2B and B2C, regardless of any filter — against the 7 marking laws above.</dd></div>
           <div class="definition-item"><dt>Dubai Day-Key</dt><dd>The fixed UTC+4, no-DST timezone every date on this dashboard is bucketed into — "today," month/week boundaries, and each lead's creation day are all computed in Dubai time, regardless of where you're actually viewing from. Unrelated to each SDR's On-Hours/Off-Hours, which use their own personal timezone instead.</dd></div>
           <div class="definition-item"><dt>Hiring Milestones (Mandate Gates)</dt><dd>Active Coordinator headcount vs. each month's cumulative team-size target — editable, defaults to 4 by June, 5 by July, 6 by August (the onboarding doc's gates, dated June 30 / July 31 / August 31, 2026). There's no historical headcount data, so every month compares against today's live count.</dd></div>
-          <div class="definition-item"><dt>Instant Close</dt><dd>A deal that went from lead creation to Closed within 2 hours. Counts as a completed meeting everywhere, including commission (as of 2026-07-23) — subject to the Auto-Booked Meetings Toggle, which can turn that off dashboard-wide. Still never earns closed-deal REVENUE credit in commission's New Sales Incentive — that's a separate, still-active rule: an instant/self-serve close isn't something the SDR actually sold, independent of whether it counts as a meeting.</dd></div>
+          <div class="definition-item"><dt>Instant Close</dt><dd>A deal that went from lead creation to Closed within 2 hours. Counts as a completed meeting on the general, non-Strict/non-commission dashboard (charts, Mandate Scoreboard, Sales Funnel, AE Baseline, Capacity &amp; Cost's own SDR/AE tables) — subject to the Auto-Booked Meetings Toggle, which can turn that off dashboard-wide. Never counts as a meeting under Lead Rules: Strict or in commission (Meeting Set Incentive, Meeting Quality Multiplier, the printable report) — those all require a genuine Meeting Status, matching a hand-counted golden-truth export, regardless of the Auto-Booked toggle. Also never earns closed-deal REVENUE credit in commission's New Sales Incentive, a separate rule unrelated to whether it counts as a meeting.</dd></div>
           <div class="definition-item"><dt>Lead</dt><dd>Any Bookings CSV row with a recognized SDR Owner and a non-blank Creation Date. Rows that don't match either are dropped before anything else on the dashboard is computed.</dd></div>
           <div class="definition-item"><dt>Lead → Closed Rate</dt><dd>Closed deals ÷ all leads from the same creation-date cohort. Recent periods always read low — a lead created this week hasn't had time to close yet — this is a running tally that rises as those leads close later, not a same-period conversion rate.</dd></div>
-          <div class="definition-item"><dt>Lead Rules (Strict/Loose toggle)</dt><dd>Top controls bar, defaults to Strict. Governs the Summary Cards ONLY (Lead Volume, Meetings Booked, Meeting Booked Rate, Leads Qualified, % Leads Qualified, Non-Responsive Rate) — every other section (charts, Mandate Scoreboard, Sales Funnel, AE Baseline, Capacity &amp; Cost, Commission Calculator) is unaffected. Strict: Duplicate-record and Wrong-info leads are dropped from every count (including Lead Volume itself), matching a hand-counted golden-truth export on every Leads: filter (B2B only, B2C only, All leads, Commission View). Loose: the older, broader counts (duplicates included) — useful for comparing against how the dashboard used to read. Instant Close meeting credit is NOT part of this toggle — see Meeting Booked below, which counts an Instant Close as a meeting the same way everywhere, Strict or Loose.</dd></div>
+          <div class="definition-item"><dt>Lead Rules (Strict/Loose toggle)</dt><dd>Top controls bar, defaults to Strict. Governs the Summary Cards ONLY (Lead Volume, Meetings Booked, Meeting Booked Rate, Leads Qualified, % Leads Qualified, Non-Responsive Rate) — every other section (charts, Mandate Scoreboard, Sales Funnel, AE Baseline, Capacity &amp; Cost) is unaffected; the Commission Calculator always uses Strict-equivalent rules regardless of this toggle. Strict: Duplicate-record and Wrong-info leads are dropped from every count (including Lead Volume itself), and Meetings Booked requires a genuine Meeting Status (isMeetingBookedStrict — an Instant Close never counts) — matches a hand-counted golden-truth export on every Leads: filter (B2B only, B2C only, All leads, Commission View), typically within a couple of leads. Loose: the older, broader counts (duplicates included, Instant Closes credited as meetings) — useful for comparing against how the dashboard used to read.</dd></div>
           <div class="definition-item"><dt>Meeting → Closed Rate</dt><dd>Closed deals ÷ meetings done from the same creation-date cohort. Same "reads low until leads catch up" caveat as the other cohort rates. Only exists in the Sales Funnel — the Mandate Scoreboard doesn't have this row. AE Baseline column shows the playbook's static ~50% benchmark ("Online meetings convert at approximately 50%") instead of a computed number — 66% of the AE-era's closed deals have a blank Meeting Status, so a computed ratio here comes out to either ~93-96% or 266%+ depending on how those blanks are treated, neither of which is trustworthy.</dd></div>
-          <div class="definition-item"><dt>Meeting Booked</dt><dd>Meeting Status is Scheduled, Done, Rejected, or Not Atended, or the deal was an instant close (unless the Auto-Booked Meetings Toggle is set to Excluded) — one definition, used everywhere including commission as of 2026-07-23. "Meeting Requested" doesn't count on its own — roughly three-quarters of those end up disqualified, so it means "asked for," not "confirmed."</dd></div>
+          <div class="definition-item"><dt>Meeting Booked</dt><dd>Two versions in use. General (charts, Mandate Scoreboard, Sales Funnel, AE Baseline, Capacity &amp; Cost's own SDR/AE tables): Meeting Status is Scheduled, Done, Rejected, or Not Atended, or the deal was an Instant Close (unless the Auto-Booked Meetings Toggle is set to Excluded). Strict/commission (Summary Cards under Lead Rules: Strict, the Commission Calculator, the Meeting Quality Multiplier, the printable report): Meeting Status only — an Instant Close never counts, regardless of the Auto-Booked toggle, matching a hand-counted golden-truth export. Either way, "Meeting Requested" doesn't count on its own — roughly three-quarters of those end up disqualified, so it means "asked for," not "confirmed."</dd></div>
           <div class="definition-item"><dt>Meeting Held (Meetings Done)</dt><dd>Meeting Status is Meeting Done, or an instant close (unless the Auto-Booked Meetings Toggle is set to Excluded). Narrower than Meeting Booked, which also counts still-upcoming Scheduled meetings.</dd></div>
           <div class="definition-item"><dt>Meeting Not Attended (No-Show)</dt><dd>Meeting Status = Meeting Not Atended or Meeting Rejected, as a share of that period's booked meetings (Scheduled + Done + Not Atended + Rejected, minus instant closes). Same combined numerator the commission Quality Multiplier uses — a rejected meeting is still a booked meeting that didn't happen as scheduled, same as a no-show.</dd></div>
           <div class="definition-item"><dt>Meeting Rejected</dt><dd>The AE declining a booked meeting — a qualification call, not a client no-show. Counts toward Meeting Booked and the no-show rate's denominator, but never its numerator; tracked separately as AE Disqualified / Handoff Quality.</dd></div>
@@ -2689,16 +2689,28 @@ function isMeetingBooked(r) {
   return MEETING_BOOKED_STATUSES.includes(r['Meeting Status']);
 }
 // DISABLED 2026-07-23, kept in place rather than deleted: this used to deny
-// an Instant Close meeting-incentive credit regardless of what Meeting
-// Status said — the rule that an auto-booked (Instant Close) meeting
-// shouldn't count toward the SDR. Every former call site (trailingRejectionCounts,
-// commissionMetricsForSDR, computeMetrics's commissionMeetings/
-// meetings_no_show_denom, the printable report, SDR Cost Efficiency) now
-// calls isMeetingBooked() instead, so an Instant Close counts the same
-// everywhere (still subject to the Auto-Booked Meetings toggle above). Not
-// called anywhere right now — left here in case the rule needs reinstating.
+// an Instant Close meeting-incentive credit UNLESS a real Meeting Status was
+// also present — the confusing part was that it denied credit even to a
+// lead with a genuine "Meeting Done" if that same deal also happened to
+// close within 2 hours. Not called anywhere right now.
 function isMeetingBookedCommission(r) {
   if (isInstantClose(r)) return false;
+  return MEETING_BOOKED_STATUSES.includes(r['Meeting Status']);
+}
+// The definition validated against a hand-counted golden-truth export
+// (matches its "meeting"/"meeting rejected" columns exactly): a genuine
+// Meeting Status entry, full stop — Scheduled, Done, Rejected, or Not
+// Atended. An Instant Close is NEVER credited here, whether or not it also
+// has a real Meeting Status, and this is NOT subject to the Auto-Booked
+// Meetings toggle (that toggle only governs the general isMeetingBooked()
+// above). Used by the Lead Rules: Strict path (Summary Cards), the
+// Commission Calculator, the Meeting Quality Multiplier's rejection-rate
+// denominator, and the printable report — everywhere that needs to match
+// the golden-truth export. isMeetingBooked() above (which does credit an
+// Instant Close) is still used for the general, non-Strict/non-commission
+// dashboard (charts, Mandate Scoreboard, Sales Funnel, AE Baseline,
+// Capacity & Cost's own SDR/AE tables).
+function isMeetingBookedStrict(r) {
   return MEETING_BOOKED_STATUSES.includes(r['Meeting Status']);
 }
 // Of all booked meetings, the subset that didn't actually happen — used by the
@@ -2764,10 +2776,13 @@ function computeMetrics(leads, opts) {
     speed_to_lead_on_matched: 0, speed_to_lead_on_eligible: 0,
     speed_to_lead_off_matched: 0, speed_to_lead_off_eligible: 0 };
   const isAEImpliedMeeting = r => opts.closedImpliesMeeting && r['Sales status'] === 'Closed' && !(r['Meeting Status'] || '').trim();
-  // opts.commissionMeetings is no longer a distinct rule (2026-07-23 removal
-  // of the Instant-Close-denial commission rule) — kept as a harmless no-op
-  // flag some callers still pass, rather than touching every call site.
-  const meetings = leads.filter(r => isMeetingBooked(r) || isAEImpliedMeeting(r)).length;
+  // opts.commissionMeetings: used by allDataStrict/allDataStrictB2B (Lead
+  // Rules: Strict path) — swaps in isMeetingBookedStrict (a genuine Meeting
+  // Status only, matching the golden-truth export) instead of the general
+  // isMeetingBooked, which credits an Instant Close as a meeting.
+  const meetings = opts.commissionMeetings
+    ? leads.filter(isMeetingBookedStrict).length
+    : leads.filter(r => isMeetingBooked(r) || isAEImpliedMeeting(r)).length;
   const meetings_not_attended = leads.filter(isMeetingNotAttended).length;
   const meetings_resolved = leads.filter(r => isMeetingResolved(r) || isAEImpliedMeeting(r)).length;
   // No-Show Rate's denominator: every booked meeting (Scheduled/Done/
@@ -6445,7 +6460,7 @@ function trailingRejectionCounts(sdrKey) {
     const rows = rawByDay[d] && rawByDay[d][sdrKey];
     if (!rows) return;
     rows.filter(isBusinessLead).forEach(r => {
-      if (isMeetingBooked(r)) booked++;
+      if (isMeetingBookedStrict(r)) booked++;
       if (isMeetingNotAttended(r)) bad++;
     });
   });
@@ -6489,7 +6504,7 @@ function commissionMetricsForSDR(days, sdrKey) {
   const b2bLeads = rows.filter(isBusinessLead).length;
   const b2cLeads = rows.filter(isB2CLead).length;
   const qualified = rows.filter(isQualifiedLead).length;
-  const meetings = rows.filter(isMeetingBooked).length;
+  const meetings = rows.filter(isMeetingBookedStrict).length;
   // Closed deals/revenue now follow the same creation-date cohort as every
   // other number here — a deal counts toward the month its LEAD was created
   // in, once it's closed, not the month it actually closed in. If it hasn't
@@ -7241,8 +7256,8 @@ function buildQualifiedReportHtml(selected) {
       if (dayRows) rows.push(...dayRows);
     });
     const qualified = rows.filter(isQualifiedLead);
-    const qualifiedBooked = qualified.filter(isMeetingBooked);
-    const qualifiedNotBooked = qualified.filter(r => !isMeetingBooked(r));
+    const qualifiedBooked = qualified.filter(isMeetingBookedStrict);
+    const qualifiedNotBooked = qualified.filter(r => !isMeetingBookedStrict(r));
     return `
       ${i > 0 ? '<div class="report-page-break"></div>' : ''}
       ${reportCommissionSummaryHtml(sdr, monthKey, commissionDays)}
