@@ -696,6 +696,12 @@
      of the room without switching the whole dashboard's density. */
   #marketTable { font-size: 14px; }
   #marketTable th { font-size: 12px; }
+  /* Every column but the first (Segment) holds a number/percent/dash — right-
+     align them so digits line up on the ones place instead of the ragged
+     left edge that made counts of different widths ("293" vs "—" vs "1,527")
+     read as misaligned. */
+  #marketTable th:not(:first-child), #marketTable td:not(:first-child) { text-align: right; }
+  #marketTable td:not(:first-child) { padding-right: 16px; }
   .mandate-kpi-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
   .mandate-kpi-table td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
   .mandate-kpi-name { font-weight: 600; white-space: nowrap; }
