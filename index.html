@@ -1006,6 +1006,65 @@
           </select>
         </div>
         <div style="overflow-x:auto"><table class="mandate-kpi-table" id="marketTable"></table></div>
+
+        <div class="mandate-subheading-row" style="margin-top:24px">
+          <div class="mandate-subheading">Trends</div>
+          <select class="chart-granularity" id="marketRangeSelect" title="How many months of history the two trend charts below show." onchange="saveMarketRange(this.value)">
+            <option value="all">All months with data</option>
+            <option value="trailing12">Trailing 12 months</option>
+          </select>
+        </div>
+        <div class="charts-grid">
+          <div class="chart-card full" data-chart-id="chartMarketVolume">
+            <div class="chart-header">
+              <span class="chart-title">Volume Trend <span class="goal-info" title="Nbr of BL per month, stacked by whichever dimension is selected. Same Duplicate/Wrong-info exclusion as the table above.">ⓘ</span></span>
+              <div class="chart-header-right">
+                <div class="chart-legend" id="legend-chartMarketVolume"></div>
+                <select class="chart-granularity" id="marketVolumeStackSelect" onchange="renderMarketCharts()">
+                  <option value="team">Stack by Team</option>
+                  <option value="tier">Stack by Tier</option>
+                </select>
+              </div>
+            </div>
+            <canvas id="chartMarketVolume"></canvas>
+          </div>
+          <div class="chart-card full" data-chart-id="chartMarketRate">
+            <div class="chart-header">
+              <span class="chart-title">Conversion Rate Trend <span class="goal-info" title="Bars = lead volume (left axis); lines = the checked rates (right axis, %). Team: All combines US+OUS; picking one team shows only its lines/bars.">ⓘ</span></span>
+              <div class="chart-header-right">
+                <div class="chart-legend" id="legend-chartMarketRate"></div>
+                <span class="activity-metric-checks">
+                  <label class="chart-cumulative-toggle" style="margin-right:0">
+                    <input type="checkbox" id="marketRateLine-pctQual" checked onchange="renderMarketCharts()">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-text">% Qual</span>
+                  </label>
+                  <label class="chart-cumulative-toggle" style="margin-right:0">
+                    <input type="checkbox" id="marketRateLine-meetingPct" checked onchange="renderMarketCharts()">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-text">Meeting Booked %</span>
+                  </label>
+                  <label class="chart-cumulative-toggle">
+                    <input type="checkbox" id="marketRateLine-leadToDeal" checked onchange="renderMarketCharts()">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-text">Lead to Deal %</span>
+                  </label>
+                </span>
+                <select class="chart-granularity" id="marketRateBarsSelect" onchange="renderMarketCharts()">
+                  <option value="nbrBL">Bars: Nbr of BL</option>
+                  <option value="qalBL">Bars: Qal BL</option>
+                  <option value="both">Bars: Both</option>
+                </select>
+                <select class="chart-granularity" id="marketRateTeamSelect" onchange="renderMarketCharts()">
+                  <option value="all">Team: All</option>
+                  <option value="US">Team: US</option>
+                  <option value="OUS">Team: OUS</option>
+                </select>
+              </div>
+            </div>
+            <canvas id="chartMarketRate"></canvas>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -6906,14 +6965,19 @@ function marketMergeMetrics(list) {
   };
 }
 function marketPctCell(v) { return v == null ? '—' : v.toFixed(1) + '%'; }
+// A segment with zero leads shows a dash in every column, not a row of
+// zeros — 0 reads as "we checked, there's nothing here," which is what an
+// empty >1k/complex row (or any other empty segment/month) actually means,
+// rather than a wall of zeros that looks like a rendering bug.
+function marketCountCell(v, m) { return m.nbrBL === 0 ? '—' : v.toLocaleString(); }
 function marketRowHtml(label, m, opts) {
   opts = opts || {};
   return `<tr${opts.total ? ' class="mandate-kpi-total"' : ''}>
     <td class="mandate-kpi-name"${opts.indent ? ' style="padding-left:24px"' : ''}>${escapeHtml(label)}</td>
-    <td>${m.nbrBL.toLocaleString()}</td>
-    <td>${m.qalBL.toLocaleString()}</td>
+    <td>${marketCountCell(m.nbrBL, m)}</td>
+    <td>${marketCountCell(m.qalBL, m)}</td>
     <td>${marketPctCell(m.pctQal)}</td>
-    <td>${m.meetingBooked.toLocaleString()}</td>
+    <td>${marketCountCell(m.meetingBooked, m)}</td>
     <td>${marketPctCell(m.meetingPct)}</td>
     <td>${marketPctCell(m.qalToClosePct)}</td>
     <td>${marketPctCell(m.meetingDoneToClosePct)}</td>
@@ -6969,6 +7033,131 @@ function renderMarketSection() {
   bodyRows += marketRowHtml('Total shootday', grandTotal, { total: true });
 
   table.innerHTML = `<thead><tr><th>Segment</th><th>Nbr of BL</th><th>Qal BL</th><th>% Qal</th><th>Meeting Booked</th><th>Meeting Booked %</th><th>Qal to Close %</th><th>Meeting Done to Close %</th><th>Lead to Deal %</th></tr></thead><tbody>${bodyRows}</tbody>`;
+  renderMarketCharts();
+}
+
+// ─── MARKET SPLIT: MONTHLY TREND CHARTS ────────────────────────────────────────
+// Reuses the exact same per-month computation the table above uses
+// (marketCleanB2BRows/marketRequestTier/marketMetrics/marketMergeMetrics) —
+// just run across every month instead of the one currently picked in the
+// Month dropdown, so the table and these charts can never silently disagree
+// on what a "qualified lead" or "meeting booked" means.
+const MARKET_TIER_COLORS = ['#1a9e94', '#e07b1a', '#c94f7c', '#4a7fd4'];
+function marketRangeMode() {
+  try { return localStorage.getItem('sdr_market_range') || 'all'; } catch (e) { return 'all'; }
+}
+function saveMarketRange(value) {
+  try { localStorage.setItem('sdr_market_range', value); } catch (e) {}
+  renderMarketCharts();
+}
+function marketRangeMonths() {
+  const all = marketAvailableMonths();
+  return marketRangeMode() === 'trailing12' ? all.slice(-12) : all;
+}
+function marketMonthlySeries(monthKeys, tzBasis) {
+  return monthKeys.map(monthKey => {
+    const teamMetrics = {};
+    TEAM_GROUPS.forEach(team => {
+      const tierMetrics = {};
+      MARKET_TIERS.forEach(t => {
+        const rows = marketCleanB2BRows(monthKey, tzBasis, team.members).filter(r => marketRequestTier(r) === t.key);
+        tierMetrics[t.key] = marketMetrics(rows);
+      });
+      teamMetrics[team.key] = { tiers: tierMetrics, total: marketMergeMetrics(MARKET_TIERS.map(t => tierMetrics[t.key])) };
+    });
+    const allTotal = marketMergeMetrics(TEAM_GROUPS.map(g => teamMetrics[g.key].total));
+    return { monthKey, teamMetrics, allTotal };
+  });
+}
+function renderMarketCharts() {
+  if (!rawByDay || !Object.keys(rawByDay).length) return;
+  const rangeSelect = document.getElementById('marketRangeSelect');
+  if (rangeSelect) rangeSelect.value = marketRangeMode();
+  const months = marketRangeMonths();
+  const series = marketMonthlySeries(months, marketTzBasis());
+  const labels = months.map(mk => monthLabelFromKey(mk));
+  renderMarketVolumeChart(series, labels);
+  renderMarketRateChart(series, labels);
+}
+function renderMarketVolumeChart(series, labels) {
+  const el = document.getElementById('chartMarketVolume');
+  if (!el) return;
+  const stackSelect = document.getElementById('marketVolumeStackSelect');
+  const stackBy = stackSelect ? stackSelect.value : 'team';
+  const datasets = stackBy === 'tier'
+    ? MARKET_TIERS.map((t, i) => ({
+        label: t.label,
+        data: series.map(s => TEAM_GROUPS.reduce((sum, g) => sum + s.teamMetrics[g.key].tiers[t.key].nbrBL, 0)),
+        backgroundColor: MARKET_TIER_COLORS[i],
+        stack: 'vol'
+      }))
+    : TEAM_GROUPS.map(g => ({
+        label: g.label,
+        data: series.map(s => s.teamMetrics[g.key].total.nbrBL),
+        backgroundColor: g.color,
+        stack: 'vol'
+      }));
+  if (charts.chartMarketVolume) charts.chartMarketVolume.destroy();
+  charts.chartMarketVolume = new Chart(el.getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: { legend: { display: true, position: 'bottom' } },
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Nbr of BL' } }
+      }
+    }
+  });
+}
+function renderMarketRateChart(series, labels) {
+  const el = document.getElementById('chartMarketRate');
+  if (!el) return;
+  const teamSelect = document.getElementById('marketRateTeamSelect');
+  const teamScope = teamSelect ? teamSelect.value : 'all';
+  const barsSelect = document.getElementById('marketRateBarsSelect');
+  const barsMode = barsSelect ? barsSelect.value : 'nbrBL';
+  const metricsFor = s => teamScope === 'all' ? s.allTotal : s.teamMetrics[teamScope].total;
+
+  const datasets = [];
+  if (barsMode === 'nbrBL' || barsMode === 'both') {
+    datasets.push({ type: 'bar', label: 'Nbr of BL', data: series.map(s => metricsFor(s).nbrBL), backgroundColor: '#c7d2e8', yAxisID: 'y', order: 3 });
+  }
+  if (barsMode === 'qalBL' || barsMode === 'both') {
+    datasets.push({ type: 'bar', label: 'Qal BL', data: series.map(s => metricsFor(s).qalBL), backgroundColor: '#8fa6d6', yAxisID: 'y', order: 3 });
+  }
+  const lineDefs = [
+    { id: 'pctQual', label: '% Qual', field: 'pctQal', color: '#d9534f' },
+    { id: 'meetingPct', label: 'Meeting Booked %', field: 'meetingPct', color: '#2f6fed' },
+    { id: 'leadToDeal', label: 'Lead to Deal %', field: 'leadToDealPct', color: '#6c63ff' }
+  ];
+  lineDefs.forEach(ld => {
+    const cb = document.getElementById('marketRateLine-' + ld.id);
+    if (!cb || !cb.checked) return;
+    datasets.push({
+      type: 'line', label: ld.label,
+      data: series.map(s => metricsFor(s)[ld.field]),
+      borderColor: ld.color, backgroundColor: ld.color,
+      yAxisID: 'y1', tension: 0.2, pointRadius: 3, spanGaps: true, order: 1
+    });
+  });
+
+  if (charts.chartMarketRate) charts.chartMarketRate.destroy();
+  charts.chartMarketRate = new Chart(el.getContext('2d'), {
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: { legend: { display: true, position: 'bottom' } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, position: 'left', title: { display: true, text: 'Leads' } },
+        y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => v + '%' }, title: { display: true, text: '%' } }
+      }
+    }
+  });
 }
 
 // Show $ figures off by default so this table can be shared/screen-shared
