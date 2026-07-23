@@ -986,6 +986,29 @@
     <!-- SUMMARY CARDS -->
     <div class="summary-grid" id="summaryCards"></div>
 
+    <!-- MARKET SPLIT BY REQUEST TYPE -->
+    <div class="mandate-section" id="marketSection">
+      <div class="mandate-header" onclick="toggleMarketSection()">
+        <div class="mandate-header-left">
+          <span class="mandate-title">Market Split by Request Type <span class="goal-info" id="marketSectionInfo" title="B2B funnel for a single chosen month, grouped by Team (US: MJ + Gospel; OUS: Mark + Levi) and Request Type tier. &lt;1k = '&lt;$1k - Share Quote', incomplete = 'Incomplete - Request Info' — the only two Request Types this team currently works; &gt;1k and complex are reserved for a different team's request types and will read 0 here until/unless this team ever gets that work. Leads with a blank or unrecognized Request Type aren't shown in any row, so each team's Total equals the sum of its two Sub totals. Qualified/Meeting Booked use the same strict definitions as the QAL Funnel by SDR table (Capacity &amp; Cost) — Duplicate-record/Wrong-info leads excluded from every count. Qal to Close % = Closed ÷ Qualified. Meeting Done to Close % = Closed ÷ Meeting Status = Meeting Done specifically (not Scheduled/Rejected/Not Atended). Lead to Deal % = Closed ÷ Nbr of BL — the overall conversion rate.">ⓘ</span></span>
+          <span class="mandate-sub" id="marketHeaderNote">B2B funnel by team and request-type tier, for a single chosen month</span>
+        </div>
+        <span class="mandate-chevron">&#9654;</span>
+      </div>
+      <div class="mandate-body">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap">
+          <span style="font-size:12px; color:var(--muted); font-weight:600">Month</span>
+          <select class="chart-granularity" id="marketMonthSelect" onchange="saveMarketMonth(this.value)"></select>
+          <span style="font-size:12px; color:var(--muted); font-weight:600">Month boundary:</span>
+          <select class="chart-granularity" id="marketTzSelect" title="Which timezone defines the start/end of the chosen month. Dubai time is what the rest of this dashboard uses everywhere else. EEST / Romania time matches how the leads' Creation Date is exported and how Airtable's own filters cut off a month — pick this if you're cross-checking against a manual Airtable pull." onchange="saveMarketTz(this.value)">
+            <option value="dubai">Dubai time (dashboard default)</option>
+            <option value="eest">EEST / Romania time</option>
+          </select>
+        </div>
+        <div style="overflow-x:auto"><table class="mandate-kpi-table" id="marketTable"></table></div>
+      </div>
+    </div>
+
     <!-- SALES FUNNEL -->
     <div class="mandate-section" id="funnelSection">
       <div class="mandate-header" onclick="toggleFunnelSection()">
@@ -1649,6 +1672,7 @@
           <div class="definition-item"><dt>Lead</dt><dd>Any Bookings CSV row with a recognized SDR Owner and a non-blank Creation Date. Rows that don't match either are dropped before anything else on the dashboard is computed.</dd></div>
           <div class="definition-item"><dt>Lead → Closed Rate</dt><dd>Closed deals ÷ all leads from the same creation-date cohort. Recent periods always read low — a lead created this week hasn't had time to close yet — this is a running tally that rises as those leads close later, not a same-period conversion rate.</dd></div>
           <div class="definition-item"><dt>Lead Rules (Strict/Loose toggle)</dt><dd>Top controls bar, defaults to Strict. Governs the Summary Cards ONLY (Lead Volume, Meetings Booked, Meeting Booked Rate, Leads Qualified, % Leads Qualified, Non-Responsive Rate) — every other section (charts, Mandate Scoreboard, Sales Funnel, AE Baseline, Capacity &amp; Cost) is unaffected; the Commission Calculator always uses Strict-equivalent rules regardless of this toggle. Strict: Duplicate-record and Wrong-info leads are dropped from every count (including Lead Volume itself), and Meetings Booked requires a genuine Meeting Status (an Instant Close never counts) — applies on every Leads: filter (B2B only, B2C only, All leads, Commission View). Loose: the older, broader counts (duplicates included, Instant Closes credited as meetings) — useful for comparing against how the dashboard used to read.</dd></div>
+          <div class="definition-item"><dt>Market Split by Request Type</dt><dd>Its own section, own month picker, above the Sales Funnel. Grouped by Team (US: MJ + Gospel; OUS: Mark + Levi) and Request Type tier. &lt;1k = "&lt;$1k - Share Quote", incomplete = "Incomplete - Request Info" — the only two Request Types this team currently works, per the onboarding brief's own scope description. &gt;1k and complex are a different team's request types, kept as their own rows (always 0 for this team) rather than hidden. A blank/unrecognized Request Type isn't counted in any row, so each team's Total always equals the sum of its two Sub totals. Qualified/Meeting Booked reuse the same strict definitions as the QAL Funnel by SDR table — Duplicate-record/Wrong-info leads excluded from every count. Qal to Close % = Closed ÷ Qualified. Meeting Done to Close % = Closed ÷ (Meeting Status = Meeting Done specifically, not Scheduled/Rejected/Not Atended). Lead to Deal % = Closed ÷ Nbr of BL. A "Month boundary" dropdown lets you switch between Dubai time (this dashboard's usual bucketing) and EEST/Romania time (how Creation Date is exported and how Airtable's own filters cut off a month) — the two occasionally disagree on which month a lead right at the boundary falls into.</dd></div>
           <div class="definition-item"><dt>Meeting → Closed Rate</dt><dd>Closed deals ÷ meetings done from the same creation-date cohort. Same "reads low until leads catch up" caveat as the other cohort rates. Only exists in the Sales Funnel — the Mandate Scoreboard doesn't have this row. AE Baseline column shows the playbook's static ~50% benchmark ("Online meetings convert at approximately 50%") instead of a computed number — 66% of the AE-era's closed deals have a blank Meeting Status, so a computed ratio here comes out to either ~93-96% or 266%+ depending on how those blanks are treated, neither of which is trustworthy.</dd></div>
           <div class="definition-item"><dt>Meeting Booked</dt><dd>Two versions in use. General (charts, Mandate Scoreboard, Sales Funnel, AE Baseline, Capacity &amp; Cost's own SDR/AE tables): Meeting Status is Scheduled, Done, Rejected, or Not Atended, or the deal was an Instant Close (unless the Auto-Booked Meetings Toggle is set to Excluded). Strict/commission (Summary Cards under Lead Rules: Strict, the Commission Calculator, the Meeting Quality Multiplier, the printable report): Meeting Status only — an Instant Close never counts, regardless of the Auto-Booked toggle. Either way, "Meeting Requested" doesn't count on its own — roughly three-quarters of those end up disqualified, so it means "asked for," not "confirmed."</dd></div>
           <div class="definition-item"><dt>Meeting Held (Meetings Done)</dt><dd>Meeting Status is Meeting Done, or an instant close (unless the Auto-Booked Meetings Toggle is set to Excluded). Narrower than Meeting Booked, which also counts still-upcoming Scheduled meetings.</dd></div>
@@ -3180,6 +3204,7 @@ function renderDashboard() {
   if (!allData) return;
   const days = getFilteredDays();
   renderSummaryCards(days);
+  renderMarketSection();
   renderFunnelSection();
   renderCapacitySection();
   renderMandateSection();
@@ -6773,6 +6798,179 @@ function renderQalFunnelSdrTable() {
     </tr>`;
   table.innerHTML = `<thead><tr><th>SDR</th><th>B2B QAL</th><th>B2C QAL</th><th>Total QAL</th><th>B2B Meeting</th><th>B2C Meeting</th><th>Total Meeting</th><th>Meeting Rejected B2B</th><th>Meeting Rejected B2C</th><th>Total Meeting Rejected</th><th>B2B Leads</th><th>QAL %</th><th>Meeting %</th><th>Net Meeting %</th></tr></thead><tbody>${bodyRows}${totalRow}</tbody>`;
 }
+
+// ─── MARKET SPLIT BY REQUEST TYPE ──────────────────────────────────────────────
+// Own month picker (like Capacity & Cost) plus a month-boundary timezone
+// choice, since the two disagree on which calendar day a lead near a month
+// edge falls into: Dubai time (this dashboard's usual bucketing, via
+// rawByDay's day-keys) vs EEST/Romania time (how Creation Date is exported
+// and how Airtable's own filters cut a month off, with no shift applied at
+// all — see toDubaiDayKey's own comment on the Romania->Dubai conversion
+// this table deliberately skips for the EEST option).
+// Request Type only ever contains two real values for this team's data —
+// '<$1k - Share Quote' and 'Incomplete - Request Info' — matching the
+// onboarding brief's own description of this team's scope as the sub-$1k/
+// incomplete tier. '>1k' and 'complex' are a different team's request
+// types; they're kept as their own rows (always 0 for now) rather than
+// hidden, so the table's shape doesn't change if that team's data ever
+// gets merged in. A blank or unrecognized Request Type isn't shown in any
+// tier row and isn't counted in the team Total either, so each Total always
+// equals the sum of its two Sub totals, never more.
+const MARKET_TIERS = [
+  { key: 'lt1k', label: '<1k' },
+  { key: 'incomplete', label: 'incomplete' },
+  { key: 'gt1k', label: '>1k' },
+  { key: 'complex', label: 'complex' }
+];
+function marketRequestTier(r) {
+  const rt = (r['Request Type'] || '').trim().toLowerCase();
+  if (!rt) return null;
+  if (rt.includes('incomplete')) return 'incomplete';
+  if (rt.includes('complex')) return 'complex';
+  if (rt.startsWith('<$1k') || rt.includes('< $1k') || rt.includes('<1k')) return 'lt1k';
+  if (rt.startsWith('>$1k') || rt.includes('> $1k') || rt.includes('>1k')) return 'gt1k';
+  return null;
+}
+function marketAvailableMonths() {
+  const months = new Set();
+  if (rawByDay) Object.keys(rawByDay).forEach(d => {
+    SDRS.forEach(s => (rawByDay[d][s.key] || []).forEach(r => {
+      const raw = (r['Creation Date'] || '').trim();
+      if (raw.length >= 7) months.add(raw.slice(0, 7));
+    }));
+  });
+  months.add(dubaiTodayKey().slice(0, 7));
+  return [...months].sort();
+}
+function marketSelectedMonth() {
+  try {
+    const saved = localStorage.getItem('sdr_market_month');
+    if (saved) return saved;
+  } catch (e) {}
+  return priorMonthKey();
+}
+function saveMarketMonth(value) {
+  try { localStorage.setItem('sdr_market_month', value); } catch (e) {}
+  renderMarketSection();
+}
+function marketTzBasis() {
+  try { return localStorage.getItem('sdr_market_tz') || 'dubai'; } catch (e) { return 'dubai'; }
+}
+function saveMarketTz(value) {
+  try { localStorage.setItem('sdr_market_tz', value); } catch (e) {}
+  renderMarketSection();
+}
+// Scans every Dubai-day bucket (not just the ones matching monthKey) since
+// the EEST basis can put a lead in a different calendar month than the
+// Dubai-day it happens to be bucketed under.
+function marketCleanB2BRows(monthKey, tzBasis, sdrKeys) {
+  const rows = [];
+  if (!rawByDay) return rows;
+  Object.keys(rawByDay).forEach(d => {
+    sdrKeys.forEach(key => {
+      (rawByDay[d][key] || []).forEach(r => {
+        const raw = (r['Creation Date'] || '').trim();
+        const month = tzBasis === 'eest' ? raw.slice(0, 7) : toDubaiDayKey(raw).slice(0, 7);
+        if (month === monthKey && isBusinessLead(r) && !isLeadExcluded(r)) rows.push(r);
+      });
+    });
+  });
+  return rows;
+}
+function marketMetrics(rows) {
+  const nbrBL = rows.length;
+  const qalBL = rows.filter(isQualifiedLead).length;
+  const meetingBooked = rows.filter(isMeetingBookedStrict).length;
+  const meetingDone = rows.filter(r => r['Meeting Status'] === 'Meeting Done').length;
+  const closed = rows.filter(r => normalizeSalesStatus(r['Sales status']) === 'closed').length;
+  return {
+    nbrBL, qalBL, meetingBooked, meetingDone, closed,
+    pctQal: nbrBL ? qalBL / nbrBL * 100 : null,
+    meetingPct: nbrBL ? meetingBooked / nbrBL * 100 : null,
+    qalToClosePct: qalBL ? closed / qalBL * 100 : null,
+    meetingDoneToClosePct: meetingDone ? closed / meetingDone * 100 : null,
+    leadToDealPct: nbrBL ? closed / nbrBL * 100 : null
+  };
+}
+function marketMergeMetrics(list) {
+  const sum = f => list.reduce((a, m) => a + m[f], 0);
+  const nbrBL = sum('nbrBL'), qalBL = sum('qalBL'), meetingBooked = sum('meetingBooked'),
+        meetingDone = sum('meetingDone'), closed = sum('closed');
+  return {
+    nbrBL, qalBL, meetingBooked, meetingDone, closed,
+    pctQal: nbrBL ? qalBL / nbrBL * 100 : null,
+    meetingPct: nbrBL ? meetingBooked / nbrBL * 100 : null,
+    qalToClosePct: qalBL ? closed / qalBL * 100 : null,
+    meetingDoneToClosePct: meetingDone ? closed / meetingDone * 100 : null,
+    leadToDealPct: nbrBL ? closed / nbrBL * 100 : null
+  };
+}
+function marketPctCell(v) { return v == null ? '—' : v.toFixed(1) + '%'; }
+function marketRowHtml(label, m, opts) {
+  opts = opts || {};
+  return `<tr${opts.total ? ' class="mandate-kpi-total"' : ''}>
+    <td class="mandate-kpi-name"${opts.indent ? ' style="padding-left:24px"' : ''}>${escapeHtml(label)}</td>
+    <td>${m.nbrBL.toLocaleString()}</td>
+    <td>${m.qalBL.toLocaleString()}</td>
+    <td>${marketPctCell(m.pctQal)}</td>
+    <td>${m.meetingBooked.toLocaleString()}</td>
+    <td>${marketPctCell(m.meetingPct)}</td>
+    <td>${marketPctCell(m.qalToClosePct)}</td>
+    <td>${marketPctCell(m.meetingDoneToClosePct)}</td>
+    <td>${marketPctCell(m.leadToDealPct)}</td>
+  </tr>`;
+}
+function toggleMarketSection() {
+  document.getElementById('marketSection').classList.toggle('expanded');
+}
+function renderMarketSection() {
+  const table = document.getElementById('marketTable');
+  if (!table) return;
+  if (!rawByDay || !Object.keys(rawByDay).length) {
+    table.innerHTML = '<tbody><tr><td class="mandate-kpi-note">Upload a leads CSV to see the market split.</td></tr></tbody>';
+    return;
+  }
+  const monthKey = marketSelectedMonth();
+  const monthSelect = document.getElementById('marketMonthSelect');
+  if (monthSelect) {
+    const months = marketAvailableMonths();
+    monthSelect.innerHTML = months.map(mk => `<option value="${mk}">${escapeHtml(monthLabelFromKey(mk))}</option>`).join('');
+    monthSelect.value = months.includes(monthKey) ? monthKey : priorMonthKey();
+  }
+  const tzBasis = marketTzBasis();
+  const tzSelect = document.getElementById('marketTzSelect');
+  if (tzSelect) tzSelect.value = tzBasis;
+  const note = document.getElementById('marketHeaderNote');
+  if (note) note.textContent = `B2B funnel by team and request-type tier — ${monthLabelFromKey(monthKey)} (${tzBasis === 'eest' ? 'EEST/Romania' : 'Dubai'} month boundary)`;
+
+  let bodyRows = '';
+  const teamTotals = [];
+  TEAM_GROUPS.forEach(team => {
+    const tierMetrics = {};
+    MARKET_TIERS.forEach(t => {
+      const rows = marketCleanB2BRows(monthKey, tzBasis, team.members).filter(r => marketRequestTier(r) === t.key);
+      tierMetrics[t.key] = marketMetrics(rows);
+    });
+    const sub1 = marketMergeMetrics([tierMetrics.lt1k, tierMetrics.incomplete]);
+    const sub2 = marketMergeMetrics([tierMetrics.gt1k, tierMetrics.complex]);
+    const teamTotal = marketMergeMetrics([sub1, sub2]);
+    teamTotals.push(teamTotal);
+
+    bodyRows += `<tr><td class="mandate-kpi-name" colspan="9" style="padding-top:16px">${escapeHtml(team.label)}</td></tr>`;
+    MARKET_TIERS.forEach((t, i) => {
+      bodyRows += marketRowHtml(t.label, tierMetrics[t.key], { indent: true });
+      if (i === 1) bodyRows += marketRowHtml('Sub total', sub1, { indent: true, total: true });
+      if (i === 3) bodyRows += marketRowHtml('Sub total', sub2, { indent: true, total: true });
+    });
+    bodyRows += marketRowHtml(`Total ${team.label.replace(' Team', '')}`, teamTotal, { total: true });
+  });
+  const grandTotal = marketMergeMetrics(teamTotals);
+  bodyRows += `<tr><td colspan="9" style="height:8px;border:none"></td></tr>`;
+  bodyRows += marketRowHtml('Total shootday', grandTotal, { total: true });
+
+  table.innerHTML = `<thead><tr><th>Segment</th><th>Nbr of BL</th><th>Qal BL</th><th>% Qal</th><th>Meeting Booked</th><th>Meeting Booked %</th><th>Qal to Close %</th><th>Meeting Done to Close %</th><th>Lead to Deal %</th></tr></thead><tbody>${bodyRows}</tbody>`;
+}
+
 // Show $ figures off by default so this table can be shared/screen-shared
 // with the SDR team without exposing each other's pay — Cost ÷ Revenue and
 // AOV aren't personal income, so those stay visible either way; only the
