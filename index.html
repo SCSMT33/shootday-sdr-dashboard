@@ -1815,6 +1815,8 @@ let allData = null;   // { date: { <sdrKey>: metrics, Team: metrics } } — deri
 let allDataB2B = null;   // same shape, always business-leads-only — used by Commission View's Lead Volume card
 let allDataB2C = null;   // same shape, always b2c-leads-only — used by chart-local B2B/B2C/All toggles
 let allDataAll = null;   // same shape, always combined B2B+B2C regardless of the global lead-type filter — used by chart-local B2B/B2C/All toggles
+let allDataCommission = null;   // same shape, combined B2B+B2C, Duplicate-record/Wrong-info leads dropped, Instant Closes not credited as meetings — Commission View Summary Cards' numerator (Meetings Booked/Qualified/NR counts)
+let allDataCommissionB2B = null;   // same shape, business-leads-only, Duplicate-record/Wrong-info leads dropped — Commission View Summary Cards' B2B-leads denominator (replaces allDataB2B for Commission View specifically)
 let rawByDay = null;   // { date: { <sdrKey>: [rows] } } — unfiltered raw rows, persisted
 let rawCalls = null;   // [{ phoneDigits, utcMs, sdrKey, durationSec }] from the Aircall call-history CSV, persisted
 let callsFilename = null;
@@ -2347,29 +2349,40 @@ function recomputeAllData() {
   allDataB2B = {};
   allDataB2C = {};
   allDataAll = {};
+  allDataCommission = {};
+  allDataCommissionB2B = {};
   Object.keys(rawByDay).sort().forEach(day => {
     const filtered = {}, b2b = {}, b2c = {}, all = {};
-    const allFiltered = [], allB2B = [], allB2C = [], allAll = [];
+    const commissionAll = {}, commissionB2B = {};
+    const allFiltered = [], allB2B = [], allB2C = [], allAll = [], allCommissionAll = [], allCommissionB2B = [];
     SDRS.forEach(s => {
       const raw = rawByDay[day][s.key] || [];
       filtered[s.key] = applyLeadTypeFilter(raw);
       b2b[s.key] = raw.filter(isBusinessLead);
       b2c[s.key] = raw.filter(isB2CLead);
       all[s.key] = raw;
+      commissionAll[s.key] = raw.filter(r => !isLeadExcluded(r));
+      commissionB2B[s.key] = commissionAll[s.key].filter(isBusinessLead);
       allFiltered.push(...filtered[s.key]);
       allB2B.push(...b2b[s.key]);
       allB2C.push(...b2c[s.key]);
       allAll.push(...all[s.key]);
+      allCommissionAll.push(...commissionAll[s.key]);
+      allCommissionB2B.push(...commissionB2B[s.key]);
     });
     allData[day] = { Team: computeMetrics(allFiltered) };
     allDataB2B[day] = { Team: computeMetrics(allB2B) };
     allDataB2C[day] = { Team: computeMetrics(allB2C) };
     allDataAll[day] = { Team: computeMetrics(allAll) };
+    allDataCommission[day] = { Team: computeMetrics(allCommissionAll, { commissionMeetings: true }) };
+    allDataCommissionB2B[day] = { Team: computeMetrics(allCommissionB2B, { commissionMeetings: true }) };
     SDRS.forEach(s => {
       allData[day][s.key] = computeMetrics(filtered[s.key]);
       allDataB2B[day][s.key] = computeMetrics(b2b[s.key]);
       allDataB2C[day][s.key] = computeMetrics(b2c[s.key]);
       allDataAll[day][s.key] = computeMetrics(all[s.key]);
+      allDataCommission[day][s.key] = computeMetrics(commissionAll[s.key], { commissionMeetings: true });
+      allDataCommissionB2B[day][s.key] = computeMetrics(commissionB2B[s.key], { commissionMeetings: true });
     });
   });
   recomputeCallData();
@@ -2506,6 +2519,8 @@ function clearLoadedData() {
   rawByDay = null;
   allData = null;
   allDataB2B = null;
+  allDataCommission = null;
+  allDataCommissionB2B = null;
   rawCalls = null;
   callsFilename = null;
   allCallsDataAll = null;
@@ -2710,7 +2725,14 @@ function computeMetrics(leads, opts) {
     speed_to_lead_on_matched: 0, speed_to_lead_on_eligible: 0,
     speed_to_lead_off_matched: 0, speed_to_lead_off_eligible: 0 };
   const isAEImpliedMeeting = r => opts.closedImpliesMeeting && r['Sales status'] === 'Closed' && !(r['Meeting Status'] || '').trim();
-  const meetings = leads.filter(r => isMeetingBooked(r) || isAEImpliedMeeting(r)).length;
+  // opts.commissionMeetings: used ONLY by the allDataCommission/allDataCommissionB2B
+  // datasets (Commission View's Summary Cards) — swaps in the same stricter,
+  // no-Instant-Close-credit meeting rule the Commission Calculator itself
+  // already uses (isMeetingBookedCommission), instead of the general
+  // isMeetingBooked which credits an Instant Close as a meeting.
+  const meetings = opts.commissionMeetings
+    ? leads.filter(isMeetingBookedCommission).length
+    : leads.filter(r => isMeetingBooked(r) || isAEImpliedMeeting(r)).length;
   const meetings_not_attended = leads.filter(isMeetingNotAttended).length;
   const meetings_resolved = leads.filter(r => isMeetingResolved(r) || isAEImpliedMeeting(r)).length;
   // No-Show Rate's denominator: matches how commission counts a booked
@@ -3130,11 +3152,27 @@ function renderSummaryCards(days) {
   const lastDay = days[days.length - 1];
   const ae = isAEBaselineOn() ? computeAEBaselineMetrics() : null;
 
+  // Commission View: every count/rate card (Meetings Booked, Meeting Booked
+  // Rate, Leads Qualified, % Qualified, Non-Responsive Rate) switches to the
+  // same stricter rules the Commission Calculator/payout math already use —
+  // Duplicate-record/Wrong-info leads dropped entirely (allDataCommission /
+  // allDataCommissionB2B, built in recomputeAllData), and Meetings Booked no
+  // longer credits an Instant Close (computeMetrics' commissionMeetings
+  // option, i.e. isMeetingBookedCommission instead of isMeetingBooked) — so
+  // these cards read the same numbers a paycheck would. Every rate/
+  // percentage card also keeps the combined B2B+B2C numerator but is judged
+  // against the B2B-only lead volume as its denominator. Outside Commission
+  // View none of this applies — Lead Volume, Meetings Booked, and Qualified
+  // stay the plain whole-number counts (Instant Closes included, duplicates
+  // included) on every other Leads: filter.
+  const isCommission = leadTypeFilter() === 'commission';
+  const numData = isCommission ? allDataCommission : allData;
+
   // Totals for the current view
   const totalLeads = sumMetric(days, v, 'leads');
-  const totalMeetings = sumMetric(days, v, 'meetings');
-  const totalQualified = sumMetric(days, v, 'qualified');
-  const totalNR = sumMetric(days, v, 'non_responsive');
+  const totalMeetings = sumMetricFrom(numData, days, v, 'meetings');
+  const totalQualified = sumMetricFrom(numData, days, v, 'qualified');
+  const totalNR = sumMetricFrom(numData, days, v, 'non_responsive');
   const totalAEDQ = sumMetric(days, v, 'ae_dq');
   const totalSTLMatched = sumMetric(days, v, 'speed_to_lead_matched');
   const totalSTLEligible = sumMetric(days, v, 'speed_to_lead_eligible');
@@ -3152,13 +3190,7 @@ function renderSummaryCards(days) {
   const totalResolved = sumMetric(days, v, 'meetings_no_show_denom');
   const noShowRate = totalResolved ? (totalNoShow / totalResolved * 100) : 0;
 
-  // Commission View: every rate/percentage card (Meeting Booked Rate, % Qualified,
-  // NR Rate) keeps the combined B2B+B2C numerator but is judged against the
-  // B2B-only lead volume as its denominator — same as the Lead Volume card uses.
-  // Outside Commission View these equal the combined totals, so the math below
-  // is unaffected.
-  const isCommission = leadTypeFilter() === 'commission';
-  const leadVolTotal = isCommission ? sumMetricFrom(allDataB2B, days, v, 'leads') : totalLeads;
+  const leadVolTotal = isCommission ? sumMetricFrom(allDataCommissionB2B, days, v, 'leads') : totalLeads;
 
   const pctQual = leadVolTotal ? (totalQualified / leadVolTotal * 100) : 0;
   const nrRate = leadVolTotal ? (totalNR / leadVolTotal * 100) : 0;
@@ -3174,10 +3206,10 @@ function renderSummaryCards(days) {
   if (prevPeriod) {
     const pd = prevPeriod.days;
     const pl = prevPeriod.label;
-    const prevLeadVol = isCommission ? sumMetricFrom(allDataB2B, pd, v, 'leads') : sumMetric(pd, v, 'leads');
-    const prevMeetings = sumMetric(pd, v, 'meetings');
-    const prevQualified = sumMetric(pd, v, 'qualified');
-    const prevNR = sumMetric(pd, v, 'non_responsive');
+    const prevLeadVol = isCommission ? sumMetricFrom(allDataCommissionB2B, pd, v, 'leads') : sumMetric(pd, v, 'leads');
+    const prevMeetings = sumMetricFrom(numData, pd, v, 'meetings');
+    const prevQualified = sumMetricFrom(numData, pd, v, 'qualified');
+    const prevNR = sumMetricFrom(numData, pd, v, 'non_responsive');
     const prevNoShow = sumMetric(pd, v, 'meetings_no_show');
     const prevResolved = sumMetric(pd, v, 'meetings_no_show_denom');
     const prevMeetingRate = prevLeadVol ? (prevMeetings / prevLeadVol * 100) : null;
@@ -3207,15 +3239,15 @@ function renderSummaryCards(days) {
   // selection's total) — leads aren't split evenly.
   const perSDR = SDRS.filter(s => selectedSDRs.has(s.key)).map(s => {
     const leads = sumMetric(days, s.key, 'leads');
-    const meetings = sumMetric(days, s.key, 'meetings');
-    const qualified = sumMetric(days, s.key, 'qualified');
-    const nr = sumMetric(days, s.key, 'non_responsive');
+    const meetings = sumMetricFrom(numData, days, s.key, 'meetings');
+    const qualified = sumMetricFrom(numData, days, s.key, 'qualified');
+    const nr = sumMetricFrom(numData, days, s.key, 'non_responsive');
     const aedq = sumMetric(days, s.key, 'ae_dq');
     const medianMinutes = median(speedToLeadMinutesValues(days, [s.key]));
     const matched = sumMetric(days, s.key, 'speed_to_lead_matched');
     const sPipelineBucket = lastDay ? metricsForSelection(allData, lastDay, s.key) : null;
     const pipeline = sPipelineBucket ? sPipelineBucket.active_pipeline : 0;
-    const leadVol = isCommission ? sumMetricFrom(allDataB2B, days, s.key, 'leads') : leads;
+    const leadVol = isCommission ? sumMetricFrom(allDataCommissionB2B, days, s.key, 'leads') : leads;
     const leadsProjected = elapsed ? (leadVol / elapsed * daysInMo) : 0;
     const noShow = sumMetric(days, s.key, 'meetings_no_show');
     const resolved = sumMetric(days, s.key, 'meetings_no_show_denom');
@@ -3238,9 +3270,11 @@ function renderSummaryCards(days) {
   const leadTypeLabel = { business: 'B2B leads only', b2c: 'B2C leads only', all: 'All leads (B2B+B2C)', commission: 'Commission View' }[leadTypeFilter()] || 'B2B leads only';
   const aeNote = isAEBaselineOn() ? ' AE Baseline row shown = the same calculation run on the frozen pre-SDR AE export.' : '';
   const infoLeadVolume = isCommission
-    ? `Count of leads created in the selected range, currently filtered to B2B leads only (Commission View always uses B2B as the denominator regardless of the Leads: dropdown).${aeNote}`
+    ? `Count of leads created in the selected range, currently filtered to B2B leads only (Commission View always uses B2B as the denominator regardless of the Leads: dropdown) — Duplicate-record and Wrong-info leads are excluded, same as they are from Qualified. Everywhere else on this dashboard, those leads still count toward Lead Volume.${aeNote}`
     : `Count of leads created in the selected range, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
-  const infoMeetingsBooked = `Meeting Status = Scheduled, Done, Rejected, or Not Atended, or an instant close (closed within 2h of lead creation, counted as a meeting for consistency with Lead Volume/Qualified) — a Closed deal past 2h with no Meeting Status doesn't count alone. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Commission's own Meetings figure excludes instant closes — not a real SDR meeting for payout.${aeNote}`;
+  const infoMeetingsBooked = isCommission
+    ? `Commission View uses the same stricter rule the Commission Calculator pays out on: Meeting Status = Scheduled, Done, Rejected, or Not Atended — an Instant Close (closed within 2h of creation, no real Meeting Status) does NOT count as a meeting here, and Duplicate-record/Wrong-info leads are excluded entirely. Everywhere else on this dashboard, an Instant Close still counts as a meeting.${aeNote}`
+    : `Meeting Status = Scheduled, Done, Rejected, or Not Atended, or an instant close (closed within 2h of lead creation, counted as a meeting for consistency with Lead Volume/Qualified) — a Closed deal past 2h with no Meeting Status doesn't count alone. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Commission View uses the stricter payout rule instead (no Instant Close credit, duplicates excluded).${aeNote}`;
   const infoMeetingRate = isCommission
     ? `Meetings Booked (B2B+B2C combined) ÷ B2B-only Lead Volume — Commission View judges the combined meeting count against the B2B lead denominator.${aeNote}`
     : `Meetings Booked ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${aeNote}`;
@@ -6411,7 +6445,7 @@ function commissionMetricsForSDR(days, sdrKey) {
   const rows = [];
   days.forEach(d => {
     const dayRows = rawByDay[d] && rawByDay[d][sdrKey];
-    if (dayRows) rows.push(...dayRows);
+    if (dayRows) rows.push(...dayRows.filter(r => !isLeadExcluded(r)));
   });
   const b2bLeads = rows.filter(isBusinessLead).length;
   const b2cLeads = rows.filter(isB2CLead).length;
