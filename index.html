@@ -3499,13 +3499,13 @@ function renderSummaryCards(days) {
   const infoNR = isCommission
     ? `Non-Responsive leads (B2B+B2C) ÷ B2B-only Lead Volume. Non-responsive = Disqualified reason "Not responsive" or Sales status "Non respondant" (includes leads still mid-cadence). Lower is better. The Mandate Scoreboard's version is narrower — terminal Not-responsive only, matching the strategic briefing's baseline.${strictNote}${aeNote}`
     : `Sales status = Non respondant or Disqualified reason = Not responsive (includes leads still mid-cadence) ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Lower is better. The Mandate Scoreboard's version is narrower — terminal Not-responsive only, matching the strategic briefing's baseline.${strictNote}${aeNote}`;
-  const infoLeadToDeal = `Closed deals ÷ Lead Volume, by creation-date cohort — of the leads created in the selected range, how many have a Sales status of Closed as of right now. Recent ranges always read low until their leads have had time to close (deals typically take weeks). Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${strictNote}${aeNote}`;
+  const infoLeadToDeal = `Closed deals ÷ Lead Volume, by creation-date cohort — of the leads created in the selected range, how many have a Sales status of Closed as of right now. Recent ranges always read low until their leads have had time to close (deals typically take weeks). Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${strictNote}${isAEBaselineOn() ? ' AE Baseline row = Jan–May 2026 only (the motion the SDRs actually replaced), restricted to the same 4 Request Type tiers as the Market Split chart — not the full multi-year AE Baseline average shown elsewhere on this dashboard, which the founder-led early years skew much higher.' : ''}`;
   const infoAEDQ = `Count of leads the AE bounced back as wrongly qualified (Sales status contains "Disqualified AE") — measures SDR hand-off quality, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
   const infoPipeline = `Snapshot as of the last day in range: leads whose Sales status is NOT Closed, Disqualified, Lost, Deposit refund, or blank — i.e. still open/in-progress, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
   const infoNoShow = `Meeting Not Atended or Rejected ÷ booked meetings (Scheduled + Done + Not Atended + Rejected, or an Instant Close) in range. Scheduled is in the denominator so a lead whose deal resolved without Meeting Status being updated off Scheduled doesn't vanish from the math (this also means brand-new upcoming meetings count here, so the rate reads higher in the most recent week or two before they resolve). Lower is better. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Full breakdown in the "No-Show Rate by SDR" chart below.`;
   document.getElementById('summaryCards').innerHTML = `
     ${countCard('Lead Volume', leadVolTotal, perSDR.map(s => ({ ...s, value: s.leadVol, goal: s.leadsGoal })), elapsed, daysInMo, showProjection, isCommission ? 'B2B leads only' : undefined, d.goalLeads, ae ? ae.leadsPerDay : null, infoLeadVolume, deltas.leadVol)}
-    ${rateCard('Lead to Deal', leadToDealRate, perSDR.map(s => ({ ...s, value: s.leadToDealRate })), null, `${totalClosed} closed deal${totalClosed === 1 ? '' : 's'} of ${leadVolTotal} leads`, null, false, ae && ae.overall.leads ? (ae.overall.closed / ae.overall.leads * 100) : null, infoLeadToDeal, deltas.leadToDeal)}
+    ${rateCard('Lead to Deal', leadToDealRate, perSDR.map(s => ({ ...s, value: s.leadToDealRate })), null, `${totalClosed} closed deal${totalClosed === 1 ? '' : 's'} of ${leadVolTotal} leads`, null, false, isAEBaselineOn() ? aeRecentLeadToDealPct() : null, infoLeadToDeal, deltas.leadToDeal, 'AE Baseline (Jan–May 2026)')}
     ${countCard('Meetings Booked', totalMeetings, perSDR.map(s => ({ ...s, value: s.meetings, goal: s.meetingsGoal })), elapsed, daysInMo, showProjection, undefined, d.goalMeetings, ae ? ae.meetingsPerDay : null, infoMeetingsBooked, deltas.meetings)}
     ${rateCard('Meeting Booked Rate', meetingRate, perSDR.map(s => ({ ...s, value: s.meetingRate })), isCommission ? meanRateCommission(days, v, 'meetings') : meanMetric(days, v, 'meeting_rate'), isCommission ? 'meetings (B2B+B2C) ÷ B2B leads' : 'meetings ÷ total leads', d.goalMeetingRate, false, ae ? ae.overall.meeting_rate : null, infoMeetingRate, deltas.meetingRate)}
     ${countCard('Leads Qualified', totalQualified, perSDR.map(s => ({ ...s, value: s.qualified, goal: s.qualifiedGoal })), elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified, ae ? ae.qualifiedPerDay : null, infoQualified, deltas.qualified)}
@@ -3628,7 +3628,14 @@ function countCard(label, total, sdrList, elapsed, daysInMo, showProjection, ext
   });
   const projected = showProjection ? Math.round(avg * daysInMo) : null;
   const goalRow = (showProjection && goalMonthly) ? goalStatusRow(projected, goalMonthly, false, false, 'Monthly Goal (team)') : '';
-  const aeRow = (isAEBaselineOn() && aeBaselinePerDay != null) ? `<div class="card-avg-row card-ae-row"><span>AE Baseline (avg/day)</span><span style="color:${COLORS.AEBaseline}">${aeBaselinePerDay.toFixed(1)}</span></div>` : '';
+  // Shown per month, not per day — a per-day rate is technically correct but
+  // reads as a near-zero number once averaged across the AE Baseline's full
+  // multi-year span, and isn't what it's actually being compared against
+  // (the SDR side's own Monthly Goal/Projected figures a few rows below).
+  // Converted using the currently-viewed month's real day count, same basis
+  // "Projected (month, team)" above already uses.
+  const aeBaselinePerMonth = aeBaselinePerDay != null ? aeBaselinePerDay * daysInMo : null;
+  const aeRow = (isAEBaselineOn() && aeBaselinePerMonth != null) ? `<div class="card-avg-row card-ae-row"><span>AE Baseline (avg/month)</span><span style="color:${COLORS.AEBaseline}">${Math.round(aeBaselinePerMonth)}</span></div>` : '';
   return `<div class="card" data-label="${label}">
     ${expandBtn(label)}
     <div class="card-label">${label} ${cardInfo(infoText)}</div>
@@ -3643,10 +3650,10 @@ function countCard(label, total, sdrList, elapsed, daysInMo, showProjection, ext
   </div>`;
 }
 
-function rateCard(label, pct, sdrList, avgDaily, extraSub, goalVal, lowerIsBetter, aeBaselinePct, infoText, deltaHtml) {
+function rateCard(label, pct, sdrList, avgDaily, extraSub, goalVal, lowerIsBetter, aeBaselinePct, infoText, deltaHtml, aeLabel) {
   const goalRow = goalStatusRow(pct, goalVal, true, lowerIsBetter, 'Target (team)');
   const enriched = sdrList.map(s => ({ ...s, goalVal }));
-  const aeRow = (isAEBaselineOn() && aeBaselinePct != null) ? `<div class="card-avg-row card-ae-row"><span>AE Baseline</span><span style="color:${COLORS.AEBaseline}">${aeBaselinePct.toFixed(1)}%</span></div>` : '';
+  const aeRow = (isAEBaselineOn() && aeBaselinePct != null) ? `<div class="card-avg-row card-ae-row"><span>${aeLabel || 'AE Baseline'}</span><span style="color:${COLORS.AEBaseline}">${aeBaselinePct.toFixed(1)}%</span></div>` : '';
   return `<div class="card" data-label="${label}">
     ${expandBtn(label)}
     <div class="card-label">${label} ${cardInfo(infoText)}</div>
@@ -7261,6 +7268,22 @@ function aeBaselineMonthlySeries(tzBasis) {
   });
   return result;
 }
+// The single AE-era Lead to Deal % reference used by BOTH the Lead to Deal
+// summary card (top of dashboard) and the Market Split "Lead to Deal"
+// chart's dashed AE-avg line — one function so the two can never quietly
+// disagree again. Jan 2026 – May 18 2026 only (the motion the SDRs actually
+// replaced, not the founder-led years further back which closed at a much
+// higher rate on a fraction of the volume — that's the ~36% vs ~14% gap you'd
+// see if this used the AE Baseline section's full multi-year average
+// instead), and tier-restricted the same way aeBaselineMonthlySeries()'s
+// `overall` already is.
+function aeRecentLeadToDealPct() {
+  if (!rawAEBaseline || !rawAEBaseline.length) return null;
+  const series = aeBaselineMonthlySeries('dubai');
+  const keys = Object.keys(series).filter(mk => mk >= '2026-01');
+  if (!keys.length) return null;
+  return marketMergeMetrics(keys.map(mk => series[mk].overall)).leadToDealPct;
+}
 // The groups a "Split by" mode breaks each chart into — 'total' is a single
 // merged series (still returned as a one-element array so every chart function
 // can just .forEach it), 'team' is US/OUS, 'tier' is the four request-type tiers.
@@ -7556,22 +7579,17 @@ function renderMarketDealChart(entries, labels, baselineOn, aeSeriesAll) {
   });
 
   if (baselineOn) {
-    // Reference = the AE era's 2026 months only (Jan 1 – May 18), not the
-    // full 2021+ history — the early founder-led years closed at much higher
-    // rates on a fraction of the volume, which would inflate the bar the
-    // SDR program is judged against. Jan–May 2026 is the motion the SDRs
-    // actually replaced.
-    const aeMonthKeys = Object.keys(aeSeriesAll).filter(mk => mk >= '2026-01');
-    if (aeMonthKeys.length) {
-      const merged = marketMergeMetrics(aeMonthKeys.map(mk => aeSeriesAll[mk].overall));
-      if (merged.leadToDealPct != null) {
-        datasets.push({
-          type: 'line', label: `AE avg Lead to Deal, Jan–May 2026 (${merged.leadToDealPct.toFixed(1)}%)`,
-          data: entries.map(() => merged.leadToDealPct),
-          borderColor: '#8a8f98', borderDash: [3, 3], borderWidth: 1.5,
-          pointRadius: 0, yAxisID: 'y1', order: 0
-        });
-      }
+    // Same aeRecentLeadToDealPct() the Lead to Deal summary card uses — one
+    // shared function, so this line and that card's AE Baseline row can
+    // never disagree.
+    const aeL2D = aeRecentLeadToDealPct();
+    if (aeL2D != null) {
+      datasets.push({
+        type: 'line', label: `AE avg Lead to Deal, Jan–May 2026 (${aeL2D.toFixed(1)}%)`,
+        data: entries.map(() => aeL2D),
+        borderColor: '#8a8f98', borderDash: [3, 3], borderWidth: 1.5,
+        pointRadius: 0, yAxisID: 'y1', order: 0
+      });
     }
   }
 
