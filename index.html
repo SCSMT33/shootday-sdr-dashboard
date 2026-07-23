@@ -965,8 +965,8 @@
         <option value="condensed" selected>Condensed</option>
         <option value="full">Full</option>
       </select>
-      <span>Lead Rules:</span>
-      <select id="leadRulesSelect" title="Governs the Summary Cards only (Lead Volume, Meetings Booked, Meeting Booked Rate, Leads Qualified, % Leads Qualified, Non-Responsive Rate), for every Leads: filter below including Commission View. Strict (default): Duplicate-record/Wrong-info leads dropped from every count, and Meetings Booked requires a genuine Meeting Status (an Instant Close never counts). Loose: the older, broader counts (duplicates included, Instant Closes credited as meetings)." onchange="saveLeadRulesFilter(); renderDashboard()">
+      <span>Lead Rules: <span class="goal-info" title="Governs the Summary Cards only (Lead Volume, Meetings Booked, Meeting Booked Rate, Leads Qualified, % Leads Qualified, Non-Responsive Rate), for every Leads: filter below including Commission View. Strict (default): Duplicate-record/Wrong-info leads dropped from every count, and Meetings Booked requires a genuine Meeting Status (an Instant Close never counts). Loose: the older, broader counts (duplicates included, Instant Closes credited as meetings).">ⓘ</span></span>
+      <select id="leadRulesSelect" onchange="saveLeadRulesFilter(); renderDashboard()">
         <option value="strict" selected>Strict</option>
         <option value="loose">Loose</option>
       </select>
