@@ -2252,7 +2252,7 @@ function readAEBaselineFile(file) {
   };
   reader.readAsText(file);
 }
-function parseAEBaselineCSV(text, filename) {
+function parseAEBaselineCSV(text, filename, skipSave) {
   const raw = text.replace(/^﻿/, '');
   const table = parseCSVText(raw);
   if (!table.length) return;
@@ -2266,9 +2266,28 @@ function parseAEBaselineCSV(text, filename) {
   }
   rawAEBaseline = rows;
   aeBaselineFilename = filename;
-  saveAEBaselineData();
+  if (!skipSave) saveAEBaselineData();
   renderAEBaselineSection();
   renderDashboard();
+}
+// Auto-loads the committed pre-SDR historical export (data/ae-baseline.csv,
+// filtered from a ~24k-row all-time company export down to Owner-populated/
+// SDR-Owner-blank rows created before the earliest SDR-assigned lead) as the
+// default AE Baseline dataset, so every visitor sees it with no manual
+// upload step. A manual "Load AE Baseline CSV" upload (restored above from
+// localStorage) always takes precedence — this fetch only runs when nothing
+// was restored. skipSave=true: this file is too large to persist into
+// localStorage's quota, and doesn't need to — it's a static, versioned asset
+// already served straight off GitHub Pages, so re-fetching each page load
+// (with normal HTTP caching) is simpler and more reliable than trying to
+// cache a multi-MB payload in localStorage. The unfiltered source (all ~24k
+// rows, all 46 columns, nothing dropped) is archived at data/booking-history-full.csv
+// for future re-filtering into new metrics — it is never fetched by the app itself.
+function loadDefaultAEBaseline() {
+  fetch('data/ae-baseline.csv')
+    .then(res => res.ok ? res.text() : Promise.reject(new Error('HTTP ' + res.status)))
+    .then(text => parseAEBaselineCSV(text, 'ae-baseline.csv (auto-loaded)', true))
+    .catch(() => {}); // no committed file (e.g. local file:// testing) — manual upload still works
 }
 function saveAEBaselineData() {
   try { localStorage.setItem('sdr_ae_baseline', JSON.stringify({ rows: rawAEBaseline, filename: aeBaselineFilename })); } catch (e) {}
@@ -7516,8 +7535,8 @@ function renderAEBaselineSection() {
   if (!rawAEBaseline || !rawAEBaseline.length) {
     loadedNote.textContent = '';
     clearBtn.style.display = 'none';
-    headerNote.textContent = 'Click to expand — load once, compare SDR performance to the pre-SDR AE era';
-    contentEl.innerHTML = `<div class="ae-baseline-empty">No AE Baseline CSV loaded yet.</div>` + sdrTableHtml;
+    headerNote.textContent = 'Click to expand — compare SDR performance to the pre-SDR AE era';
+    contentEl.innerHTML = `<div class="ae-baseline-empty">No AE Baseline CSV loaded yet (auto-load of the default dataset may have failed — try loading one manually below).</div>` + sdrTableHtml;
     return;
   }
 
@@ -7748,6 +7767,7 @@ loadAutoBookedToggle();
 loadReportScope();
 loadExcludedAEBaselineOwners();
 restoreAEBaselineData();
+if (!rawAEBaseline) loadDefaultAEBaseline();
 renderAEBaselineSection();
 if (restoreLoadedData()) {
   renderDashboard();
