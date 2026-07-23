@@ -1015,11 +1015,6 @@
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap">
           <span style="font-size:12px; color:var(--muted); font-weight:600">Month</span>
           <select class="chart-granularity" id="marketMonthSelect" onchange="saveMarketMonth(this.value)"></select>
-          <span style="font-size:12px; color:var(--muted); font-weight:600">Month boundary:</span>
-          <select class="chart-granularity" id="marketTzSelect" title="Which timezone defines the start/end of the chosen month. Dubai time is what the rest of this dashboard uses everywhere else. EEST / Romania time matches how the leads' Creation Date is exported and how Airtable's own filters cut off a month — pick this if you're cross-checking against a manual Airtable pull." onchange="saveMarketTz(this.value)">
-            <option value="dubai">Dubai time (dashboard default)</option>
-            <option value="eest">EEST / Romania time</option>
-          </select>
         </div>
         <div style="overflow-x:auto"><table class="mandate-kpi-table" id="marketTable"></table></div>
 
@@ -1045,9 +1040,14 @@
         <div class="charts-grid">
           <div class="chart-card full" data-chart-id="chartMarketVolume">
             <div class="chart-header">
-              <span class="chart-title">Volume Trend <span class="goal-info" title="Monthly count of the chosen metric. Bars are grouped side-by-side (never stacked) so Team/Tier splits stay readable. Same Duplicate/Wrong-info exclusion as the table above.">ⓘ</span></span>
+              <span class="chart-title">Volume Trend <span class="goal-info" title="Metric mode: monthly count of the chosen metric, grouped side-by-side by Team/Tier split (never stacked, so the split stays readable). Funnel mode: Business Leads/Qualified/Meetings Booked/Deals Closed stacked per month — these funnel stages are nested subsets of each other, not mutually exclusive counts, so the stack height is a visual comparison of the four stages shrinking, not a sum that equals total leads. Same Duplicate/Wrong-info exclusion as the table above either way.">ⓘ</span></span>
               <div class="chart-header-right">
                 <div class="chart-legend" id="legend-chartMarketVolume"></div>
+                <label class="chart-cumulative-toggle" style="margin-right:0">
+                  <input type="checkbox" id="marketVolumeFunnelStack" onchange="renderMarketCharts()">
+                  <span class="toggle-track"></span>
+                  <span class="toggle-text">Stack: BL/Qual/Meeting/Deals</span>
+                </label>
                 <select class="chart-granularity" id="marketVolumeMetricSelect" onchange="renderMarketCharts()">
                   <option value="nbrBL">Business Leads</option>
                   <option value="qalBL">Qualified</option>
@@ -1781,7 +1781,7 @@
           <div class="definition-item"><dt>Lead</dt><dd>Any Bookings CSV row with a recognized SDR Owner and a non-blank Creation Date. Rows that don't match either are dropped before anything else on the dashboard is computed.</dd></div>
           <div class="definition-item"><dt>Lead → Closed Rate</dt><dd>Closed deals ÷ all leads from the same creation-date cohort. Recent periods always read low — a lead created this week hasn't had time to close yet — this is a running tally that rises as those leads close later, not a same-period conversion rate.</dd></div>
           <div class="definition-item"><dt>Lead Rules (Strict/Loose toggle)</dt><dd>Top controls bar, defaults to Strict. Governs the Summary Cards ONLY (Lead Volume, Meetings Booked, Meeting Booked Rate, Leads Qualified, % Leads Qualified, Non-Responsive Rate) — every other section (charts, Mandate Scoreboard, Sales Funnel, AE Baseline, Capacity &amp; Cost) is unaffected; the Commission Calculator always uses Strict-equivalent rules regardless of this toggle. Strict: Duplicate-record and Wrong-info leads are dropped from every count (including Lead Volume itself), and Meetings Booked requires a genuine Meeting Status (an Instant Close never counts) — applies on every Leads: filter (B2B only, B2C only, All leads, Commission View). Loose: the older, broader counts (duplicates included, Instant Closes credited as meetings) — useful for comparing against how the dashboard used to read.</dd></div>
-          <div class="definition-item"><dt>Market Split by Request Type</dt><dd>Its own section, own month picker, above the Sales Funnel. Grouped by Team (US: MJ + Gospel; OUS: Mark + Levi) and Request Type tier. &lt;1k = "&lt;$1k - Share Quote", incomplete = "Incomplete - Request Info" — the only two Request Types this team currently works, per the onboarding brief's own scope description. &gt;1k and complex are a different team's request types, kept as their own rows (always 0 for this team) rather than hidden. A blank/unrecognized Request Type isn't counted in any row, so each team's Total always equals the sum of its two Sub totals. Qualified/Meeting Booked reuse the same strict definitions as the QAL Funnel by SDR table — Duplicate-record/Wrong-info leads excluded from every count. Qal to Close % = Closed ÷ Qualified. Meeting Done to Close % = Closed ÷ (Meeting Status = Meeting Done specifically, not Scheduled/Rejected/Not Atended). Lead to Deal % = Closed ÷ Nbr of BL. A "Month boundary" dropdown lets you switch between Dubai time (this dashboard's usual bucketing) and EEST/Romania time (how Creation Date is exported and how Airtable's own filters cut off a month) — the two occasionally disagree on which month a lead right at the boundary falls into.</dd></div>
+          <div class="definition-item"><dt>Market Split by Request Type</dt><dd>Its own section, own month picker, above the Sales Funnel. Grouped by Team (US: MJ + Gospel; OUS: Mark + Levi) and Request Type tier. &lt;1k = "&lt;$1k - Share Quote", incomplete = "Incomplete - Request Info" — the only two Request Types this team currently works, per the onboarding brief's own scope description. &gt;1k and complex are a different team's request types, kept as their own rows (always 0 for this team) rather than hidden. A blank/unrecognized Request Type isn't counted in any row, so each team's Total always equals the sum of its two Sub totals. Qualified/Meeting Booked reuse the same strict definitions as the QAL Funnel by SDR table — Duplicate-record/Wrong-info leads excluded from every count. Qal to Close % = Closed ÷ Qualified. Meeting Done to Close % = Closed ÷ (Meeting Status = Meeting Done specifically, not Scheduled/Rejected/Not Atended). Lead to Deal % = Closed ÷ Nbr of BL. Months are bucketed in Dubai time, same as every other month cutoff on this dashboard.</dd></div>
           <div class="definition-item"><dt>Meeting → Closed Rate</dt><dd>Closed deals ÷ meetings done from the same creation-date cohort. Same "reads low until leads catch up" caveat as the other cohort rates. Only exists in the Sales Funnel — the Mandate Scoreboard doesn't have this row. AE Baseline column shows the playbook's static ~50% benchmark ("Online meetings convert at approximately 50%") instead of a computed number — 66% of the AE-era's closed deals have a blank Meeting Status, so a computed ratio here comes out to either ~93-96% or 266%+ depending on how those blanks are treated, neither of which is trustworthy.</dd></div>
           <div class="definition-item"><dt>Meeting Booked</dt><dd>Two versions in use. General (charts, Mandate Scoreboard, Sales Funnel, AE Baseline, Capacity &amp; Cost's own SDR/AE tables): Meeting Status is Scheduled, Done, Rejected, or Not Atended, or the deal was an Instant Close (unless the Auto-Booked Meetings Toggle is set to Excluded). Strict/commission (Summary Cards under Lead Rules: Strict, the Commission Calculator, the Meeting Quality Multiplier, the printable report): Meeting Status only — an Instant Close never counts, regardless of the Auto-Booked toggle. Either way, "Meeting Requested" doesn't count on its own — roughly three-quarters of those end up disqualified, so it means "asked for," not "confirmed."</dd></div>
           <div class="definition-item"><dt>Meeting Held (Meetings Done)</dt><dd>Meeting Status is Meeting Done, or an instant close (unless the Auto-Booked Meetings Toggle is set to Excluded). Narrower than Meeting Booked, which also counts still-upcoming Scheduled meetings.</dd></div>
@@ -7018,13 +7018,12 @@ function saveMarketMonth(value) {
   try { localStorage.setItem('sdr_market_month', value); } catch (e) {}
   renderMarketSection();
 }
-function marketTzBasis() {
-  try { return localStorage.getItem('sdr_market_tz') || 'dubai'; } catch (e) { return 'dubai'; }
-}
-function saveMarketTz(value) {
-  try { localStorage.setItem('sdr_market_tz', value); } catch (e) {}
-  renderMarketSection();
-}
+// Always Dubai time — matches every other month bucketing on this dashboard.
+// (Used to be switchable to EEST/Romania time for cross-checking a manual
+// Airtable pull; removed as an unnecessary control once that stopped
+// being a live need. tzBasis is still threaded through the functions below
+// in case a different basis is ever needed again.)
+function marketTzBasis() { return 'dubai'; }
 // Scans every Dubai-day bucket (not just the ones matching monthKey) since
 // the EEST basis can put a lead in a different calendar month than the
 // Dubai-day it happens to be bucketed under.
@@ -7115,10 +7114,8 @@ function renderMarketSection() {
     monthSelect.innerHTML = months.map(mk => `<option value="${mk}">${escapeHtml(monthLabelFromKey(mk))}${sdrMonths.includes(mk) ? '' : ' (AE era)'}</option>`).join('');
     monthSelect.value = months.includes(monthKey) ? monthKey : priorMonthKey();
   }
-  const tzSelect = document.getElementById('marketTzSelect');
-  if (tzSelect) tzSelect.value = tzBasis;
   const note = document.getElementById('marketHeaderNote');
-  if (note) note.textContent = `B2B funnel by team and request-type tier — ${monthLabelFromKey(monthKey)} (${tzBasis === 'eest' ? 'EEST/Romania' : 'Dubai'} month boundary)`;
+  if (note) note.textContent = `B2B funnel by team and request-type tier — ${monthLabelFromKey(monthKey)} (Dubai time)`;
 
   let bodyRows = '';
   const teamTotals = [];
@@ -7341,15 +7338,15 @@ function renderMarketCharts() {
 // Shared Chart.js options for the three market trend charts — bottom legend
 // and expanded-mode font scaling (Chart.js paints tick/legend text onto the
 // canvas, so CSS can't resize it).
-function marketChartOptions(chartId, yTitle, withPctAxis) {
+function marketChartOptions(chartId, yTitle, withPctAxis, stacked) {
   const f = chartFontSizes(chartId);
   const opts = {
     responsive: true,
     maintainAspectRatio: true,
     plugins: { legend: { display: true, position: 'bottom', labels: { font: { size: f.tick + 1 } } } },
     scales: {
-      x: { grid: { display: false }, ticks: { font: { size: f.tick } } },
-      y: { beginAtZero: true, position: 'left', title: { display: true, text: yTitle, font: { size: f.tick } }, ticks: { font: { size: f.tick } } }
+      x: { stacked: !!stacked, grid: { display: false }, ticks: { font: { size: f.tick } } },
+      y: { stacked: !!stacked, beginAtZero: true, position: 'left', title: { display: true, text: yTitle, font: { size: f.tick } }, ticks: { font: { size: f.tick } } }
     }
   };
   if (withPctAxis) {
@@ -7357,35 +7354,61 @@ function marketChartOptions(chartId, yTitle, withPctAxis) {
   }
   return opts;
 }
+// The Volume Trend's two mutually exclusive modes: pick ONE metric split by
+// Team/Tier (grouped, never stacked — see renderMarketVolumeChart), or stack
+// all four funnel stages together for one combined view of the whole
+// funnel's shape over time. Funnel mode always uses the Total split — 4
+// stages × Team or Tier groups would be 8-16 stacked segments, unreadable.
+const MARKET_FUNNEL_STAGES = [
+  { field: 'nbrBL', label: 'Business Leads', color: '#c7d2e8' },
+  { field: 'qalBL', label: 'Qualified', color: '#8fa6d6' },
+  { field: 'meetingBooked', label: 'Meetings Booked', color: '#2f6fed' },
+  { field: 'closed', label: 'Deals Closed', color: '#1a9e94' }
+];
 function renderMarketVolumeChart(entries, labels, baselineOn) {
   const el = document.getElementById('chartMarketVolume');
   if (!el) return;
+  const funnelStackEl = document.getElementById('marketVolumeFunnelStack');
+  const funnelStack = !!(funnelStackEl && funnelStackEl.checked);
   const metricSelect = document.getElementById('marketVolumeMetricSelect');
-  const metric = metricSelect ? metricSelect.value : 'nbrBL';
-  const splitMode = marketSplitMode();
-  const groups = marketSplitGroups(splitMode);
+  if (metricSelect) metricSelect.disabled = funnelStack;
 
-  // One continuous series per group — AE-only months are the same series in
-  // a washed-out shade (plus the "(AE)" axis label) rather than a separate
-  // legend entry, so the eye reads one storyline across both eras.
-  const datasets = groups.map(g => ({
-    label: g.label,
-    data: entries.map(e => { const m = marketEntryMetrics(e, splitMode, g.key, baselineOn); return m ? m[metric] : null; }),
-    backgroundColor: entries.map(e => (e.sdr ? g.color : marketMuted(g.color)))
-  }));
-  if (baselineOn && splitMode === 'team') {
-    datasets.push({
-      label: 'AE era (all)',
-      data: entries.map(e => { const m = marketAeMetricsForSplit(e, splitMode, null); return m ? m[metric] : null; }),
-      backgroundColor: '#c7cdd8'
-    });
+  let datasets, yTitle;
+  if (funnelStack) {
+    datasets = MARKET_FUNNEL_STAGES.map(stage => ({
+      label: stage.label,
+      data: entries.map(e => { const m = marketEntryMetrics(e, 'total', null, baselineOn); return m ? m[stage.field] : null; }),
+      backgroundColor: entries.map(e => (e.sdr ? stage.color : marketMuted(stage.color))),
+      stack: 'funnel'
+    }));
+    yTitle = 'Leads (stacked funnel stages)';
+  } else {
+    const metric = metricSelect ? metricSelect.value : 'nbrBL';
+    const splitMode = marketSplitMode();
+    const groups = marketSplitGroups(splitMode);
+    // One continuous series per group — AE-only months are the same series in
+    // a washed-out shade (plus the "(AE)" axis label) rather than a separate
+    // legend entry, so the eye reads one storyline across both eras.
+    datasets = groups.map(g => ({
+      label: g.label,
+      data: entries.map(e => { const m = marketEntryMetrics(e, splitMode, g.key, baselineOn); return m ? m[metric] : null; }),
+      backgroundColor: entries.map(e => (e.sdr ? g.color : marketMuted(g.color)))
+    }));
+    if (baselineOn && splitMode === 'team') {
+      datasets.push({
+        label: 'AE era (all)',
+        data: entries.map(e => { const m = marketAeMetricsForSplit(e, splitMode, null); return m ? m[metric] : null; }),
+        backgroundColor: '#c7cdd8'
+      });
+    }
+    yTitle = marketMetricLabel(metric);
   }
 
   if (charts.chartMarketVolume) charts.chartMarketVolume.destroy();
   charts.chartMarketVolume = new Chart(el.getContext('2d'), {
     type: 'bar',
     data: { labels, datasets: marketDropEmptyDatasets(datasets) },
-    options: marketChartOptions('chartMarketVolume', marketMetricLabel(metric), false)
+    options: marketChartOptions('chartMarketVolume', yTitle, false, funnelStack)
   });
 }
 function renderMarketRateChart(entries, labels, baselineOn) {
