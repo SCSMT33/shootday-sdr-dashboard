@@ -1009,20 +1009,34 @@
 
         <div class="mandate-subheading-row" style="margin-top:24px">
           <div class="mandate-subheading">Trends</div>
-          <select class="chart-granularity" id="marketRangeSelect" title="How many months of history the two trend charts below show." onchange="saveMarketRange(this.value)">
-            <option value="all">All months with data</option>
-            <option value="trailing12">Trailing 12 months</option>
-          </select>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap">
+            <select class="chart-granularity" id="marketSplitSelect" title="Applies to all three trend charts below. Total merges US+OUS into one line/bar per month; Team shows US and OUS side-by-side; Tier breaks out <1k / >1k / complex / incomplete." onchange="saveMarketSplit(this.value)">
+              <option value="total">Split: Total</option>
+              <option value="team">Split: by Team</option>
+              <option value="tier">Split: by Tier</option>
+            </select>
+            <select class="chart-granularity" id="marketRangeSelect" title="How many months of history the trend charts below show." onchange="saveMarketRange(this.value)">
+              <option value="6">Last 6 months</option>
+              <option value="12">Last 12 months</option>
+            </select>
+            <label class="chart-cumulative-toggle" title="Extends each chart back through the pre-SDR AE era (data/ae-baseline.csv) for a before/after comparison. AE-era months are muted and labeled '(AE)' — it's the whole company, not just US/OUS, since that split didn't exist yet.">
+              <input type="checkbox" id="marketBaselineToggle" onchange="saveMarketBaseline(this.checked)">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Pre-SDR baseline</span>
+            </label>
+          </div>
         </div>
         <div class="charts-grid">
           <div class="chart-card full" data-chart-id="chartMarketVolume">
             <div class="chart-header">
-              <span class="chart-title">Volume Trend <span class="goal-info" title="Nbr of BL per month, stacked by whichever dimension is selected. Same Duplicate/Wrong-info exclusion as the table above.">ⓘ</span></span>
+              <span class="chart-title">Volume Trend <span class="goal-info" title="Monthly count of the chosen metric. Bars are grouped side-by-side (never stacked) so Team/Tier splits stay readable. Same Duplicate/Wrong-info exclusion as the table above.">ⓘ</span></span>
               <div class="chart-header-right">
                 <div class="chart-legend" id="legend-chartMarketVolume"></div>
-                <select class="chart-granularity" id="marketVolumeStackSelect" onchange="renderMarketCharts()">
-                  <option value="team">Stack by Team</option>
-                  <option value="tier">Stack by Tier</option>
+                <select class="chart-granularity" id="marketVolumeMetricSelect" onchange="renderMarketCharts()">
+                  <option value="nbrBL">Business Leads</option>
+                  <option value="qalBL">Qualified</option>
+                  <option value="meetingBooked">Meetings Booked</option>
+                  <option value="closed">Deals Closed</option>
                 </select>
               </div>
             </div>
@@ -1030,7 +1044,7 @@
           </div>
           <div class="chart-card full" data-chart-id="chartMarketRate">
             <div class="chart-header">
-              <span class="chart-title">Conversion Rate Trend <span class="goal-info" title="Bars = lead volume (left axis); lines = the checked rates (right axis, %). Team: All combines US+OUS; picking one team shows only its lines/bars.">ⓘ</span></span>
+              <span class="chart-title">Conversion Rate Trend <span class="goal-info" title="Bars = Nbr of BL (left axis, context only); lines = the checked rates (right axis, %). Meeting Booked % isn't extended into the AE era — Meeting Status was rarely logged back then (~15% populated), so the rate would read as an artifact of logging discipline, not performance.">ⓘ</span></span>
               <div class="chart-header-right">
                 <div class="chart-legend" id="legend-chartMarketRate"></div>
                 <span class="activity-metric-checks">
@@ -1039,30 +1053,36 @@
                     <span class="toggle-track"></span>
                     <span class="toggle-text">% Qual</span>
                   </label>
-                  <label class="chart-cumulative-toggle" style="margin-right:0">
+                  <label class="chart-cumulative-toggle">
                     <input type="checkbox" id="marketRateLine-meetingPct" checked onchange="renderMarketCharts()">
                     <span class="toggle-track"></span>
                     <span class="toggle-text">Meeting Booked %</span>
                   </label>
-                  <label class="chart-cumulative-toggle">
-                    <input type="checkbox" id="marketRateLine-leadToDeal" checked onchange="renderMarketCharts()">
-                    <span class="toggle-track"></span>
-                    <span class="toggle-text">Lead to Deal %</span>
-                  </label>
                 </span>
-                <select class="chart-granularity" id="marketRateBarsSelect" onchange="renderMarketCharts()">
-                  <option value="nbrBL">Bars: Nbr of BL</option>
-                  <option value="qalBL">Bars: Qal BL</option>
-                  <option value="both">Bars: Both</option>
-                </select>
-                <select class="chart-granularity" id="marketRateTeamSelect" onchange="renderMarketCharts()">
-                  <option value="all">Team: All</option>
-                  <option value="US">Team: US</option>
-                  <option value="OUS">Team: OUS</option>
-                </select>
               </div>
             </div>
             <canvas id="chartMarketRate"></canvas>
+          </div>
+          <div class="chart-card full" data-chart-id="chartMarketDeal">
+            <div class="chart-header">
+              <span class="chart-title">Lead to Deal <span class="goal-info" title="Bars = deals closed (left axis), by creation-month cohort. Lines = Lead to Deal % and Qualified to Close % (right axis). With Pre-SDR baseline on, the dashed grey line marks the AE-era average Lead to Deal % as a reference. The most recent 2 months are shown lighter — deals from a recent cohort are still closing, so those bars/rates will keep rising.">ⓘ</span></span>
+              <div class="chart-header-right">
+                <div class="chart-legend" id="legend-chartMarketDeal"></div>
+                <span class="activity-metric-checks">
+                  <label class="chart-cumulative-toggle" style="margin-right:0">
+                    <input type="checkbox" id="marketDealLine-leadToDeal" checked onchange="renderMarketCharts()">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-text">Lead to Deal %</span>
+                  </label>
+                  <label class="chart-cumulative-toggle">
+                    <input type="checkbox" id="marketDealLine-qualToClose" checked onchange="renderMarketCharts()">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-text">Qual to Close %</span>
+                  </label>
+                </span>
+              </div>
+            </div>
+            <canvas id="chartMarketDeal"></canvas>
           </div>
         </div>
       </div>
@@ -7063,15 +7083,25 @@ function renderMarketSection() {
 // on what a "qualified lead" or "meeting booked" means.
 const MARKET_TIER_COLORS = ['#1a9e94', '#e07b1a', '#c94f7c', '#4a7fd4'];
 function marketRangeMode() {
-  try { return localStorage.getItem('sdr_market_range') || 'all'; } catch (e) { return 'all'; }
+  try { const v = localStorage.getItem('sdr_market_range'); return v === '12' ? '12' : '6'; } catch (e) { return '6'; }
 }
 function saveMarketRange(value) {
   try { localStorage.setItem('sdr_market_range', value); } catch (e) {}
   renderMarketCharts();
 }
-function marketRangeMonths() {
-  const all = marketAvailableMonths();
-  return marketRangeMode() === 'trailing12' ? all.slice(-12) : all;
+function marketSplitMode() {
+  try { const v = localStorage.getItem('sdr_market_split'); return (v === 'team' || v === 'tier') ? v : 'total'; } catch (e) { return 'total'; }
+}
+function saveMarketSplit(value) {
+  try { localStorage.setItem('sdr_market_split', value); } catch (e) {}
+  renderMarketCharts();
+}
+function marketBaselineOn() {
+  try { return localStorage.getItem('sdr_market_baseline') === '1'; } catch (e) { return false; }
+}
+function saveMarketBaseline(checked) {
+  try { localStorage.setItem('sdr_market_baseline', checked ? '1' : '0'); } catch (e) {}
+  renderMarketCharts();
 }
 function marketMonthlySeries(monthKeys, tzBasis) {
   return monthKeys.map(monthKey => {
@@ -7088,34 +7118,126 @@ function marketMonthlySeries(monthKeys, tzBasis) {
     return { monthKey, teamMetrics, allTotal };
   });
 }
+// Builds the pre-SDR AE-era monthly series straight from the auto-loaded
+// data/ae-baseline.csv (rawAEBaseline) — every row already predates the SDR
+// era by construction (that's how the file was filtered), so no cutoff check
+// is needed here. Same header names and the same isBusinessLead/isLeadExcluded/
+// isQualifiedLead/isMeetingBookedStrict rules as the live SDR data (via
+// marketMetrics), so an AE month and an SDR month are computed identically
+// and can sit side-by-side on the same chart as a fair comparison.
+function aeBaselineMonthlySeries() {
+  const byMonth = {};
+  (rawAEBaseline || []).forEach(r => {
+    if (!isBusinessLead(r) || isLeadExcluded(r)) return;
+    const raw = (r['Creation Date'] || '').trim();
+    if (raw.length < 7) return;
+    const mk = raw.slice(0, 7);
+    (byMonth[mk] = byMonth[mk] || []).push(r);
+  });
+  const result = {};
+  Object.keys(byMonth).forEach(mk => {
+    const rows = byMonth[mk];
+    const tiers = {};
+    MARKET_TIERS.forEach(t => { tiers[t.key] = marketMetrics(rows.filter(r => marketRequestTier(r) === t.key)); });
+    result[mk] = { overall: marketMetrics(rows), tiers };
+  });
+  return result;
+}
+// The groups a "Split by" mode breaks each chart into — 'total' is a single
+// merged series (still returned as a one-element array so every chart function
+// can just .forEach it), 'team' is US/OUS, 'tier' is the four request-type tiers.
+function marketSplitGroups(splitMode) {
+  if (splitMode === 'team') return TEAM_GROUPS.map(g => ({ key: g.key, label: g.label, color: g.color }));
+  if (splitMode === 'tier') return MARKET_TIERS.map((t, i) => ({ key: t.key, label: t.label, color: MARKET_TIER_COLORS[i] }));
+  return [{ key: null, label: 'Total', color: '#2f6fed' }];
+}
+// entry.sdr is a marketMonthlySeries() row (or null if this month has no SDR
+// data). Resolves it down to the metrics object for one split group.
+function marketSdrMetricsForSplit(entry, splitMode, key) {
+  if (!entry || !entry.sdr) return null;
+  if (splitMode === 'team') return entry.sdr.teamMetrics[key].total;
+  if (splitMode === 'tier') return marketMergeMetrics(TEAM_GROUPS.map(g => entry.sdr.teamMetrics[g.key].tiers[key]));
+  return entry.sdr.allTotal;
+}
+// entry.ae is an aeBaselineMonthlySeries() value (or null). The AE era predates
+// the US/OUS team split, so 'team' and 'total' both fall back to the company-wide
+// AE total — only 'tier' can meaningfully split the AE-era baseline further.
+function marketAeMetricsForSplit(entry, splitMode, key) {
+  if (!entry || !entry.ae) return null;
+  if (splitMode === 'tier') return entry.ae.tiers[key];
+  return entry.ae.overall;
+}
+function marketMetricLabel(metric) {
+  return { nbrBL: 'Business Leads', qalBL: 'Qualified Leads', meetingBooked: 'Meetings Booked', closed: 'Deals Closed' }[metric] || metric;
+}
+// Blends a hex color 55% toward white — used for AE-era bars/lines and for
+// the "still maturing" shading on the most recent Lead to Deal months, so
+// both read as "same series, softened" rather than a different color entirely.
+function marketMuted(hex) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substr(0, 2), 16), g = parseInt(h.substr(2, 2), 16), b = parseInt(h.substr(4, 2), 16);
+  const mix = c => Math.round(c + (255 - c) * 0.55);
+  return `rgb(${mix(r)},${mix(g)},${mix(b)})`;
+}
 function renderMarketCharts() {
   if (!rawByDay || !Object.keys(rawByDay).length) return;
   const rangeSelect = document.getElementById('marketRangeSelect');
   if (rangeSelect) rangeSelect.value = marketRangeMode();
-  const months = marketRangeMonths();
-  const series = marketMonthlySeries(months, marketTzBasis());
-  const labels = months.map(mk => monthLabelFromKey(mk));
-  renderMarketVolumeChart(series, labels);
-  renderMarketRateChart(series, labels);
+  const splitSelect = document.getElementById('marketSplitSelect');
+  if (splitSelect) splitSelect.value = marketSplitMode();
+  const baselineToggle = document.getElementById('marketBaselineToggle');
+  const baselineOn = marketBaselineOn();
+  if (baselineToggle) baselineToggle.checked = baselineOn;
+
+  const aeSeries = baselineOn ? aeBaselineMonthlySeries() : {};
+  const n = marketRangeMode() === '12' ? 12 : 6;
+  const sdrMonths = marketAvailableMonths();
+  const monthSet = new Set(sdrMonths);
+  if (baselineOn) Object.keys(aeSeries).forEach(mk => monthSet.add(mk));
+  const months = [...monthSet].sort().slice(-n);
+
+  const tzBasis = marketTzBasis();
+  const sdrOnlyMonths = months.filter(mk => sdrMonths.includes(mk));
+  const sdrSeries = marketMonthlySeries(sdrOnlyMonths, tzBasis);
+  const sdrByMonth = {};
+  sdrSeries.forEach(s => { sdrByMonth[s.monthKey] = s; });
+
+  const entries = months.map(mk => ({ monthKey: mk, sdr: sdrByMonth[mk] || null, ae: aeSeries[mk] || null }));
+  const labels = entries.map(e => monthLabelFromKey(e.monthKey) + (e.sdr ? '' : ' (AE)'));
+
+  renderMarketVolumeChart(entries, labels, baselineOn);
+  renderMarketRateChart(entries, labels, baselineOn);
+  renderMarketDealChart(entries, labels, baselineOn, aeSeries);
 }
-function renderMarketVolumeChart(series, labels) {
+function renderMarketVolumeChart(entries, labels, baselineOn) {
   const el = document.getElementById('chartMarketVolume');
   if (!el) return;
-  const stackSelect = document.getElementById('marketVolumeStackSelect');
-  const stackBy = stackSelect ? stackSelect.value : 'team';
-  const datasets = stackBy === 'tier'
-    ? MARKET_TIERS.map((t, i) => ({
-        label: t.label,
-        data: series.map(s => TEAM_GROUPS.reduce((sum, g) => sum + s.teamMetrics[g.key].tiers[t.key].nbrBL, 0)),
-        backgroundColor: MARKET_TIER_COLORS[i],
-        stack: 'vol'
-      }))
-    : TEAM_GROUPS.map(g => ({
-        label: g.label,
-        data: series.map(s => s.teamMetrics[g.key].total.nbrBL),
-        backgroundColor: g.color,
-        stack: 'vol'
+  const metricSelect = document.getElementById('marketVolumeMetricSelect');
+  const metric = metricSelect ? metricSelect.value : 'nbrBL';
+  const splitMode = marketSplitMode();
+  const groups = marketSplitGroups(splitMode);
+
+  const datasets = groups.map(g => ({
+    label: g.label,
+    data: entries.map(e => { const m = marketSdrMetricsForSplit(e, splitMode, g.key); return m ? m[metric] : null; }),
+    backgroundColor: g.color
+  }));
+  if (baselineOn) {
+    if (splitMode === 'tier') {
+      groups.forEach(g => datasets.push({
+        label: g.label + ' (AE)',
+        data: entries.map(e => { const m = marketAeMetricsForSplit(e, splitMode, g.key); return m ? m[metric] : null; }),
+        backgroundColor: marketMuted(g.color)
       }));
+    } else {
+      datasets.push({
+        label: 'AE era (all)',
+        data: entries.map(e => { const m = marketAeMetricsForSplit(e, splitMode, null); return m ? m[metric] : null; }),
+        backgroundColor: '#c7cdd8'
+      });
+    }
+  }
+
   if (charts.chartMarketVolume) charts.chartMarketVolume.destroy();
   charts.chartMarketVolume = new Chart(el.getContext('2d'), {
     type: 'bar',
@@ -7125,41 +7247,53 @@ function renderMarketVolumeChart(series, labels) {
       maintainAspectRatio: true,
       plugins: { legend: { display: true, position: 'bottom' } },
       scales: {
-        x: { stacked: true, grid: { display: false } },
-        y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Nbr of BL' } }
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, title: { display: true, text: marketMetricLabel(metric) } }
       }
     }
   });
 }
-function renderMarketRateChart(series, labels) {
+function renderMarketRateChart(entries, labels, baselineOn) {
   const el = document.getElementById('chartMarketRate');
   if (!el) return;
-  const teamSelect = document.getElementById('marketRateTeamSelect');
-  const teamScope = teamSelect ? teamSelect.value : 'all';
-  const barsSelect = document.getElementById('marketRateBarsSelect');
-  const barsMode = barsSelect ? barsSelect.value : 'nbrBL';
-  const metricsFor = s => teamScope === 'all' ? s.allTotal : s.teamMetrics[teamScope].total;
+  const splitMode = marketSplitMode();
+  const groups = marketSplitGroups(splitMode);
+  const aeBoundaryIdx = entries.findIndex(e => e.sdr);
 
-  const datasets = [];
-  if (barsMode === 'nbrBL' || barsMode === 'both') {
-    datasets.push({ type: 'bar', label: 'Nbr of BL', data: series.map(s => metricsFor(s).nbrBL), backgroundColor: '#c7d2e8', yAxisID: 'y', order: 3 });
-  }
-  if (barsMode === 'qalBL' || barsMode === 'both') {
-    datasets.push({ type: 'bar', label: 'Qal BL', data: series.map(s => metricsFor(s).qalBL), backgroundColor: '#8fa6d6', yAxisID: 'y', order: 3 });
-  }
+  const datasets = [{
+    type: 'bar', label: 'Nbr of BL',
+    data: entries.map(e => (e.sdr ? e.sdr.allTotal.nbrBL : (baselineOn && e.ae ? e.ae.overall.nbrBL : null))),
+    backgroundColor: '#c7d2e8', yAxisID: 'y', order: 3
+  }];
+
   const lineDefs = [
-    { id: 'pctQual', label: '% Qual', field: 'pctQal', color: '#d9534f' },
-    { id: 'meetingPct', label: 'Meeting Booked %', field: 'meetingPct', color: '#2f6fed' },
-    { id: 'leadToDeal', label: 'Lead to Deal %', field: 'leadToDealPct', color: '#6c63ff' }
+    { id: 'pctQual', label: '% Qual', field: 'pctQal', extendIntoAE: true, soloColor: '#d9534f' },
+    { id: 'meetingPct', label: 'Meeting Booked %', field: 'meetingPct', extendIntoAE: false, soloColor: '#2f6fed' }
   ];
   lineDefs.forEach(ld => {
     const cb = document.getElementById('marketRateLine-' + ld.id);
     if (!cb || !cb.checked) return;
-    datasets.push({
-      type: 'line', label: ld.label,
-      data: series.map(s => metricsFor(s)[ld.field]),
-      borderColor: ld.color, backgroundColor: ld.color,
-      yAxisID: 'y1', tension: 0.2, pointRadius: 3, spanGaps: true, order: 1
+    groups.forEach(g => {
+      const color = groups.length > 1 ? g.color : ld.soloColor;
+      const data = entries.map(e => {
+        const sdrM = marketSdrMetricsForSplit(e, splitMode, g.key);
+        if (sdrM && sdrM[ld.field] != null) return sdrM[ld.field];
+        if (baselineOn && ld.extendIntoAE) {
+          const aeM = marketAeMetricsForSplit(e, splitMode, g.key);
+          if (aeM) return aeM[ld.field];
+        }
+        return null;
+      });
+      const ds = {
+        type: 'line', label: groups.length > 1 ? `${ld.label} — ${g.label}` : ld.label,
+        data, borderColor: color, backgroundColor: color,
+        yAxisID: 'y1', tension: 0.2, pointRadius: 3, spanGaps: true, order: 1
+      };
+      if (ld.id === 'meetingPct' && groups.length > 1) ds.borderDash = [6, 3];
+      if (ld.extendIntoAE && aeBoundaryIdx > 0) {
+        ds.segment = { borderDash: ctx => (ctx.p1DataIndex < aeBoundaryIdx ? [5, 5] : undefined) };
+      }
+      datasets.push(ds);
     });
   });
 
@@ -7173,6 +7307,102 @@ function renderMarketRateChart(series, labels) {
       scales: {
         x: { grid: { display: false } },
         y: { beginAtZero: true, position: 'left', title: { display: true, text: 'Leads' } },
+        y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => v + '%' }, title: { display: true, text: '%' } }
+      }
+    }
+  });
+}
+// Bars = closed deals by creation-month cohort; lines = Lead to Deal % and
+// Qualified to Close %. With the baseline on, a dashed grey reference line
+// marks the AE-era's overall average Lead to Deal % so every SDR month reads
+// as above/below the old motion at a glance. The most recent 2 SDR months
+// (real, non-AE) are shown muted — deals from a recent cohort are still
+// closing, so those bars/rates are understated and still rising.
+function renderMarketDealChart(entries, labels, baselineOn, aeSeriesAll) {
+  const el = document.getElementById('chartMarketDeal');
+  if (!el) return;
+  const splitMode = marketSplitMode();
+  const groups = marketSplitGroups(splitMode);
+  const aeBoundaryIdx = entries.findIndex(e => e.sdr);
+  const sdrIdxs = entries.map((e, i) => (e.sdr ? i : -1)).filter(i => i >= 0);
+  const maturingIdxs = new Set(sdrIdxs.slice(-2));
+
+  const datasets = groups.map(g => ({
+    type: 'bar', label: groups.length > 1 ? `Deals — ${g.label}` : 'Deals Closed',
+    data: entries.map(e => { const m = marketSdrMetricsForSplit(e, splitMode, g.key); return m ? m.closed : null; }),
+    backgroundColor: entries.map((e, i) => (maturingIdxs.has(i) ? marketMuted(g.color) : g.color)),
+    yAxisID: 'y', order: 3
+  }));
+  if (baselineOn) {
+    if (splitMode === 'tier') {
+      groups.forEach(g => datasets.push({
+        type: 'bar', label: `Deals — ${g.label} (AE)`,
+        data: entries.map(e => { const m = marketAeMetricsForSplit(e, splitMode, g.key); return m ? m.closed : null; }),
+        backgroundColor: marketMuted(g.color), yAxisID: 'y', order: 3
+      }));
+    } else {
+      datasets.push({
+        type: 'bar', label: 'Deals — AE era (all)',
+        data: entries.map(e => { const m = marketAeMetricsForSplit(e, splitMode, null); return m ? m.closed : null; }),
+        backgroundColor: '#c7cdd8', yAxisID: 'y', order: 3
+      });
+    }
+  }
+
+  const lineDefs = [
+    { id: 'leadToDeal', label: 'Lead to Deal %', field: 'leadToDealPct', soloColor: '#6c63ff' },
+    { id: 'qualToClose', label: 'Qual to Close %', field: 'qalToClosePct', soloColor: '#1a9e94' }
+  ];
+  lineDefs.forEach(ld => {
+    const cb = document.getElementById('marketDealLine-' + ld.id);
+    if (!cb || !cb.checked) return;
+    groups.forEach(g => {
+      const color = groups.length > 1 ? g.color : ld.soloColor;
+      const data = entries.map(e => {
+        const sdrM = marketSdrMetricsForSplit(e, splitMode, g.key);
+        if (sdrM && sdrM[ld.field] != null) return sdrM[ld.field];
+        if (baselineOn) {
+          const aeM = marketAeMetricsForSplit(e, splitMode, g.key);
+          if (aeM) return aeM[ld.field];
+        }
+        return null;
+      });
+      const ds = {
+        type: 'line', label: groups.length > 1 ? `${ld.label} — ${g.label}` : ld.label,
+        data, borderColor: color, backgroundColor: color,
+        yAxisID: 'y1', tension: 0.2, pointRadius: 3, spanGaps: true, order: 1
+      };
+      if (ld.id === 'qualToClose' && groups.length > 1) ds.borderDash = [6, 3];
+      if (aeBoundaryIdx > 0) ds.segment = { borderDash: ctx => (ctx.p1DataIndex < aeBoundaryIdx ? [5, 5] : undefined) };
+      datasets.push(ds);
+    });
+  });
+
+  if (baselineOn) {
+    const aeMonthKeys = Object.keys(aeSeriesAll);
+    if (aeMonthKeys.length) {
+      const merged = marketMergeMetrics(aeMonthKeys.map(mk => aeSeriesAll[mk].overall));
+      if (merged.leadToDealPct != null) {
+        datasets.push({
+          type: 'line', label: `AE avg Lead to Deal % (${merged.leadToDealPct.toFixed(1)}%)`,
+          data: entries.map(() => merged.leadToDealPct),
+          borderColor: '#8a8f98', borderDash: [3, 3], borderWidth: 1.5,
+          pointRadius: 0, yAxisID: 'y1', order: 0
+        });
+      }
+    }
+  }
+
+  if (charts.chartMarketDeal) charts.chartMarketDeal.destroy();
+  charts.chartMarketDeal = new Chart(el.getContext('2d'), {
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: { legend: { display: true, position: 'bottom' } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, position: 'left', title: { display: true, text: 'Deals Closed' } },
         y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => v + '%' }, title: { display: true, text: '%' } }
       }
     }
