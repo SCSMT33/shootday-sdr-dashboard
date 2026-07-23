@@ -1040,13 +1040,13 @@
         <div class="charts-grid">
           <div class="chart-card full" data-chart-id="chartMarketVolume">
             <div class="chart-header">
-              <span class="chart-title">Volume Trend <span class="goal-info" title="Metric mode: monthly count of the chosen metric, grouped side-by-side by Team/Tier split (never stacked, so the split stays readable). Funnel mode: Business Leads/Qualified/Meetings Booked/Deals Closed stacked per month — these funnel stages are nested subsets of each other, not mutually exclusive counts, so the stack height is a visual comparison of the four stages shrinking, not a sum that equals total leads. Same Duplicate/Wrong-info exclusion as the table above either way.">ⓘ</span></span>
+              <span class="chart-title">Volume Trend <span class="goal-info" title="Metric mode: monthly count of the chosen metric, grouped side-by-side by Team/Tier split. Funnel mode: Business Leads/Qualified/Meetings Booked/Deals Closed drawn as nested bars in the same slot each month — since every Qualified lead is also a Business Lead (and so on down the funnel), these are overlaid, not summed. The full bar height is the Business Leads count; Qualified/Meetings/Deals sit inside it as progressively narrower, more saturated bars. Same Duplicate/Wrong-info exclusion as the table above either way.">ⓘ</span></span>
               <div class="chart-header-right">
                 <div class="chart-legend" id="legend-chartMarketVolume"></div>
                 <label class="chart-cumulative-toggle" style="margin-right:0">
                   <input type="checkbox" id="marketVolumeFunnelStack" onchange="renderMarketCharts()">
                   <span class="toggle-track"></span>
-                  <span class="toggle-text">Stack: BL/Qual/Meeting/Deals</span>
+                  <span class="toggle-text">Funnel view (BL/Qual/Meeting/Deals)</span>
                 </label>
                 <select class="chart-granularity" id="marketVolumeMetricSelect" onchange="renderMarketCharts()">
                   <option value="nbrBL">Business Leads</option>
@@ -7369,15 +7369,26 @@ function marketChartOptions(chartId, yTitle, withPctAxis, stacked) {
   return opts;
 }
 // The Volume Trend's two mutually exclusive modes: pick ONE metric split by
-// Team/Tier (grouped, never stacked — see renderMarketVolumeChart), or stack
-// all four funnel stages together for one combined view of the whole
-// funnel's shape over time. Funnel mode always uses the Total split — 4
-// stages × Team or Tier groups would be 8-16 stacked segments, unreadable.
+// Team/Tier (grouped, never stacked — see renderMarketVolumeChart), or a
+// funnel overlay of all four stages together for one combined view of the
+// whole funnel's shape over time. Funnel mode always uses the Total split —
+// 4 stages × Team or Tier groups would be 8-16 overlapping bars, unreadable.
+//
+// "Overlay," not stack: each later stage is a strict subset of the one
+// before it (every Qualified lead is also a Business Lead), so summing
+// their heights would double/triple/quadruple-count the same leads and the
+// bar would read taller than the actual lead count. Instead every stage is
+// its own full-height bar drawn in the SAME x slot (grouped:false) with a
+// narrower barPercentage than the stage before it, so Business Leads forms
+// the tall backdrop and each subsequent stage nests inside it like a target
+// — the full bar height is the Business Leads count, exactly as it should
+// read, and Qualified/Meetings/Deals sit inside it as progressively
+// narrower, more saturated bars rather than adding on top.
 const MARKET_FUNNEL_STAGES = [
-  { field: 'nbrBL', label: 'Business Leads', color: '#c7d2e8' },
-  { field: 'qalBL', label: 'Qualified', color: '#8fa6d6' },
-  { field: 'meetingBooked', label: 'Meetings Booked', color: '#2f6fed' },
-  { field: 'closed', label: 'Deals Closed', color: '#1a9e94' }
+  { field: 'nbrBL', label: 'Business Leads', color: '#c7d2e8', barPct: 0.92 },
+  { field: 'qalBL', label: 'Qualified', color: '#8fa6d6', barPct: 0.68 },
+  { field: 'meetingBooked', label: 'Meetings Booked', color: '#2f6fed', barPct: 0.44 },
+  { field: 'closed', label: 'Deals Closed', color: '#1a9e94', barPct: 0.2 }
 ];
 function renderMarketVolumeChart(entries, labels, baselineOn) {
   const el = document.getElementById('chartMarketVolume');
@@ -7389,13 +7400,19 @@ function renderMarketVolumeChart(entries, labels, baselineOn) {
 
   let datasets, yTitle;
   if (funnelStack) {
+    // Array order matters here, not just visually: Chart.js paints datasets
+    // in array order, so listing widest-first/narrowest-last means each
+    // narrower, more-saturated stage is drawn on top of the wider one behind
+    // it — no explicit z-index/order property needed.
     datasets = MARKET_FUNNEL_STAGES.map(stage => ({
       label: stage.label,
       data: entries.map(e => { const m = marketEntryMetrics(e, 'total', null, baselineOn); return m ? m[stage.field] : null; }),
       backgroundColor: entries.map(e => (e.sdr ? stage.color : marketMuted(stage.color))),
-      stack: 'funnel'
+      grouped: false,
+      categoryPercentage: 0.85,
+      barPercentage: stage.barPct
     }));
-    yTitle = 'Leads (stacked funnel stages)';
+    yTitle = 'Business Leads (funnel stages nested inside)';
   } else {
     const metric = metricSelect ? metricSelect.value : 'nbrBL';
     const splitMode = marketSplitMode();
@@ -7422,7 +7439,7 @@ function renderMarketVolumeChart(entries, labels, baselineOn) {
   charts.chartMarketVolume = new Chart(el.getContext('2d'), {
     type: 'bar',
     data: { labels, datasets: marketDropEmptyDatasets(datasets) },
-    options: marketChartOptions('chartMarketVolume', yTitle, false, funnelStack)
+    options: marketChartOptions('chartMarketVolume', yTitle, false, false)
   });
 }
 function renderMarketRateChart(entries, labels, baselineOn) {
