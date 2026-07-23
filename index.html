@@ -161,6 +161,12 @@
     margin-bottom: 24px;
     align-items: stretch;
   }
+  /* Card details: Condensed (default) — hides each card's per-SDR split and
+     Avg/day rows so only the headline number, delta, goal/projection, and the
+     AE Baseline reference line remain. A per-card Expand (↕) always reveals
+     the full detail for that one card regardless of this global setting. */
+  .summary-grid.cards-condensed .card:not(.expanded) .card-split { display: none; }
+  .summary-grid.cards-condensed .card:not(.expanded) .card-avg-row:not(.card-ae-row) { display: none; }
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -685,6 +691,11 @@
   .mandate-month-cell { font-weight: 600; }
   .mandate-month-cell.current { color: var(--accent); }
   .mandate-kpi-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  /* Market Split runs slightly larger than the other KPI tables — it's the
+     one most often screen-shared, so the numbers need to read from the back
+     of the room without switching the whole dashboard's density. */
+  #marketTable { font-size: 14px; }
+  #marketTable th { font-size: 12px; }
   .mandate-kpi-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
   .mandate-kpi-table td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
   .mandate-kpi-name { font-weight: 600; white-space: nowrap; }
@@ -949,6 +960,11 @@
         <option value="off" selected>Off</option>
         <option value="on">On</option>
       </select>
+      <span>Card details:</span>
+      <select id="cardDetailsToggle" title="Condensed (default): each Summary Card shows just the headline number, trend vs previous period, goal/projection, and the AE Baseline reference. Full: also shows the per-SDR breakdown and Avg/day rows on every card. Either way, each card's own ↕ button expands that one card fully." onchange="saveCardDetailsToggle()">
+        <option value="condensed" selected>Condensed</option>
+        <option value="full">Full</option>
+      </select>
       <span>Lead Rules:</span>
       <select id="leadRulesSelect" title="Governs the Summary Cards only (Lead Volume, Meetings Booked, Meeting Booked Rate, Leads Qualified, % Leads Qualified, Non-Responsive Rate), for every Leads: filter below including Commission View. Strict (default): Duplicate-record/Wrong-info leads dropped from every count, and Meetings Booked requires a genuine Meeting Status (an Instant Close never counts). Loose: the older, broader counts (duplicates included, Instant Closes credited as meetings)." onchange="saveLeadRulesFilter(); renderDashboard()">
         <option value="strict" selected>Strict</option>
@@ -990,7 +1006,7 @@
     <div class="mandate-section" id="marketSection">
       <div class="mandate-header" onclick="toggleMarketSection()">
         <div class="mandate-header-left">
-          <span class="mandate-title">Market Split by Request Type <span class="goal-info" id="marketSectionInfo" title="B2B funnel for a single chosen month, grouped by Team (US: MJ + Gospel; OUS: Mark + Levi) and Request Type tier. &lt;1k = '&lt;$1k - Share Quote', incomplete = 'Incomplete - Request Info' — the only two Request Types this team currently works; &gt;1k and complex are reserved for a different team's request types and will read 0 here until/unless this team ever gets that work. Leads with a blank or unrecognized Request Type aren't shown in any row, so each team's Total equals the sum of its two Sub totals. Qualified/Meeting Booked use the same strict definitions as the QAL Funnel by SDR table (Capacity &amp; Cost) — Duplicate-record/Wrong-info leads excluded from every count. Qal to Close % = Closed ÷ Qualified. Meeting Done to Close % = Closed ÷ Meeting Status = Meeting Done specifically (not Scheduled/Rejected/Not Atended). Lead to Deal % = Closed ÷ Nbr of BL — the overall conversion rate.">ⓘ</span></span>
+          <span class="mandate-title">Market Split by Request Type <span class="goal-info" id="marketSectionInfo" title="B2B funnel for a single chosen month, grouped by Team (US: MJ + Gospel; OUS: Mark + Levi) and Request Type tier. &lt;1k = '&lt;$1k - Share Quote', incomplete = 'Incomplete - Request Info' — the only two Request Types this team currently works; &gt;1k and complex are reserved for a different team's request types and will read 0 here until/unless this team ever gets that work. Leads with a blank or unrecognized Request Type aren't shown in any row, so each team's Total equals the sum of its two Sub totals. Qualified/Meeting Booked use the same strict definitions as the QAL Funnel by SDR table (Capacity &amp; Cost) — Duplicate-record/Wrong-info leads excluded from every count. Qal to Close % = Closed ÷ Qualified. Meeting Done to Close % = Closed ÷ Meeting Status = Meeting Done specifically (not Scheduled/Rejected/Not Atended). Lead to Deal % = Closed ÷ Nbr of BL — the overall conversion rate. Months labeled (AE era) predate the SDRs: they come from the committed historical dataset and show the whole company's funnel under AEs as one block — including an (untyped) row for pre-SDR leads whose Request Type was never filled in, so the AE Total genuinely sums. May 2026 is the transition month and shows both (AEs ran it through May 18; Total shootday combines the two).">ⓘ</span></span>
           <span class="mandate-sub" id="marketHeaderNote">B2B funnel by team and request-type tier, for a single chosen month</span>
         </div>
         <span class="mandate-chevron">&#9654;</span>
@@ -1019,7 +1035,7 @@
               <option value="6">Last 6 months</option>
               <option value="12">Last 12 months</option>
             </select>
-            <label class="chart-cumulative-toggle" title="Extends each chart back through the pre-SDR AE era (data/ae-baseline.csv) for a before/after comparison. AE-era months are muted and labeled '(AE)' — it's the whole company, not just US/OUS, since that split didn't exist yet.">
+            <label class="chart-cumulative-toggle" title="Extends each chart back through the pre-SDR AE era (from the committed historical dataset) for a before/after comparison. AE-era months are muted and labeled '(AE)' — it's the whole company, not just US/OUS, since that split didn't exist yet. May 2026 (the transition month — AEs through May 18, SDRs after) combines both eras into one true total. Dashed line segments = AE-era portion of a rate line.">
               <input type="checkbox" id="marketBaselineToggle" onchange="saveMarketBaseline(this.checked)">
               <span class="toggle-track"></span>
               <span class="toggle-text">Pre-SDR baseline</span>
@@ -1038,6 +1054,7 @@
                   <option value="meetingBooked">Meetings Booked</option>
                   <option value="closed">Deals Closed</option>
                 </select>
+                <button class="chart-expand-btn" onclick="toggleChartExpand('chartMarketVolume')" title="Expand">&#10530;</button>
               </div>
             </div>
             <canvas id="chartMarketVolume"></canvas>
@@ -1059,6 +1076,7 @@
                     <span class="toggle-text">Meeting Booked %</span>
                   </label>
                 </span>
+                <button class="chart-expand-btn" onclick="toggleChartExpand('chartMarketRate')" title="Expand">&#10530;</button>
               </div>
             </div>
             <canvas id="chartMarketRate"></canvas>
@@ -1080,6 +1098,7 @@
                     <span class="toggle-text">Qual to Close %</span>
                   </label>
                 </span>
+                <button class="chart-expand-btn" onclick="toggleChartExpand('chartMarketDeal')" title="Expand">&#10530;</button>
               </div>
             </div>
             <canvas id="chartMarketDeal"></canvas>
@@ -1191,6 +1210,15 @@
     </div>
 
     <!-- CHARTS -->
+    <div class="mandate-section" id="chartsSection">
+      <div class="mandate-header" onclick="toggleChartsSection()">
+        <div class="mandate-header-left">
+          <span class="mandate-title">SDR Performance Charts</span>
+          <span class="mandate-sub">Meetings, qualification, NR &amp; DQ rates, speed-to-lead, attendance and call activity — per SDR over time</span>
+        </div>
+        <span class="mandate-chevron">&#9654;</span>
+      </div>
+      <div class="mandate-body">
     <div class="charts-grid">
       <div class="chart-card full" data-chart-id="chartActivity">
         <div class="chart-header">
@@ -1529,6 +1557,8 @@
           </div>
         </div>
         <canvas id="chartCallActivity"></canvas>
+      </div>
+    </div>
       </div>
     </div>
 
@@ -2890,7 +2920,7 @@ function isQualifiedLead(r) {
 // Meeting Status, so this flag is never needed (or used) for SDR numbers.
 function computeMetrics(leads, opts) {
   opts = opts || {};
-  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, non_responsive_terminal: 0, ae_dq: 0, sdr_dq: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, meetings_no_show_denom: 0, meetings_held: 0, meetings_no_show: 0, speed_to_lead_matched: 0, speed_to_lead_eligible: 0, speed_to_lead_mismatch: 0,
+  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, non_responsive_terminal: 0, ae_dq: 0, sdr_dq: 0, closed: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, meetings_no_show_denom: 0, meetings_held: 0, meetings_no_show: 0, speed_to_lead_matched: 0, speed_to_lead_eligible: 0, speed_to_lead_mismatch: 0,
     speed_to_lead_on_matched: 0, speed_to_lead_on_eligible: 0,
     speed_to_lead_off_matched: 0, speed_to_lead_off_eligible: 0 };
   const isAEImpliedMeeting = r => opts.closedImpliesMeeting && r['Sales status'] === 'Closed' && !(r['Meeting Status'] || '').trim();
@@ -2937,6 +2967,9 @@ function computeMetrics(leads, opts) {
   const ae_dq = leads.filter(r => (r['Sales status'] || '').includes('Disqualified AE')).length;
   // Plain "Disqualified" (the SDR's own call) — distinct from the AE-disqualified status above
   const sdr_dq = leads.filter(r => (r['Sales status'] || '').trim().toLowerCase() === 'disqualified').length;
+  // Closed deals by creation-date cohort (same convention as everywhere else
+  // on the dashboard) — feeds the Lead to Deal summary card.
+  const closed = leads.filter(r => normalizeSalesStatus(r['Sales status']) === 'closed').length;
   const active_pipeline = leads.filter(r => !['Closed','Disqualified','Lost','Deposit refund',''].includes(r['Sales status'])).length;
   // Set by matchSpeedToLead() onto each row before computeMetrics runs. Counts
   // are summable across days/SDRs; the actual minute values (for a median)
@@ -2966,6 +2999,7 @@ function computeMetrics(leads, opts) {
     non_responsive_terminal,
     ae_dq,
     sdr_dq,
+    closed,
     active_pipeline,
     meetings_not_attended,
     meetings_resolved,
@@ -3363,12 +3397,14 @@ function renderSummaryCards(days) {
   const totalNoShow = sumMetric(days, v, 'meetings_no_show');
   const totalResolved = sumMetric(days, v, 'meetings_no_show_denom');
   const noShowRate = totalResolved ? (totalNoShow / totalResolved * 100) : 0;
+  const totalClosed = sumMetricFrom(numData, days, v, 'closed');
 
   const leadVolTotal = isCommission ? sumMetricFrom(b2bDenomData, days, v, 'leads') : totalLeads;
 
   const pctQual = leadVolTotal ? (totalQualified / leadVolTotal * 100) : 0;
   const nrRate = leadVolTotal ? (totalNR / leadVolTotal * 100) : 0;
   const meetingRate = leadVolTotal ? (totalMeetings / leadVolTotal * 100) : 0;
+  const leadToDealRate = leadVolTotal ? (totalClosed / leadVolTotal * 100) : 0;
 
   // "vs previous period" deltas — same metrics recomputed over the matched-
   // length window immediately before the selected range (see
@@ -3386,6 +3422,8 @@ function renderSummaryCards(days) {
     const prevNR = sumMetricFrom(numData, pd, v, 'non_responsive');
     const prevNoShow = sumMetric(pd, v, 'meetings_no_show');
     const prevResolved = sumMetric(pd, v, 'meetings_no_show_denom');
+    const prevClosed = sumMetricFrom(numData, pd, v, 'closed');
+    const prevLeadToDeal = prevLeadVol ? (prevClosed / prevLeadVol * 100) : null;
     const prevMeetingRate = prevLeadVol ? (prevMeetings / prevLeadVol * 100) : null;
     const prevPctQual = prevLeadVol ? (prevQualified / prevLeadVol * 100) : null;
     const prevNrRate = prevLeadVol ? (prevNR / prevLeadVol * 100) : null;
@@ -3397,6 +3435,7 @@ function renderSummaryCards(days) {
     deltas.meetingRate = deltaChip(meetingRate, prevMeetingRate, { isPct: true, lowerIsBetter: false, label: pl, prevText: prevMeetingRate != null ? prevMeetingRate.toFixed(1) + '%' : null });
     deltas.pctQual = deltaChip(pctQual, prevPctQual, { isPct: true, lowerIsBetter: false, label: pl, prevText: prevPctQual != null ? prevPctQual.toFixed(1) + '%' : null });
     deltas.nrRate = deltaChip(nrRate, prevNrRate, { isPct: true, lowerIsBetter: true, label: pl, prevText: prevNrRate != null ? prevNrRate.toFixed(1) + '%' : null });
+    deltas.leadToDeal = deltaChip(leadToDealRate, prevLeadToDeal, { isPct: true, lowerIsBetter: false, label: pl, prevText: prevLeadToDeal != null ? prevLeadToDeal.toFixed(1) + '%' : null });
     deltas.noShowRate = deltaChip(totalResolved ? noShowRate : null, prevNoShowRate, { isPct: true, lowerIsBetter: true, label: pl, prevText: prevNoShowRate != null ? prevNoShowRate.toFixed(1) + '%' : null });
     deltas.stl = deltaChip(stlMedian, prevStl, { isPct: false, lowerIsBetter: true, label: pl, prevText: prevStl != null ? fmtMinutes(prevStl) : null });
   }
@@ -3425,10 +3464,12 @@ function renderSummaryCards(days) {
     const leadsProjected = elapsed ? (leadVol / elapsed * daysInMo) : 0;
     const noShow = sumMetric(days, s.key, 'meetings_no_show');
     const resolved = sumMetric(days, s.key, 'meetings_no_show_denom');
+    const closed = sumMetricFrom(numData, days, s.key, 'closed');
     return {
       ...s, leads, meetings, qualified, nr, aedq, pipeline, leadVol, leadsProjected, medianMinutes, matched,
-      noShow, resolved,
+      noShow, resolved, closed,
       noShowRate: resolved ? (noShow / resolved * 100) : 0,
+      leadToDealRate: leadVol ? (closed / leadVol * 100) : 0,
       pctQual: leadVol ? (qualified / leadVol * 100) : 0,
       nrRate: leadVol ? (nr / leadVol * 100) : 0,
       meetingRate: leadVol ? (meetings / leadVol * 100) : 0,
@@ -3458,12 +3499,14 @@ function renderSummaryCards(days) {
   const infoNR = isCommission
     ? `Non-Responsive leads (B2B+B2C) ÷ B2B-only Lead Volume. Non-responsive = Disqualified reason "Not responsive" or Sales status "Non respondant" (includes leads still mid-cadence). Lower is better. The Mandate Scoreboard's version is narrower — terminal Not-responsive only, matching the strategic briefing's baseline.${strictNote}${aeNote}`
     : `Sales status = Non respondant or Disqualified reason = Not responsive (includes leads still mid-cadence) ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Lower is better. The Mandate Scoreboard's version is narrower — terminal Not-responsive only, matching the strategic briefing's baseline.${strictNote}${aeNote}`;
+  const infoLeadToDeal = `Closed deals ÷ Lead Volume, by creation-date cohort — of the leads created in the selected range, how many have a Sales status of Closed as of right now. Recent ranges always read low until their leads have had time to close (deals typically take weeks). Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${strictNote}${aeNote}`;
   const infoAEDQ = `Count of leads the AE bounced back as wrongly qualified (Sales status contains "Disqualified AE") — measures SDR hand-off quality, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
   const infoPipeline = `Snapshot as of the last day in range: leads whose Sales status is NOT Closed, Disqualified, Lost, Deposit refund, or blank — i.e. still open/in-progress, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).`;
   const infoNoShow = `Meeting Not Atended or Rejected ÷ booked meetings (Scheduled + Done + Not Atended + Rejected, or an Instant Close) in range. Scheduled is in the denominator so a lead whose deal resolved without Meeting Status being updated off Scheduled doesn't vanish from the math (this also means brand-new upcoming meetings count here, so the rate reads higher in the most recent week or two before they resolve). Lower is better. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Full breakdown in the "No-Show Rate by SDR" chart below.`;
   document.getElementById('summaryCards').innerHTML = `
     ${countCard('Lead Volume', leadVolTotal, perSDR.map(s => ({ ...s, value: s.leadVol, goal: s.leadsGoal })), elapsed, daysInMo, showProjection, isCommission ? 'B2B leads only' : undefined, d.goalLeads, ae ? ae.leadsPerDay : null, infoLeadVolume, deltas.leadVol)}
     ${countCard('Meetings Booked', totalMeetings, perSDR.map(s => ({ ...s, value: s.meetings, goal: s.meetingsGoal })), elapsed, daysInMo, showProjection, undefined, d.goalMeetings, ae ? ae.meetingsPerDay : null, infoMeetingsBooked, deltas.meetings)}
+    ${rateCard('Lead to Deal', leadToDealRate, perSDR.map(s => ({ ...s, value: s.leadToDealRate })), null, `${totalClosed} closed deal${totalClosed === 1 ? '' : 's'} of ${leadVolTotal} leads`, null, false, ae && ae.overall.leads ? (ae.overall.closed / ae.overall.leads * 100) : null, infoLeadToDeal, deltas.leadToDeal)}
     ${rateCard('Meeting Booked Rate', meetingRate, perSDR.map(s => ({ ...s, value: s.meetingRate })), isCommission ? meanRateCommission(days, v, 'meetings') : meanMetric(days, v, 'meeting_rate'), isCommission ? 'meetings (B2B+B2C) ÷ B2B leads' : 'meetings ÷ total leads', d.goalMeetingRate, false, ae ? ae.overall.meeting_rate : null, infoMeetingRate, deltas.meetingRate)}
     ${countCard('Leads Qualified', totalQualified, perSDR.map(s => ({ ...s, value: s.qualified, goal: s.qualifiedGoal })), elapsed, daysInMo, showProjection, `${pctQual.toFixed(1)}% of leads`, d.goalQualified, ae ? ae.qualifiedPerDay : null, infoQualified, deltas.qualified)}
     ${rateCard('% Leads Qualified', pctQual, perSDR.map(s => ({ ...s, value: s.pctQual })), isCommission ? meanRateCommission(days, v, 'qualified') : meanMetric(days, v, 'pct_qualified'), 'Hot/Warm/Closed/Lost/Qualified SDR/refund status', d.goalPctQual, false, ae ? ae.overall.pct_qualified : null, infoPctQualified, deltas.pctQual)}
@@ -3474,7 +3517,24 @@ function renderSummaryCards(days) {
         { median: stlOffMedian, matched: totalSTLOffMatched, eligible: totalSTLOffEligible }, deltas.stl) : pendingCard('Speed-to-Lead', 'Load a Call History CSV to enable')}
     ${pendingCard('Cadence Adherence', 'Pending (manual score)')}
   `;
+  document.getElementById('summaryCards').classList.toggle('cards-condensed', cardDetailsCondensed());
   applyExpandedState();
+}
+
+// Card details: Condensed (default) hides every card's per-SDR split and
+// Avg/day rows via .summary-grid.cards-condensed CSS — headline number,
+// delta, goal/projection, and AE Baseline reference stay. Full shows it all.
+function cardDetailsCondensed() {
+  try { return localStorage.getItem('sdr_card_details') !== 'full'; } catch (e) { return true; }
+}
+function saveCardDetailsToggle() {
+  const el = document.getElementById('cardDetailsToggle');
+  try { localStorage.setItem('sdr_card_details', el.value); } catch (e) {}
+  document.getElementById('summaryCards').classList.toggle('cards-condensed', el.value !== 'full');
+}
+function loadCardDetailsToggle() {
+  const el = document.getElementById('cardDetailsToggle');
+  if (el) el.value = cardDetailsCondensed() ? 'condensed' : 'full';
 }
 
 function cardInfo(text) {
@@ -3509,7 +3569,14 @@ function toggleChartExpand(id) {
   document.querySelectorAll('.chart-card[data-chart-id]').forEach(c => {
     c.classList.toggle('expanded', expandedCharts.has(c.dataset.chartId));
   });
-  renderCharts(getFilteredDays());
+  // Market Split trend charts live outside the main charts-grid and are
+  // rebuilt by their own renderer — redrawing every SDR chart for one of
+  // them would be wasted work (and vice versa).
+  if (id.indexOf('chartMarket') === 0) renderMarketCharts();
+  else renderCharts(getFilteredDays());
+}
+function toggleChartsSection() {
+  document.getElementById('chartsSection').classList.toggle('expanded');
 }
 // Chart.js draws axis-tick and tooltip text directly onto the canvas — that
 // text doesn't grow just because the surrounding card gets taller via CSS, so
@@ -3561,7 +3628,7 @@ function countCard(label, total, sdrList, elapsed, daysInMo, showProjection, ext
   });
   const projected = showProjection ? Math.round(avg * daysInMo) : null;
   const goalRow = (showProjection && goalMonthly) ? goalStatusRow(projected, goalMonthly, false, false, 'Monthly Goal (team)') : '';
-  const aeRow = (isAEBaselineOn() && aeBaselinePerDay != null) ? `<div class="card-avg-row"><span>AE Baseline (avg/day)</span><span style="color:${COLORS.AEBaseline}">${aeBaselinePerDay.toFixed(1)}</span></div>` : '';
+  const aeRow = (isAEBaselineOn() && aeBaselinePerDay != null) ? `<div class="card-avg-row card-ae-row"><span>AE Baseline (avg/day)</span><span style="color:${COLORS.AEBaseline}">${aeBaselinePerDay.toFixed(1)}</span></div>` : '';
   return `<div class="card" data-label="${label}">
     ${expandBtn(label)}
     <div class="card-label">${label} ${cardInfo(infoText)}</div>
@@ -3579,7 +3646,7 @@ function countCard(label, total, sdrList, elapsed, daysInMo, showProjection, ext
 function rateCard(label, pct, sdrList, avgDaily, extraSub, goalVal, lowerIsBetter, aeBaselinePct, infoText, deltaHtml) {
   const goalRow = goalStatusRow(pct, goalVal, true, lowerIsBetter, 'Target (team)');
   const enriched = sdrList.map(s => ({ ...s, goalVal }));
-  const aeRow = (isAEBaselineOn() && aeBaselinePct != null) ? `<div class="card-avg-row"><span>AE Baseline</span><span style="color:${COLORS.AEBaseline}">${aeBaselinePct.toFixed(1)}%</span></div>` : '';
+  const aeRow = (isAEBaselineOn() && aeBaselinePct != null) ? `<div class="card-avg-row card-ae-row"><span>AE Baseline</span><span style="color:${COLORS.AEBaseline}">${aeBaselinePct.toFixed(1)}%</span></div>` : '';
   return `<div class="card" data-label="${label}">
     ${expandBtn(label)}
     <div class="card-label">${label} ${cardInfo(infoText)}</div>
@@ -7033,14 +7100,21 @@ function renderMarketSection() {
     table.innerHTML = '<tbody><tr><td class="mandate-kpi-note">Upload a leads CSV to see the market split.</td></tr></tbody>';
     return;
   }
+  const tzBasis = marketTzBasis();
+  // AE-era (pre-SDR) months come from the committed historical dataset —
+  // selectable in the Month dropdown (labeled "(AE era)", from Jan 2026 on)
+  // and shown as their own whole-company block, since no US/OUS/SDR split
+  // existed back then.
+  const aeByMonth = rawAEBaseline ? aeCleanB2BByMonth(tzBasis) : {};
   const monthKey = marketSelectedMonth();
   const monthSelect = document.getElementById('marketMonthSelect');
+  const sdrMonths = marketAvailableMonths();
   if (monthSelect) {
-    const months = marketAvailableMonths();
-    monthSelect.innerHTML = months.map(mk => `<option value="${mk}">${escapeHtml(monthLabelFromKey(mk))}</option>`).join('');
+    const aeMonths = Object.keys(aeByMonth).filter(mk => mk >= '2026-01');
+    const months = [...new Set(sdrMonths.concat(aeMonths))].sort();
+    monthSelect.innerHTML = months.map(mk => `<option value="${mk}">${escapeHtml(monthLabelFromKey(mk))}${sdrMonths.includes(mk) ? '' : ' (AE era)'}</option>`).join('');
     monthSelect.value = months.includes(monthKey) ? monthKey : priorMonthKey();
   }
-  const tzBasis = marketTzBasis();
   const tzSelect = document.getElementById('marketTzSelect');
   if (tzSelect) tzSelect.value = tzBasis;
   const note = document.getElementById('marketHeaderNote');
@@ -7048,7 +7122,8 @@ function renderMarketSection() {
 
   let bodyRows = '';
   const teamTotals = [];
-  TEAM_GROUPS.forEach(team => {
+  const hasSdrData = sdrMonths.includes(monthKey);
+  if (hasSdrData) TEAM_GROUPS.forEach(team => {
     const tierMetrics = {};
     MARKET_TIERS.forEach(t => {
       const rows = marketCleanB2BRows(monthKey, tzBasis, team.members).filter(r => marketRequestTier(r) === t.key);
@@ -7067,7 +7142,34 @@ function renderMarketSection() {
     });
     bodyRows += marketRowHtml(`Total ${team.label.replace(' Team', '')}`, teamTotal, { total: true });
   });
-  const grandTotal = marketMergeMetrics(teamTotals);
+
+  // AE-era block for any month the historical dataset covers — the whole
+  // company as one group (tiers + an "(untyped)" row for pre-SDR leads whose
+  // Request Type was never filled in, so the AE Total genuinely sums).
+  // May 2026 is the transition month: it shows the SDR team blocks AND this
+  // block (May 1–18 ran under AEs), and Total shootday combines both.
+  let aeTotal = null;
+  const aeRows = aeByMonth[monthKey] || [];
+  if (aeRows.length) {
+    // Meeting Done to Close is dashed out for AE-era rows: most pre-SDR
+    // closed deals have a blank Meeting Status, so the computed ratio runs
+    // to 250-300%+ — the Definitions glossary documents this exact problem
+    // and the AE Baseline section uses a static benchmark instead.
+    const noMDC = m => ({ ...m, meetingDoneToClosePct: null });
+    const aeTiers = {};
+    MARKET_TIERS.forEach(t => { aeTiers[t.key] = marketMetrics(aeRows.filter(r => marketRequestTier(r) === t.key)); });
+    const untypedRows = aeRows.filter(r => marketRequestTier(r) === null);
+    aeTotal = marketMetrics(aeRows);
+    bodyRows += `<tr><td class="mandate-kpi-name" colspan="9" style="padding-top:16px">AE era (pre-SDR, whole company)</td></tr>`;
+    MARKET_TIERS.forEach(t => { bodyRows += marketRowHtml(t.label, noMDC(aeTiers[t.key]), { indent: true }); });
+    bodyRows += marketRowHtml('(untyped)', noMDC(marketMetrics(untypedRows)), { indent: true });
+    bodyRows += marketRowHtml('Total AE era', noMDC(aeTotal), { total: true });
+  }
+
+  const grandTotal = marketMergeMetrics(teamTotals.concat(aeTotal ? [aeTotal] : []));
+  // Any AE-era rows in the total poison Meeting Done to Close the same way
+  // they do in their own block above — dash it rather than print 250%+.
+  if (aeTotal) grandTotal.meetingDoneToClosePct = null;
   bodyRows += `<tr><td colspan="9" style="height:8px;border:none"></td></tr>`;
   bodyRows += marketRowHtml('Total shootday', grandTotal, { total: true });
 
@@ -7118,22 +7220,27 @@ function marketMonthlySeries(monthKeys, tzBasis) {
     return { monthKey, teamMetrics, allTotal };
   });
 }
-// Builds the pre-SDR AE-era monthly series straight from the auto-loaded
-// data/ae-baseline.csv (rawAEBaseline) — every row already predates the SDR
-// era by construction (that's how the file was filtered), so no cutoff check
-// is needed here. Same header names and the same isBusinessLead/isLeadExcluded/
-// isQualifiedLead/isMeetingBookedStrict rules as the live SDR data (via
-// marketMetrics), so an AE month and an SDR month are computed identically
-// and can sit side-by-side on the same chart as a fair comparison.
-function aeBaselineMonthlySeries() {
+// Pre-SDR AE-era clean-B2B rows from the auto-loaded data/ae-baseline.csv
+// (rawAEBaseline), bucketed by creation month on the same timezone basis as
+// the SDR data — every row already predates the SDR era by construction
+// (that's how the committed file was filtered), so no cutoff check is needed.
+// Same header names and the same isBusinessLead/isLeadExcluded rules as the
+// live SDR data, so an AE month and an SDR month are computed identically
+// and can sit side-by-side as a fair comparison. Used by both the Market
+// table (AE-era months in the Month dropdown) and the trend charts.
+function aeCleanB2BByMonth(tzBasis) {
   const byMonth = {};
   (rawAEBaseline || []).forEach(r => {
     if (!isBusinessLead(r) || isLeadExcluded(r)) return;
     const raw = (r['Creation Date'] || '').trim();
     if (raw.length < 7) return;
-    const mk = raw.slice(0, 7);
+    const mk = tzBasis === 'eest' ? raw.slice(0, 7) : toDubaiDayKey(raw).slice(0, 7);
     (byMonth[mk] = byMonth[mk] || []).push(r);
   });
+  return byMonth;
+}
+function aeBaselineMonthlySeries(tzBasis) {
+  const byMonth = aeCleanB2BByMonth(tzBasis);
   const result = {};
   Object.keys(byMonth).forEach(mk => {
     const rows = byMonth[mk];
@@ -7167,6 +7274,28 @@ function marketAeMetricsForSplit(entry, splitMode, key) {
   if (splitMode === 'tier') return entry.ae.tiers[key];
   return entry.ae.overall;
 }
+// The single number a chart plots for one month × one split group, with the
+// baseline folded in. In total/tier splits, a month with both SDR and AE data
+// (May 2026 — AEs ran it through the 18th, SDRs after) merges the two into
+// the true business total; AE-only months carry the AE value so the series
+// runs continuously back in time. In team split the AE era can't be
+// attributed to US/OUS, so it stays out of the team series entirely and is
+// drawn as its own "AE era (all)" dataset by the caller instead.
+function marketEntryMetrics(entry, splitMode, key, baselineOn) {
+  const sdrM = marketSdrMetricsForSplit(entry, splitMode, key);
+  if (splitMode === 'team' || !baselineOn) return sdrM;
+  const aeM = marketAeMetricsForSplit(entry, splitMode, key);
+  if (sdrM && aeM) return marketMergeMetrics([sdrM, aeM]);
+  return sdrM || aeM;
+}
+// Legend declutter: a dataset that never has a value (a tier this team
+// doesn't work, a rate with no data anywhere in range) earns no legend
+// entry or axis space. All-zero bars are dropped too — same reasoning as
+// the table's dashes: "no leads here" shouldn't render as a wall of
+// zero-height bars crowding the legend.
+function marketDropEmptyDatasets(datasets) {
+  return datasets.filter(d => d.data.some(v => v != null && v !== 0));
+}
 function marketMetricLabel(metric) {
   return { nbrBL: 'Business Leads', qalBL: 'Qualified Leads', meetingBooked: 'Meetings Booked', closed: 'Deals Closed' }[metric] || metric;
 }
@@ -7189,14 +7318,14 @@ function renderMarketCharts() {
   const baselineOn = marketBaselineOn();
   if (baselineToggle) baselineToggle.checked = baselineOn;
 
-  const aeSeries = baselineOn ? aeBaselineMonthlySeries() : {};
+  const tzBasis = marketTzBasis();
+  const aeSeries = baselineOn ? aeBaselineMonthlySeries(tzBasis) : {};
   const n = marketRangeMode() === '12' ? 12 : 6;
   const sdrMonths = marketAvailableMonths();
   const monthSet = new Set(sdrMonths);
   if (baselineOn) Object.keys(aeSeries).forEach(mk => monthSet.add(mk));
   const months = [...monthSet].sort().slice(-n);
 
-  const tzBasis = marketTzBasis();
   const sdrOnlyMonths = months.filter(mk => sdrMonths.includes(mk));
   const sdrSeries = marketMonthlySeries(sdrOnlyMonths, tzBasis);
   const sdrByMonth = {};
@@ -7209,6 +7338,25 @@ function renderMarketCharts() {
   renderMarketRateChart(entries, labels, baselineOn);
   renderMarketDealChart(entries, labels, baselineOn, aeSeries);
 }
+// Shared Chart.js options for the three market trend charts — bottom legend
+// and expanded-mode font scaling (Chart.js paints tick/legend text onto the
+// canvas, so CSS can't resize it).
+function marketChartOptions(chartId, yTitle, withPctAxis) {
+  const f = chartFontSizes(chartId);
+  const opts = {
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: { legend: { display: true, position: 'bottom', labels: { font: { size: f.tick + 1 } } } },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: f.tick } } },
+      y: { beginAtZero: true, position: 'left', title: { display: true, text: yTitle, font: { size: f.tick } }, ticks: { font: { size: f.tick } } }
+    }
+  };
+  if (withPctAxis) {
+    opts.scales.y1 = { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => v + '%', font: { size: f.tick } }, title: { display: true, text: '%', font: { size: f.tick } } };
+  }
+  return opts;
+}
 function renderMarketVolumeChart(entries, labels, baselineOn) {
   const el = document.getElementById('chartMarketVolume');
   if (!el) return;
@@ -7217,40 +7365,27 @@ function renderMarketVolumeChart(entries, labels, baselineOn) {
   const splitMode = marketSplitMode();
   const groups = marketSplitGroups(splitMode);
 
+  // One continuous series per group — AE-only months are the same series in
+  // a washed-out shade (plus the "(AE)" axis label) rather than a separate
+  // legend entry, so the eye reads one storyline across both eras.
   const datasets = groups.map(g => ({
     label: g.label,
-    data: entries.map(e => { const m = marketSdrMetricsForSplit(e, splitMode, g.key); return m ? m[metric] : null; }),
-    backgroundColor: g.color
+    data: entries.map(e => { const m = marketEntryMetrics(e, splitMode, g.key, baselineOn); return m ? m[metric] : null; }),
+    backgroundColor: entries.map(e => (e.sdr ? g.color : marketMuted(g.color)))
   }));
-  if (baselineOn) {
-    if (splitMode === 'tier') {
-      groups.forEach(g => datasets.push({
-        label: g.label + ' (AE)',
-        data: entries.map(e => { const m = marketAeMetricsForSplit(e, splitMode, g.key); return m ? m[metric] : null; }),
-        backgroundColor: marketMuted(g.color)
-      }));
-    } else {
-      datasets.push({
-        label: 'AE era (all)',
-        data: entries.map(e => { const m = marketAeMetricsForSplit(e, splitMode, null); return m ? m[metric] : null; }),
-        backgroundColor: '#c7cdd8'
-      });
-    }
+  if (baselineOn && splitMode === 'team') {
+    datasets.push({
+      label: 'AE era (all)',
+      data: entries.map(e => { const m = marketAeMetricsForSplit(e, splitMode, null); return m ? m[metric] : null; }),
+      backgroundColor: '#c7cdd8'
+    });
   }
 
   if (charts.chartMarketVolume) charts.chartMarketVolume.destroy();
   charts.chartMarketVolume = new Chart(el.getContext('2d'), {
     type: 'bar',
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: { legend: { display: true, position: 'bottom' } },
-      scales: {
-        x: { grid: { display: false } },
-        y: { beginAtZero: true, title: { display: true, text: marketMetricLabel(metric) } }
-      }
-    }
+    data: { labels, datasets: marketDropEmptyDatasets(datasets) },
+    options: marketChartOptions('chartMarketVolume', marketMetricLabel(metric), false)
   });
 }
 function renderMarketRateChart(entries, labels, baselineOn) {
@@ -7262,8 +7397,9 @@ function renderMarketRateChart(entries, labels, baselineOn) {
 
   const datasets = [{
     type: 'bar', label: 'Nbr of BL',
-    data: entries.map(e => (e.sdr ? e.sdr.allTotal.nbrBL : (baselineOn && e.ae ? e.ae.overall.nbrBL : null))),
-    backgroundColor: '#c7d2e8', yAxisID: 'y', order: 3
+    data: entries.map(e => { const m = marketEntryMetrics(e, 'total', null, baselineOn); return m ? m.nbrBL : null; }),
+    backgroundColor: entries.map(e => (e.sdr ? '#c7d2e8' : '#dde3ec')),
+    yAxisID: 'y', order: 3
   }];
 
   const lineDefs = [
@@ -7276,13 +7412,16 @@ function renderMarketRateChart(entries, labels, baselineOn) {
     groups.forEach(g => {
       const color = groups.length > 1 ? g.color : ld.soloColor;
       const data = entries.map(e => {
-        const sdrM = marketSdrMetricsForSplit(e, splitMode, g.key);
-        if (sdrM && sdrM[ld.field] != null) return sdrM[ld.field];
-        if (baselineOn && ld.extendIntoAE) {
-          const aeM = marketAeMetricsForSplit(e, splitMode, g.key);
-          if (aeM) return aeM[ld.field];
+        // Meeting Booked % stops at the SDR era: AE-era Meeting Status was
+        // rarely logged (~15% populated), so extending that one line would
+        // chart logging discipline, not performance. For merged transition
+        // months the SDR-only value is used for the same reason.
+        if (!ld.extendIntoAE) {
+          const sdrM = marketSdrMetricsForSplit(e, splitMode, g.key);
+          return sdrM ? sdrM[ld.field] : null;
         }
-        return null;
+        const m = marketEntryMetrics(e, splitMode, g.key, baselineOn);
+        return m ? m[ld.field] : null;
       });
       const ds = {
         type: 'line', label: groups.length > 1 ? `${ld.label} — ${g.label}` : ld.label,
@@ -7299,25 +7438,19 @@ function renderMarketRateChart(entries, labels, baselineOn) {
 
   if (charts.chartMarketRate) charts.chartMarketRate.destroy();
   charts.chartMarketRate = new Chart(el.getContext('2d'), {
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: { legend: { display: true, position: 'bottom' } },
-      scales: {
-        x: { grid: { display: false } },
-        y: { beginAtZero: true, position: 'left', title: { display: true, text: 'Leads' } },
-        y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => v + '%' }, title: { display: true, text: '%' } }
-      }
-    }
+    data: { labels, datasets: marketDropEmptyDatasets(datasets) },
+    options: marketChartOptions('chartMarketRate', 'Leads', true)
   });
 }
 // Bars = closed deals by creation-month cohort; lines = Lead to Deal % and
 // Qualified to Close %. With the baseline on, a dashed grey reference line
 // marks the AE-era's overall average Lead to Deal % so every SDR month reads
 // as above/below the old motion at a glance. The most recent 2 SDR months
-// (real, non-AE) are shown muted — deals from a recent cohort are still
-// closing, so those bars/rates are understated and still rising.
+// are shown muted — deals from a recent cohort are still closing, so those
+// bars/rates are understated and still rising. In tier split the bars are
+// dropped entirely (lines only) — 4 tiers × eras × 2 rate lines already
+// fills the legend, and per-tier deal counts live in the Volume Trend chart
+// (metric: Deals Closed) anyway.
 function renderMarketDealChart(entries, labels, baselineOn, aeSeriesAll) {
   const el = document.getElementById('chartMarketDeal');
   if (!el) return;
@@ -7327,20 +7460,15 @@ function renderMarketDealChart(entries, labels, baselineOn, aeSeriesAll) {
   const sdrIdxs = entries.map((e, i) => (e.sdr ? i : -1)).filter(i => i >= 0);
   const maturingIdxs = new Set(sdrIdxs.slice(-2));
 
-  const datasets = groups.map(g => ({
-    type: 'bar', label: groups.length > 1 ? `Deals — ${g.label}` : 'Deals Closed',
-    data: entries.map(e => { const m = marketSdrMetricsForSplit(e, splitMode, g.key); return m ? m.closed : null; }),
-    backgroundColor: entries.map((e, i) => (maturingIdxs.has(i) ? marketMuted(g.color) : g.color)),
-    yAxisID: 'y', order: 3
-  }));
-  if (baselineOn) {
-    if (splitMode === 'tier') {
-      groups.forEach(g => datasets.push({
-        type: 'bar', label: `Deals — ${g.label} (AE)`,
-        data: entries.map(e => { const m = marketAeMetricsForSplit(e, splitMode, g.key); return m ? m.closed : null; }),
-        backgroundColor: marketMuted(g.color), yAxisID: 'y', order: 3
-      }));
-    } else {
+  const datasets = [];
+  if (splitMode !== 'tier') {
+    groups.forEach(g => datasets.push({
+      type: 'bar', label: groups.length > 1 ? `Deals — ${g.label}` : 'Deals Closed',
+      data: entries.map(e => { const m = marketEntryMetrics(e, splitMode, g.key, baselineOn); return m ? m.closed : null; }),
+      backgroundColor: entries.map((e, i) => (maturingIdxs.has(i) || !e.sdr ? marketMuted(g.color) : g.color)),
+      yAxisID: 'y', order: 3
+    }));
+    if (baselineOn && splitMode === 'team') {
       datasets.push({
         type: 'bar', label: 'Deals — AE era (all)',
         data: entries.map(e => { const m = marketAeMetricsForSplit(e, splitMode, null); return m ? m.closed : null; }),
@@ -7359,13 +7487,8 @@ function renderMarketDealChart(entries, labels, baselineOn, aeSeriesAll) {
     groups.forEach(g => {
       const color = groups.length > 1 ? g.color : ld.soloColor;
       const data = entries.map(e => {
-        const sdrM = marketSdrMetricsForSplit(e, splitMode, g.key);
-        if (sdrM && sdrM[ld.field] != null) return sdrM[ld.field];
-        if (baselineOn) {
-          const aeM = marketAeMetricsForSplit(e, splitMode, g.key);
-          if (aeM) return aeM[ld.field];
-        }
-        return null;
+        const m = marketEntryMetrics(e, splitMode, g.key, baselineOn);
+        return m ? m[ld.field] : null;
       });
       const ds = {
         type: 'line', label: groups.length > 1 ? `${ld.label} — ${g.label}` : ld.label,
@@ -7379,12 +7502,17 @@ function renderMarketDealChart(entries, labels, baselineOn, aeSeriesAll) {
   });
 
   if (baselineOn) {
-    const aeMonthKeys = Object.keys(aeSeriesAll);
+    // Reference = the AE era's 2026 months only (Jan 1 – May 18), not the
+    // full 2021+ history — the early founder-led years closed at much higher
+    // rates on a fraction of the volume, which would inflate the bar the
+    // SDR program is judged against. Jan–May 2026 is the motion the SDRs
+    // actually replaced.
+    const aeMonthKeys = Object.keys(aeSeriesAll).filter(mk => mk >= '2026-01');
     if (aeMonthKeys.length) {
       const merged = marketMergeMetrics(aeMonthKeys.map(mk => aeSeriesAll[mk].overall));
       if (merged.leadToDealPct != null) {
         datasets.push({
-          type: 'line', label: `AE avg Lead to Deal % (${merged.leadToDealPct.toFixed(1)}%)`,
+          type: 'line', label: `AE avg Lead to Deal, Jan–May 2026 (${merged.leadToDealPct.toFixed(1)}%)`,
           data: entries.map(() => merged.leadToDealPct),
           borderColor: '#8a8f98', borderDash: [3, 3], borderWidth: 1.5,
           pointRadius: 0, yAxisID: 'y1', order: 0
@@ -7395,17 +7523,8 @@ function renderMarketDealChart(entries, labels, baselineOn, aeSeriesAll) {
 
   if (charts.chartMarketDeal) charts.chartMarketDeal.destroy();
   charts.chartMarketDeal = new Chart(el.getContext('2d'), {
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: { legend: { display: true, position: 'bottom' } },
-      scales: {
-        x: { grid: { display: false } },
-        y: { beginAtZero: true, position: 'left', title: { display: true, text: 'Deals Closed' } },
-        y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => v + '%' }, title: { display: true, text: '%' } }
-      }
-    }
+    data: { labels, datasets: marketDropEmptyDatasets(datasets) },
+    options: marketChartOptions('chartMarketDeal', 'Deals Closed', true)
   });
 }
 
@@ -7995,7 +8114,21 @@ loadAEBaselineToggle();
 loadTrendLinesToggle();
 loadAutoBookedToggle();
 loadReportScope();
+loadCardDetailsToggle();
 loadExcludedAEBaselineOwners();
+// One-time migration (2026-07): AE Baselines manually uploaded BEFORE the
+// committed data/ae-baseline.csv existed were smaller partial exports saved
+// in localStorage, and localStorage always wins over the auto-fetch — so
+// without this, anyone who ever uploaded the old file would silently keep
+// seeing it (missing months, wrong AE averages) instead of the full committed
+// dataset. Discard any pre-migration saved baseline once; uploads made after
+// this ships set the same flag path and persist normally.
+try {
+  if (!localStorage.getItem('sdr_ae_baseline_v2')) {
+    localStorage.removeItem('sdr_ae_baseline');
+    localStorage.setItem('sdr_ae_baseline_v2', '1');
+  }
+} catch (e) {}
 restoreAEBaselineData();
 if (!rawAEBaseline) loadDefaultAEBaseline();
 renderAEBaselineSection();
