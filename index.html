@@ -1006,7 +1006,7 @@
     <div class="mandate-section" id="marketSection">
       <div class="mandate-header" onclick="toggleMarketSection()">
         <div class="mandate-header-left">
-          <span class="mandate-title">Market Split by Request Type <span class="goal-info" id="marketSectionInfo" title="B2B funnel for a single chosen month, grouped by Team (US: MJ + Gospel; OUS: Mark + Levi) and Request Type tier. &lt;1k = '&lt;$1k - Share Quote', incomplete = 'Incomplete - Request Info' — the only two Request Types this team currently works; &gt;1k and complex are reserved for a different team's request types and will read 0 here until/unless this team ever gets that work. Leads with a blank or unrecognized Request Type aren't shown in any row, so each team's Total equals the sum of its two Sub totals. Qualified/Meeting Booked use the same strict definitions as the QAL Funnel by SDR table (Capacity &amp; Cost) — Duplicate-record/Wrong-info leads excluded from every count. Qal to Close % = Closed ÷ Qualified. Meeting Done to Close % = Closed ÷ Meeting Status = Meeting Done specifically (not Scheduled/Rejected/Not Atended). Lead to Deal % = Closed ÷ Nbr of BL — the overall conversion rate. Months labeled (AE era) predate the SDRs: they come from the committed historical dataset and show the whole company's funnel under AEs as one block — including an (untyped) row for pre-SDR leads whose Request Type was never filled in, so the AE Total genuinely sums. May 2026 is the transition month and shows both (AEs ran it through May 18; Total shootday combines the two).">ⓘ</span></span>
+          <span class="mandate-title">Market Split by Request Type <span class="goal-info" id="marketSectionInfo" title="B2B funnel for a single chosen month, grouped by Team (US: MJ + Gospel; OUS: Mark + Levi) and Request Type tier. &lt;1k = '&lt;$1k - Share Quote', incomplete = 'Incomplete - Request Info' — the only two Request Types this team currently works; &gt;1k and complex are reserved for a different team's request types and will read 0 here until/unless this team ever gets that work. Leads with a blank or unrecognized Request Type aren't shown in any row, so each team's Total equals the sum of its two Sub totals. Qualified/Meeting Booked use the same strict definitions as the QAL Funnel by SDR table (Capacity &amp; Cost) — Duplicate-record/Wrong-info leads excluded from every count. Qal to Close % = Closed ÷ Qualified. Meeting Done to Close % = Closed ÷ Meeting Status = Meeting Done specifically (not Scheduled/Rejected/Not Atended). Lead to Deal % = Closed ÷ Nbr of BL — the overall conversion rate. Months labeled (AE era) predate the SDRs: they come from the committed historical dataset and show the whole company's funnel under AEs as one block. Same untyped-lead rule as the SDR teams above: an (untyped) row is shown for visibility but excluded from Total AE era, so it stays apples-to-apples with the SDR side's Total (also tier-sum only). May 2026 is the transition month and shows both (AEs ran it through May 18; Total shootday combines the two).">ⓘ</span></span>
           <span class="mandate-sub" id="marketHeaderNote">B2B funnel by team and request-type tier, for a single chosen month</span>
         </div>
         <span class="mandate-chevron">&#9654;</span>
@@ -7141,8 +7141,10 @@ function renderMarketSection() {
   });
 
   // AE-era block for any month the historical dataset covers — the whole
-  // company as one group (tiers + an "(untyped)" row for pre-SDR leads whose
-  // Request Type was never filled in, so the AE Total genuinely sums).
+  // company as one group. Same untyped-lead rule as the SDR teams above:
+  // an (untyped) row is shown for visibility but never folded into Total AE
+  // era, so it stays apples-to-apples with the SDR side's Total (also a
+  // tier-sum only, never a raw population count).
   // May 2026 is the transition month: it shows the SDR team blocks AND this
   // block (May 1–18 ran under AEs), and Total shootday combines both.
   let aeTotal = null;
@@ -7156,10 +7158,16 @@ function renderMarketSection() {
     const aeTiers = {};
     MARKET_TIERS.forEach(t => { aeTiers[t.key] = marketMetrics(aeRows.filter(r => marketRequestTier(r) === t.key)); });
     const untypedRows = aeRows.filter(r => marketRequestTier(r) === null);
-    aeTotal = marketMetrics(aeRows);
+    // Total AE era = sum of the 4 recognized tiers only, matching how the SDR
+    // team totals above are built (Total US/OUS also excludes blank-tier
+    // leads entirely) — "(untyped)" stays visible as its own informational
+    // row but isn't folded into the total, so an AE month and an SDR month
+    // stay apples-to-apples everywhere this number is used (this table, the
+    // Volume/Rate/Deal trend charts' Pre-SDR baseline).
+    aeTotal = marketMergeMetrics(MARKET_TIERS.map(t => aeTiers[t.key]));
     bodyRows += `<tr><td class="mandate-kpi-name" colspan="9" style="padding-top:16px">AE era (pre-SDR, whole company)</td></tr>`;
     MARKET_TIERS.forEach(t => { bodyRows += marketRowHtml(t.label, noMDC(aeTiers[t.key]), { indent: true }); });
-    bodyRows += marketRowHtml('(untyped)', noMDC(marketMetrics(untypedRows)), { indent: true });
+    bodyRows += marketRowHtml('(untyped, excluded from Total)', noMDC(marketMetrics(untypedRows)), { indent: true });
     bodyRows += marketRowHtml('Total AE era', noMDC(aeTotal), { total: true });
   }
 
@@ -7243,7 +7251,13 @@ function aeBaselineMonthlySeries(tzBasis) {
     const rows = byMonth[mk];
     const tiers = {};
     MARKET_TIERS.forEach(t => { tiers[t.key] = marketMetrics(rows.filter(r => marketRequestTier(r) === t.key)); });
-    result[mk] = { overall: marketMetrics(rows), tiers };
+    // overall = sum of the 4 recognized tiers only (matches marketMetrics
+    // over the SDR side's marketMergeMetrics(MARKET_TIERS...) — untyped
+    // leads are excluded from both, the same way the Market table excludes
+    // them from every SDR team's Total), so the trend charts' Pre-SDR
+    // baseline stays apples-to-apples with the SDR-era numbers instead of
+    // quietly folding in a ~15-20% untyped population the SDR side drops.
+    result[mk] = { overall: marketMergeMetrics(MARKET_TIERS.map(t => tiers[t.key])), tiers };
   });
   return result;
 }
