@@ -1048,7 +1048,7 @@
         <div class="charts-grid">
           <div class="chart-card full" data-chart-id="chartMarketVolume">
             <div class="chart-header">
-              <span class="chart-title">Volume Trend <span class="goal-info" title="Metric mode: monthly count of the chosen metric, grouped side-by-side by Team/Tier split. Funnel mode: Business Leads/Qualified/Meetings Booked/Deals Closed drawn as four side-by-side bars per month (not summed — every Qualified lead is also a Business Lead, and so on down the funnel, so stacking or overlaying them would double-count), each labeled with its exact number since the funnel drop-off is steep enough that a short bar (e.g. Deals Closed) can be just a few pixels tall next to Business Leads. Below each stage's number (except Business Leads, the first) is its step conversion rate off the PREVIOUS stage only — Qualified ÷ Business Leads, Meetings Booked ÷ Qualified, Deals Closed ÷ Meetings Booked — not off Business Leads every time, so it reads as a chain of hand-offs rather than the overall Lead to Deal % (that one's on the Lead to Deal chart). Same Duplicate/Wrong-info exclusion as the table above either way.">ⓘ</span></span>
+              <span class="chart-title">Volume Trend <span class="goal-info" title="Metric mode: monthly count of the chosen metric, grouped side-by-side by Team/Tier split. Funnel mode: Business Leads/Qualified/Meetings Booked/Deals Closed drawn as four side-by-side bars per month (not summed — every Qualified lead is also a Business Lead, and so on down the funnel, so stacking or overlaying them would double-count), each labeled with its exact number since the funnel drop-off is steep enough that a short bar (e.g. Deals Closed) can be just a few pixels tall next to Business Leads. Above each stage's number (except Business Leads, the first) is its step conversion rate off the PREVIOUS stage only — Qualified ÷ Business Leads, Meetings Booked ÷ Qualified, Deals Closed ÷ Meetings Booked — not off Business Leads every time, so it reads as a chain of hand-offs rather than the overall Lead to Deal % (that one's on the Lead to Deal chart). In funnel mode, the checkboxes where the metric dropdown normally sits (&lt;1k/incomplete/&gt;1k/complex) pick which Request Type tiers feed it — defaults to &lt;1k/incomplete (what this team currently works), independent of the Split dropdown above. Same Duplicate/Wrong-info exclusion as the table above either way.">ⓘ</span></span>
               <div class="chart-header-right">
                 <div class="chart-legend" id="legend-chartMarketVolume"></div>
                 <label class="chart-cumulative-toggle" style="margin-right:0">
@@ -1062,6 +1062,28 @@
                   <option value="meetingBooked">Meetings Booked</option>
                   <option value="closed">Deals Closed</option>
                 </select>
+                <span class="activity-metric-checks" id="marketVolumeTierChecks" style="display:none" title="Which Request Type tiers feed the funnel — defaults to &lt;1k/incomplete (the tiers this team currently works). Independent of the Split dropdown above; check &gt;1k/complex too if/when this team starts getting that work.">
+                  <label class="chart-cumulative-toggle" style="margin-right:0">
+                    <input type="checkbox" id="marketVolumeTier-lt1k" onchange="saveMarketVolumeTierKeys()">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-text">&lt;1k</span>
+                  </label>
+                  <label class="chart-cumulative-toggle" style="margin-right:0">
+                    <input type="checkbox" id="marketVolumeTier-incomplete" onchange="saveMarketVolumeTierKeys()">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-text">incomplete</span>
+                  </label>
+                  <label class="chart-cumulative-toggle" style="margin-right:0">
+                    <input type="checkbox" id="marketVolumeTier-gt1k" onchange="saveMarketVolumeTierKeys()">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-text">&gt;1k</span>
+                  </label>
+                  <label class="chart-cumulative-toggle" style="margin-right:0">
+                    <input type="checkbox" id="marketVolumeTier-complex" onchange="saveMarketVolumeTierKeys()">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-text">complex</span>
+                  </label>
+                </span>
                 <button class="chart-expand-btn" onclick="toggleChartExpand('chartMarketVolume')" title="Expand">&#10530;</button>
               </div>
             </div>
@@ -3766,10 +3788,10 @@ const COLORS = { Team: '#6c63ff', Goal: 'rgba(0,0,0,0.35)', Pace: '#9c6dff', AEB
 // chart.$stepRates (optional): an array, one entry per dataset, giving the
 // index of the PREVIOUS dataset to divide this one by for a step-conversion
 // rate (null = no rate for this dataset, e.g. the first funnel stage). Drawn
-// as a second, bolder line right under the count — e.g. Qualified's bar
-// shows "347" then "47.7%" underneath, where 47.7% = 347 ÷ that month's
-// Business Leads count — so the step-over-step conversion reads at a glance
-// without doing the division yourself.
+// as a bolder, larger line ABOVE the count — e.g. Qualified's bar shows
+// "47.7%" then "347" underneath, where 47.7% = 347 ÷ that month's Business
+// Leads count — so the step-over-step conversion is the first thing you
+// read, with the raw count right there for reference underneath it.
 const VALUE_LABELS_PLUGIN = {
   id: 'valueLabels',
   afterDatasetsDraw(chart) {
@@ -3788,15 +3810,15 @@ const VALUE_LABELS_PLUGIN = {
         if (v == null) return;
         const denom = denomDs ? denomDs.data[j] : null;
         const showRate = denom != null && denom !== 0;
-        ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-        ctx.fillStyle = '#22263a';
-        ctx.fillText(v.toLocaleString(), el.x, el.y - (showRate ? 18 : 4));
         if (showRate) {
           const pct = (v / denom * 100).toFixed(1) + '%';
-          ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+          ctx.font = '800 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
           ctx.fillStyle = '#6c63ff';
-          ctx.fillText(pct, el.x, el.y - 4);
+          ctx.fillText(pct, el.x, el.y - 18);
         }
+        ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.fillStyle = '#22263a';
+        ctx.fillText(v.toLocaleString(), el.x, el.y - 4);
       });
     });
     ctx.restore();
@@ -7504,6 +7526,37 @@ function marketEntryMetrics(entry, splitMode, key, baselineOn) {
   if (sdrM && aeM) return marketMergeMetrics([sdrM, aeM]);
   return sdrM || aeM;
 }
+// Volume Trend's own Request Type tier filter (marketVolumeTierChecks in the
+// chart header) — independent of the Split dropdown above, always summing
+// straight across both teams. Defaults to <1k/incomplete (see
+// MARKET_VOLUME_DEFAULT_TIERS) so the funnel view stays scoped to what this
+// team actually works, but lets that be widened to >1k/complex from the UI
+// the moment that's real SDR scope, without needing a code change.
+function marketVolumeEntryMetrics(entry, tierKeys, baselineOn) {
+  const sdrM = entry.sdr
+    ? marketMergeMetrics(TEAM_GROUPS.flatMap(g => tierKeys.map(k => entry.sdr.teamMetrics[g.key].tiers[k])))
+    : null;
+  if (!baselineOn) return sdrM;
+  const aeM = entry.ae ? marketMergeMetrics(tierKeys.map(k => entry.ae.tiers[k])) : null;
+  if (sdrM && aeM) return marketMergeMetrics([sdrM, aeM]);
+  return sdrM || aeM;
+}
+const MARKET_VOLUME_DEFAULT_TIERS = ['lt1k', 'incomplete'];
+function marketVolumeTierKeys() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('sdr_market_volume_tiers') || 'null');
+    if (Array.isArray(saved) && saved.length && saved.every(k => MARKET_TIERS.some(t => t.key === k))) return saved;
+  } catch (e) {}
+  return MARKET_VOLUME_DEFAULT_TIERS.slice();
+}
+function saveMarketVolumeTierKeys() {
+  const keys = MARKET_TIERS.map(t => t.key).filter(k => {
+    const el = document.getElementById('marketVolumeTier-' + k);
+    return el && el.checked;
+  });
+  try { localStorage.setItem('sdr_market_volume_tiers', JSON.stringify(keys)); } catch (e) {}
+  renderMarketCharts();
+}
 // Legend declutter: a dataset that never has a value (a tier this team
 // doesn't work, a rate with no data anywhere in range) earns no legend
 // entry or axis space. All-zero bars are dropped too — same reasoning as
@@ -7637,13 +7690,20 @@ function renderMarketVolumeChart(entries, labels, baselineOn) {
   const funnelStackEl = document.getElementById('marketVolumeFunnelStack');
   const funnelStack = !!(funnelStackEl && funnelStackEl.checked);
   const metricSelect = document.getElementById('marketVolumeMetricSelect');
-  if (metricSelect) metricSelect.disabled = funnelStack;
+  if (metricSelect) { metricSelect.disabled = funnelStack; metricSelect.style.display = funnelStack ? 'none' : ''; }
+  const tierChecksEl = document.getElementById('marketVolumeTierChecks');
+  if (tierChecksEl) tierChecksEl.style.display = funnelStack ? 'inline-flex' : 'none';
+  const selectedTiers = marketVolumeTierKeys();
+  MARKET_TIERS.forEach(t => {
+    const cb = document.getElementById('marketVolumeTier-' + t.key);
+    if (cb) cb.checked = selectedTiers.includes(t.key);
+  });
 
   let datasets, yTitle;
   if (funnelStack) {
     datasets = MARKET_FUNNEL_STAGES.map(stage => ({
       label: stage.label,
-      data: entries.map(e => { const m = marketEntryMetrics(e, 'total', null, baselineOn); return m ? m[stage.field] : null; }),
+      data: entries.map(e => { const m = marketVolumeEntryMetrics(e, selectedTiers, baselineOn); return m ? m[stage.field] : null; }),
       backgroundColor: entries.map(e => (e.sdr ? stage.color : marketMuted(stage.color))),
       categoryPercentage: 0.8,
       barPercentage: 0.9,
