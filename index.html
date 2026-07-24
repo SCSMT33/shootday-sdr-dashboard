@@ -1012,7 +1012,7 @@
     <div class="mandate-section" id="marketSection">
       <div class="mandate-header" onclick="toggleMarketSection()">
         <div class="mandate-header-left">
-          <span class="mandate-title">Market Split by Request Type <span class="goal-info" id="marketSectionInfo" title="B2B funnel for a single chosen month, grouped by Team (US: MJ + Gospel; OUS: Mark + Levi) and Request Type tier. &lt;1k = '&lt;$1k - Share Quote', incomplete = 'Incomplete - Request Info' — the only two Request Types this team currently works; &gt;1k and complex are reserved for a different team's request types and will read 0 here until/unless this team ever gets that work. Leads with a blank or unrecognized Request Type aren't shown in any row, so each team's Total equals the sum of its two Sub totals. Qualified/Meeting Booked use the same strict definitions as the QAL Funnel by SDR table (Capacity &amp; Cost) — Duplicate-record/Wrong-info leads excluded from every count. Qal to Close % = Closed ÷ Qualified. Meeting Done to Close % = Closed ÷ Meeting Status = Meeting Done specifically (not Scheduled/Rejected/Not Atended). Lead to Deal % = Closed ÷ Nbr of BL — the overall conversion rate. Months labeled (AE era) predate the SDRs: they come from the committed historical dataset and show the whole company's funnel under AEs as one block. Same untyped-lead rule as the SDR teams above: an (untyped) row is shown for visibility but excluded from Total AE era, so it stays apples-to-apples with the SDR side's Total (also tier-sum only). May 2026 is the transition month and shows both (AEs ran it through May 18; Total shootday combines the two).">ⓘ</span></span>
+          <span class="mandate-title">Market Split by Request Type <span class="goal-info" id="marketSectionInfo" title="B2B (default) funnel for a single chosen month — switch the new leads dropdown next to Month to B2C or B2B+B2C to run this whole table and the three trend charts below on that pool instead; B2C leads carry the same Request Type tagging and every rule below applies unchanged. Grouped by Team (US: MJ + Gospel; OUS: Mark + Levi) and Request Type tier. &lt;1k = '&lt;$1k - Share Quote', incomplete = 'Incomplete - Request Info' — the only two Request Types this team currently works; &gt;1k and complex are reserved for a different team's request types and will read 0 here until/unless this team ever gets that work. Leads with a blank or unrecognized Request Type aren't shown in any row, so each team's Total equals the sum of its two Sub totals. Qualified/Meeting Booked use the same strict definitions as the QAL Funnel by SDR table (Capacity &amp; Cost) — Duplicate-record/Wrong-info leads excluded from every count. Qal to Close % = Closed ÷ Qualified. Meeting Done to Close % = Closed ÷ Meeting Status = Meeting Done specifically (not Scheduled/Rejected/Not Atended). Lead to Deal % = Closed ÷ Nbr of BL — the overall conversion rate. Months labeled (AE era) predate the SDRs: they come from the committed historical dataset and show the whole company's funnel under AEs as one block. Same untyped-lead rule as the SDR teams above: an (untyped) row is shown for visibility but excluded from Total AE era, so it stays apples-to-apples with the SDR side's Total (also tier-sum only). May 2026 is the transition month and shows both (AEs ran it through May 18; Total shootday combines the two).">ⓘ</span></span>
           <span class="mandate-sub" id="marketHeaderNote">B2B funnel by team and request-type tier, for a single chosen month</span>
         </div>
         <span class="mandate-chevron">&#9654;</span>
@@ -1021,6 +1021,11 @@
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap">
           <span style="font-size:12px; color:var(--muted); font-weight:600">Month</span>
           <select class="chart-granularity" id="marketMonthSelect" onchange="saveMarketMonth(this.value)"></select>
+          <select class="chart-granularity" id="marketLeadTypeSelect" title="Which leads feed this table and the three trend charts below. Same Request Type tiers, Qualified/Meeting Booked/Closed rules, and Duplicate/Wrong-info exclusion either way — B2C leads use the same two tiers (&lt;1k, incomplete) B2B does." onchange="saveMarketLeadType(this.value)">
+            <option value="b2b">B2B</option>
+            <option value="b2c">B2C</option>
+            <option value="both">B2B+B2C</option>
+          </select>
         </div>
         <div style="overflow-x:auto"><table class="mandate-kpi-table" id="marketTable"></table></div>
 
@@ -3827,7 +3832,11 @@ const VALUE_LABELS_PLUGIN = {
     ctx.restore();
   }
 };
-Chart.register(VALUE_LABELS_PLUGIN);
+// Guarded: if the Chart.js CDN ever fails to load (slow network, ad-blocker,
+// corporate proxy), this must not throw and abort the rest of this script —
+// every table/card/section below Chart.js relies on code that runs after
+// this line, and none of it depends on Chart existing.
+if (typeof Chart !== 'undefined') Chart.register(VALUE_LABELS_PLUGIN);
 
 function isCumulative(id) {
   const el = document.getElementById('cumulativeToggle-' + id);
@@ -7146,6 +7155,31 @@ function marketAvailablePeriods(granularity) {
   else periods.add(dubaiTodayKey().slice(0, 7));
   return [...periods].sort();
 }
+// Which leads feed the Market Split table AND all three trend charts (they
+// share marketCleanB2BRows/aeCleanB2BByPeriod below) — B2B (default, matches
+// every previous month of this section), B2C, or both combined. B2C rows
+// carry the same Request Type tagging as B2B (verified against the real
+// data: 531/533 B2C rows have a recognized tier, same two values — "<$1k -
+// Share Quote" and "Incomplete - Request Info" — as B2B), so every metric
+// here (qualified, meeting booked, tiers, closed) applies unchanged.
+function marketLeadType() {
+  const el = document.getElementById('marketLeadTypeSelect');
+  return el ? el.value : 'b2b';
+}
+function saveMarketLeadType(value) {
+  try { localStorage.setItem('sdr_market_lead_type', value); } catch (e) {}
+  renderMarketSection();
+}
+function marketLeadTypeMatches(r) {
+  const v = marketLeadType();
+  if (v === 'b2c') return isB2CLead(r);
+  if (v === 'both') return true;
+  return isBusinessLead(r);
+}
+function marketLeadTypeLabel() {
+  const v = marketLeadType();
+  return v === 'b2c' ? 'B2C' : v === 'both' ? 'B2B+B2C' : 'B2B';
+}
 function marketSelectedMonth() {
   try {
     const saved = localStorage.getItem('sdr_market_month');
@@ -7181,7 +7215,7 @@ function marketCleanB2BRows(periodKey, tzBasis, sdrKeys, granularity) {
         } else {
           period = tzBasis === 'eest' ? raw.slice(0, 7) : toDubaiDayKey(raw).slice(0, 7);
         }
-        if (period === periodKey && isBusinessLead(r) && !isLeadExcluded(r)) rows.push(r);
+        if (period === periodKey && marketLeadTypeMatches(r) && !isLeadExcluded(r)) rows.push(r);
       });
     });
   });
@@ -7245,6 +7279,11 @@ function renderMarketSection() {
     table.innerHTML = '<tbody><tr><td class="mandate-kpi-note">Upload a leads CSV to see the market split.</td></tr></tbody>';
     return;
   }
+  const leadTypeSelect = document.getElementById('marketLeadTypeSelect');
+  if (leadTypeSelect) {
+    try { leadTypeSelect.value = localStorage.getItem('sdr_market_lead_type') || 'b2b'; } catch (e) {}
+    if (!leadTypeSelect.value) leadTypeSelect.value = 'b2b';
+  }
   const tzBasis = marketTzBasis();
   // AE-era (pre-SDR) months come from the committed historical dataset —
   // selectable in the Month dropdown (labeled "(AE era)", from Jan 2026 on)
@@ -7261,7 +7300,7 @@ function renderMarketSection() {
     monthSelect.value = months.includes(monthKey) ? monthKey : priorMonthKey();
   }
   const note = document.getElementById('marketHeaderNote');
-  if (note) note.textContent = `B2B funnel by team and request-type tier — ${monthLabelFromKey(monthKey)} (Dubai time)`;
+  if (note) note.textContent = `${marketLeadTypeLabel()} funnel by team and request-type tier — ${monthLabelFromKey(monthKey)} (Dubai time)`;
 
   let bodyRows = '';
   const teamTotals = [];
@@ -7324,7 +7363,11 @@ function renderMarketSection() {
   bodyRows += `<tr><td colspan="9" style="height:8px;border:none"></td></tr>`;
   bodyRows += marketRowHtml('Total shootday', grandTotal, { total: true });
 
-  table.innerHTML = `<thead><tr><th>Segment</th><th>Nbr of BL</th><th>Qal BL</th><th>% Qal</th><th>Meeting Booked</th><th>Meeting Booked %</th><th>Qal to Close %</th><th>Meeting Done to Close %</th><th>Lead to Deal %</th></tr></thead><tbody>${bodyRows}</tbody>`;
+  // "BL" (Business Leads) only reads correctly when the selector is on B2B —
+  // relabeled to the generic "Leads" for B2C/B2B+B2C so the column header
+  // doesn't silently claim "business" leads while showing B2C ones.
+  const leadAbbrev = marketLeadType() === 'b2b' ? 'BL' : 'Leads';
+  table.innerHTML = `<thead><tr><th>Segment</th><th>Nbr of ${leadAbbrev}</th><th>Qal ${leadAbbrev}</th><th>% Qal</th><th>Meeting Booked</th><th>Meeting Booked %</th><th>Qal to Close %</th><th>Meeting Done to Close %</th><th>Lead to Deal %</th></tr></thead><tbody>${bodyRows}</tbody>`;
   renderMarketCharts();
 }
 
@@ -7416,10 +7459,11 @@ function marketPeriodSeries(periodKeys, tzBasis, granularity) {
 // (rawAEBaseline), bucketed by creation month on the same timezone basis as
 // the SDR data — every row already predates the SDR era by construction
 // (that's how the committed file was filtered), so no cutoff check is needed.
-// Same header names and the same isBusinessLead/isLeadExcluded rules as the
-// live SDR data, so an AE month and an SDR month are computed identically
-// and can sit side-by-side as a fair comparison. Used by both the Market
-// table (AE-era months in the Month dropdown) and the trend charts.
+// Same header names and the same lead-type/isLeadExcluded rules as the live
+// SDR data (marketLeadTypeMatches — B2B/B2C/B2B+B2C, per the Market
+// section's own selector), so an AE month and an SDR month are computed
+// identically and can sit side-by-side as a fair comparison. Used by both
+// the Market table (AE-era months in the Month dropdown) and the trend charts.
 function aeCleanB2BByMonth(tzBasis) { return aeCleanB2BByPeriod(tzBasis, 'monthly'); }
 // Generalized version — buckets the AE-era baseline by week-start instead of
 // calendar month when granularity is 'weekly', same Duplicate/Wrong-info
@@ -7427,7 +7471,7 @@ function aeCleanB2BByMonth(tzBasis) { return aeCleanB2BByPeriod(tzBasis, 'monthl
 function aeCleanB2BByPeriod(tzBasis, granularity) {
   const byPeriod = {};
   (rawAEBaseline || []).forEach(r => {
-    if (!isBusinessLead(r) || isLeadExcluded(r)) return;
+    if (!marketLeadTypeMatches(r) || isLeadExcluded(r)) return;
     const raw = (r['Creation Date'] || '').trim();
     if (raw.length < 7) return;
     let key;
