@@ -1048,7 +1048,7 @@
         <div class="charts-grid">
           <div class="chart-card full" data-chart-id="chartMarketVolume">
             <div class="chart-header">
-              <span class="chart-title">Volume Trend <span class="goal-info" title="Metric mode: monthly count of the chosen metric, grouped side-by-side by Team/Tier split. Funnel mode: Business Leads/Qualified/Meetings Booked/Deals Closed drawn as nested bars in the same slot each month — since every Qualified lead is also a Business Lead (and so on down the funnel), these are overlaid, not summed. The full bar height is the Business Leads count; Qualified/Meetings/Deals sit inside it as progressively narrower, more saturated bars. Same Duplicate/Wrong-info exclusion as the table above either way.">ⓘ</span></span>
+              <span class="chart-title">Volume Trend <span class="goal-info" title="Metric mode: monthly count of the chosen metric, grouped side-by-side by Team/Tier split. Funnel mode: Business Leads/Qualified/Meetings Booked/Deals Closed drawn as four side-by-side bars per month (not summed — every Qualified lead is also a Business Lead, and so on down the funnel, so stacking or overlaying them would double-count), each labeled with its exact number since the funnel drop-off is steep enough that a short bar (e.g. Deals Closed) can be just a few pixels tall next to Business Leads. Same Duplicate/Wrong-info exclusion as the table above either way.">ⓘ</span></span>
               <div class="chart-header-right">
                 <div class="chart-legend" id="legend-chartMarketVolume"></div>
                 <label class="chart-cumulative-toggle" style="margin-right:0">
@@ -1069,7 +1069,7 @@
           </div>
           <div class="chart-card full" data-chart-id="chartMarketRate">
             <div class="chart-header">
-              <span class="chart-title">Conversion Rate Trend <span class="goal-info" title="Bars = Nbr of BL (left axis, context only); lines = the checked rates (right axis, %). Meeting Booked % isn't extended into the AE era — Meeting Status was rarely logged back then (~15% populated), so the rate would read as an artifact of logging discipline, not performance.">ⓘ</span></span>
+              <span class="chart-title">Conversion Rate Trend <span class="goal-info" title="Bars = Nbr of BL (left axis, context only); lines = the checked rates (right axis, %). Meeting Booked % isn't extended into the AE era — Meeting Status was rarely logged back then (~15% populated), so the rate would read as an artifact of logging discipline, not performance. % Qual (with Pre-SDR baseline on, Split: Total or by Tier) does extend back through the AE era — dashed and grey for the pre-May portion — restricted to the &lt;1k/incomplete tiers so it's the same product mix the SDR side works, not diluted by &gt;1k/complex deals only AEs ever touched.">ⓘ</span></span>
               <div class="chart-header-right">
                 <div class="chart-legend" id="legend-chartMarketRate"></div>
                 <span class="activity-metric-checks">
@@ -1091,7 +1091,7 @@
           </div>
           <div class="chart-card full" data-chart-id="chartMarketDeal">
             <div class="chart-header">
-              <span class="chart-title">Lead to Deal <span class="goal-info" title="Bars = deals closed (left axis), by creation-month cohort. Lines = Lead to Deal % and Qualified to Close % (right axis). With Pre-SDR baseline on, the dashed grey line marks the AE-era average Lead to Deal % as a reference. The most recent 2 months are shown lighter — deals from a recent cohort are still closing, so those bars/rates will keep rising.">ⓘ</span></span>
+              <span class="chart-title">Lead to Deal <span class="goal-info" title="Bars = deals closed (left axis), by creation-month cohort. Lines = Lead to Deal % and Qualified to Close % (right axis). With Pre-SDR baseline on (Split: Total or by Tier), both lines extend back through the AE era — the pre-May portion is dashed and grey to mark it as a different era on the same metric — restricted to the &lt;1k/incomplete Request Type tiers so the AE-era comparison is the same product mix the SDR team actually works, not diluted by &gt;1k/complex deals only AEs ever touched. A flat dashed grey reference line also marks the AE-era average Lead to Deal % (Jan–May 2026). Split: by Team can't extend these lines into the AE era (no US/OUS split existed then) — it shows AE-era deals as their own muted bar instead. The most recent 2 months are shown lighter — deals from a recent cohort are still closing, so those bars/rates will keep rising.">ⓘ</span></span>
               <div class="chart-header-right">
                 <div class="chart-legend" id="legend-chartMarketDeal"></div>
                 <span class="activity-metric-checks">
@@ -3753,6 +3753,37 @@ function speedToLeadCard(label, medianMinutes, matched, eligible, mismatch, sdrL
 
 // ─── CHARTS ───────────────────────────────────────────────────────────────────
 const COLORS = { Team: '#6c63ff', Goal: 'rgba(0,0,0,0.35)', Pace: '#9c6dff', AEBaseline: '#a0522d', Trend: '#f4b400' };
+
+// Always-visible value labels drawn above each bar — opt-in per chart via
+// chart.$valueLabels (a plain flag stashed on the Chart instance), so this
+// only affects charts that explicitly ask for it (the Volume Trend funnel
+// view, where the whole point is to see each stage's own number even when
+// its bar is too short to read visually — Deals Closed next to Business
+// Leads can be a 3px sliver on a linear scale no matter how the bars are
+// laid out). Registered once, globally, since Chart.register applies across
+// every chart instance regardless of type.
+const VALUE_LABELS_PLUGIN = {
+  id: 'valueLabels',
+  afterDatasetsDraw(chart) {
+    if (!chart.$valueLabels) return;
+    const { ctx } = chart;
+    ctx.save();
+    ctx.font = '10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#3a3f55';
+    chart.data.datasets.forEach((ds, i) => {
+      const meta = chart.getDatasetMeta(i);
+      if (meta.hidden) return;
+      meta.data.forEach((el, j) => {
+        const v = ds.data[j];
+        if (v == null) return;
+        ctx.fillText(v.toLocaleString(), el.x, el.y - 4);
+      });
+    });
+    ctx.restore();
+  }
+};
+Chart.register(VALUE_LABELS_PLUGIN);
 
 function isCumulative(id) {
   const el = document.getElementById('cumulativeToggle-' + id);
@@ -7028,6 +7059,18 @@ const MARKET_TIERS = [
   { key: 'gt1k', label: '>1k' },
   { key: 'complex', label: 'complex' }
 ];
+// The two Request Type tiers the SDR team actually works today (see
+// MARKET_TIERS/marketRequestTier and the Market Split table's own tooltip —
+// >1k/complex are a different team's request types and always read 0 on the
+// SDR side). Every AE-vs-SDR comparison in the trend charts (Pre-SDR
+// baseline overlay, the AE avg Lead to Deal % reference) restricts the
+// AE-era side to just these two tiers before merging — otherwise the AE
+// "overall" would silently include >1k/complex deals the SDR side has never
+// touched, comparing different products, not just a different era. The
+// Market table's own "Total AE era" row is a deliberate exception — it's
+// meant to show the whole pre-SDR company, all 4 tiers, not an SDR-scoped
+// comparison — so it stays untouched (see aeCleanB2BByMonth/its callers there).
+const MARKET_SDR_SCOPE_TIERS = ['lt1k', 'incomplete'];
 function marketRequestTier(r) {
   const rt = (r['Request Type'] || '').trim().toLowerCase();
   if (!rt) return null;
@@ -7356,20 +7399,35 @@ function aeCleanB2BByPeriod(tzBasis, granularity) {
   return byPeriod;
 }
 function aeBaselineMonthlySeries(tzBasis) { return aeBaselineSeriesForPeriod(tzBasis, 'monthly'); }
+// Jan 2026 onward only — same window aeRecentLeadToDealPct() already uses
+// ("the motion the SDRs actually replaced," per its own comment), and for
+// the same reason: the <1k/incomplete Request Type tags this restricts
+// `overall` to below barely existed yet in the founder-led months before
+// that, so a handful of stray rows produce degenerate, meaningless rates
+// (a flat 100% % Qual for 5 straight months, observed while building this)
+// rather than real signal. The Market table's own AE-era rows are NOT
+// bound by this — they go through aeCleanB2BByMonth directly, not this
+// function, and are meant to show the full historical span regardless.
+const AE_BASELINE_TREND_CUTOFF = { monthly: '2026-01', weekly: '2026-01-01' };
 function aeBaselineSeriesForPeriod(tzBasis, granularity) {
   const byPeriod = aeCleanB2BByPeriod(tzBasis, granularity);
+  const cutoff = AE_BASELINE_TREND_CUTOFF[granularity] || AE_BASELINE_TREND_CUTOFF.monthly;
   const result = {};
   Object.keys(byPeriod).forEach(pk => {
+    if (pk < cutoff) return;
     const rows = byPeriod[pk];
     const tiers = {};
     MARKET_TIERS.forEach(t => { tiers[t.key] = marketMetrics(rows.filter(r => marketRequestTier(r) === t.key)); });
-    // overall = sum of the 4 recognized tiers only (matches marketMetrics
-    // over the SDR side's marketMergeMetrics(MARKET_TIERS...) — untyped
-    // leads are excluded from both, the same way the Market table excludes
-    // them from every SDR team's Total), so the trend charts' Pre-SDR
-    // baseline stays apples-to-apples with the SDR-era numbers instead of
-    // quietly folding in a ~15-20% untyped population the SDR side drops.
-    result[pk] = { overall: marketMergeMetrics(MARKET_TIERS.map(t => tiers[t.key])), tiers };
+    // overall = sum of the two SDR-scope tiers only (MARKET_SDR_SCOPE_TIERS)
+    // — untyped leads AND >1k/complex are both excluded, the same way the
+    // Market table excludes untyped leads from every SDR team's Total, so
+    // the trend charts' Pre-SDR baseline stays apples-to-apples with the
+    // SDR-era numbers: same product scope, not just a wider historical
+    // population that happens to include request types the SDR team has
+    // never worked. `tiers` below still carries all 4 for Tier-split mode,
+    // where showing an AE-era >1k/complex bar next to a always-0 SDR one is
+    // informative, not misleading, since it's clearly its own tier row.
+    result[pk] = { overall: marketMergeMetrics(MARKET_SDR_SCOPE_TIERS.map(k => tiers[k])), tiers };
   });
   return result;
 }
@@ -7435,6 +7493,14 @@ function marketEntryMetrics(entry, splitMode, key, baselineOn) {
 function marketDropEmptyDatasets(datasets) {
   return datasets.filter(d => d.data.some(v => v != null && v !== 0));
 }
+// "US Team"/"OUS Team" are the right length for the Split-by-Team dropdown
+// and the Market table, but chained into a combined legend string like
+// "Lead to Deal % — US Team" across 2 groups × 2 lines × bars × an AE-era
+// entry, the "Team" suffix is just noise repeated 6+ times — shortened to
+// the bare "US"/"OUS" here only, for chart legends/tooltips.
+function marketShortGroupLabel(splitMode, g) {
+  return splitMode === 'team' ? g.key : g.label;
+}
 function marketMetricLabel(metric) {
   return { nbrBL: 'Business Leads', qalBL: 'Qualified Leads', meetingBooked: 'Meetings Booked', closed: 'Deals Closed' }[metric] || metric;
 }
@@ -7492,12 +7558,29 @@ function renderMarketCharts() {
 // Shared Chart.js options for the three market trend charts — bottom legend
 // and expanded-mode font scaling (Chart.js paints tick/legend text onto the
 // canvas, so CSS can't resize it).
+// Compact dot+label legend in the chart's own header (same convention every
+// other chart on this dashboard already uses — see the many `legend-' + id`
+// lookups in the SDR/day-bucketed charts below) instead of Chart.js's own
+// bottom legend, which wraps onto several lines of long "X — Y Team" labels
+// once Team split + both rate lines + the AE-era baseline are all on at
+// once. Reads each dataset's own `_legendColor` (a single representative
+// swatch color, since backgroundColor here is usually a per-entry array for
+// AE-era muting) rather than Chart.js's dataset styling directly.
+function renderMarketLegend(chartId, datasets) {
+  const el = document.getElementById('legend-' + chartId);
+  if (!el) return;
+  const kept = marketDropEmptyDatasets(datasets);
+  el.innerHTML = kept.map(d => {
+    const color = d._legendColor || d.borderColor || '#999';
+    return `<span class="legend-item"><span class="legend-dot" style="background:${color}"></span>${escapeHtml(d.label)}</span>`;
+  }).join('');
+}
 function marketChartOptions(chartId, yTitle, withPctAxis, stacked) {
   const f = chartFontSizes(chartId);
   const opts = {
     responsive: true,
     maintainAspectRatio: true,
-    plugins: { legend: { display: true, position: 'bottom', labels: { font: { size: f.tick + 1 } } } },
+    plugins: { legend: { display: false } },
     scales: {
       x: { stacked: !!stacked, grid: { display: false }, ticks: { font: { size: f.tick } } },
       y: { stacked: !!stacked, beginAtZero: true, position: 'left', title: { display: true, text: yTitle, font: { size: f.tick } }, ticks: { font: { size: f.tick } } }
@@ -7510,25 +7593,23 @@ function marketChartOptions(chartId, yTitle, withPctAxis, stacked) {
 }
 // The Volume Trend's two mutually exclusive modes: pick ONE metric split by
 // Team/Tier (grouped, never stacked — see renderMarketVolumeChart), or a
-// funnel overlay of all four stages together for one combined view of the
+// funnel view of all four stages together for one combined view of the
 // whole funnel's shape over time. Funnel mode always uses the Total split —
-// 4 stages × Team or Tier groups would be 8-16 overlapping bars, unreadable.
+// 4 stages × Team or Tier groups would be 16-32 bars, unreadable.
 //
-// "Overlay," not stack: each later stage is a strict subset of the one
-// before it (every Qualified lead is also a Business Lead), so summing
-// their heights would double/triple/quadruple-count the same leads and the
-// bar would read taller than the actual lead count. Instead every stage is
-// its own full-height bar drawn in the SAME x slot (grouped:false) with a
-// narrower barPercentage than the stage before it, so Business Leads forms
-// the tall backdrop and each subsequent stage nests inside it like a target
-// — the full bar height is the Business Leads count, exactly as it should
-// read, and Qualified/Meetings/Deals sit inside it as progressively
-// narrower, more saturated bars rather than adding on top.
+// Four side-by-side (grouped, not stacked/summed) bars per month, not a
+// nested overlay — a nested "nbrBL is the full bar height, each later stage
+// a narrower bar inside it" design was tried first, but the funnel drop-off
+// is steep enough (Business Leads routinely 10-50x Deals Closed) that the
+// inner stages rendered as a 2-3px sliver, invisible in practice even though
+// the geometry was technically correct. Grouped bars plus the always-on
+// value-labels plugin (chart.$valueLabels — see VALUE_LABELS_PLUGIN) means
+// every stage's exact number is readable regardless of how short its bar is.
 const MARKET_FUNNEL_STAGES = [
-  { field: 'nbrBL', label: 'Business Leads', color: '#c7d2e8', barPct: 0.92 },
-  { field: 'qalBL', label: 'Qualified', color: '#8fa6d6', barPct: 0.68 },
-  { field: 'meetingBooked', label: 'Meetings Booked', color: '#2f6fed', barPct: 0.44 },
-  { field: 'closed', label: 'Deals Closed', color: '#1a9e94', barPct: 0.2 }
+  { field: 'nbrBL', label: 'Business Leads', color: '#c7d2e8' },
+  { field: 'qalBL', label: 'Qualified', color: '#8fa6d6' },
+  { field: 'meetingBooked', label: 'Meetings Booked', color: '#2f6fed' },
+  { field: 'closed', label: 'Deals Closed', color: '#1a9e94' }
 ];
 function renderMarketVolumeChart(entries, labels, baselineOn) {
   const el = document.getElementById('chartMarketVolume');
@@ -7540,19 +7621,15 @@ function renderMarketVolumeChart(entries, labels, baselineOn) {
 
   let datasets, yTitle;
   if (funnelStack) {
-    // Array order matters here, not just visually: Chart.js paints datasets
-    // in array order, so listing widest-first/narrowest-last means each
-    // narrower, more-saturated stage is drawn on top of the wider one behind
-    // it — no explicit z-index/order property needed.
     datasets = MARKET_FUNNEL_STAGES.map(stage => ({
       label: stage.label,
       data: entries.map(e => { const m = marketEntryMetrics(e, 'total', null, baselineOn); return m ? m[stage.field] : null; }),
       backgroundColor: entries.map(e => (e.sdr ? stage.color : marketMuted(stage.color))),
-      grouped: false,
-      categoryPercentage: 0.85,
-      barPercentage: stage.barPct
+      categoryPercentage: 0.8,
+      barPercentage: 0.9,
+      _legendColor: stage.color
     }));
-    yTitle = 'Business Leads (funnel stages nested inside)';
+    yTitle = 'Count (Business Leads / Qualified / Meetings Booked / Deals Closed)';
   } else {
     const metric = metricSelect ? metricSelect.value : 'nbrBL';
     const splitMode = marketSplitMode();
@@ -7561,15 +7638,17 @@ function renderMarketVolumeChart(entries, labels, baselineOn) {
     // a washed-out shade (plus the "(AE)" axis label) rather than a separate
     // legend entry, so the eye reads one storyline across both eras.
     datasets = groups.map(g => ({
-      label: g.label,
+      label: marketShortGroupLabel(splitMode, g),
       data: entries.map(e => { const m = marketEntryMetrics(e, splitMode, g.key, baselineOn); return m ? m[metric] : null; }),
-      backgroundColor: entries.map(e => (e.sdr ? g.color : marketMuted(g.color)))
+      backgroundColor: entries.map(e => (e.sdr ? g.color : marketMuted(g.color))),
+      _legendColor: g.color
     }));
     if (baselineOn && splitMode === 'team') {
       datasets.push({
         label: 'AE era (all)',
         data: entries.map(e => { const m = marketAeMetricsForSplit(e, splitMode, null); return m ? m[metric] : null; }),
-        backgroundColor: '#c7cdd8'
+        backgroundColor: '#c7cdd8',
+        _legendColor: '#c7cdd8'
       });
     }
     yTitle = marketMetricLabel(metric);
@@ -7581,6 +7660,10 @@ function renderMarketVolumeChart(entries, labels, baselineOn) {
     data: { labels, datasets: marketDropEmptyDatasets(datasets) },
     options: marketChartOptions('chartMarketVolume', yTitle, false, false)
   });
+  // Funnel view only — its whole point is reading each stage's exact number
+  // even when the bar itself is too short to see (see VALUE_LABELS_PLUGIN).
+  charts.chartMarketVolume.$valueLabels = funnelStack;
+  renderMarketLegend('chartMarketVolume', datasets);
 }
 function renderMarketRateChart(entries, labels, baselineOn) {
   const el = document.getElementById('chartMarketRate');
@@ -7593,7 +7676,7 @@ function renderMarketRateChart(entries, labels, baselineOn) {
     type: 'bar', label: 'Nbr of BL',
     data: entries.map(e => { const m = marketEntryMetrics(e, 'total', null, baselineOn); return m ? m.nbrBL : null; }),
     backgroundColor: entries.map(e => (e.sdr ? '#c7d2e8' : '#dde3ec')),
-    yAxisID: 'y', order: 3
+    yAxisID: 'y', order: 3, _legendColor: '#c7d2e8'
   }];
 
   const lineDefs = [
@@ -7618,13 +7701,21 @@ function renderMarketRateChart(entries, labels, baselineOn) {
         return m ? m[ld.field] : null;
       });
       const ds = {
-        type: 'line', label: groups.length > 1 ? `${ld.label} — ${g.label}` : ld.label,
+        type: 'line', label: groups.length > 1 ? `${ld.label} — ${marketShortGroupLabel(splitMode, g)}` : ld.label,
         data, borderColor: color, backgroundColor: color,
-        yAxisID: 'y1', tension: 0.2, pointRadius: 3, spanGaps: true, order: 1
+        yAxisID: 'y1', tension: 0.2, pointRadius: 3, spanGaps: true, order: 1, _legendColor: color
       };
       if (ld.id === 'meetingPct' && groups.length > 1) ds.borderDash = [6, 3];
+      // The pre-SDR (AE-era) portion of an extend-into-AE line is drawn
+      // dashed AND grey — a visually distinct "different era, same metric"
+      // treatment, same idea as the muted AE-era bars elsewhere, so one
+      // continuous line can honestly show "this dipped/rose across the
+      // handoff" without implying the AE-era portion is this team's own rate.
       if (ld.extendIntoAE && aeBoundaryIdx > 0) {
-        ds.segment = { borderDash: ctx => (ctx.p1DataIndex < aeBoundaryIdx ? [5, 5] : undefined) };
+        ds.segment = {
+          borderDash: ctx => (ctx.p1DataIndex < aeBoundaryIdx ? [5, 5] : undefined),
+          borderColor: ctx => (ctx.p1DataIndex < aeBoundaryIdx ? '#8a8f98' : undefined)
+        };
       }
       datasets.push(ds);
     });
@@ -7635,6 +7726,7 @@ function renderMarketRateChart(entries, labels, baselineOn) {
     data: { labels, datasets: marketDropEmptyDatasets(datasets) },
     options: marketChartOptions('chartMarketRate', 'Leads', true)
   });
+  renderMarketLegend('chartMarketRate', datasets);
 }
 // Bars = closed deals by creation-month cohort; lines = Lead to Deal % and
 // Qualified to Close %. With the baseline on, a dashed grey reference line
@@ -7657,16 +7749,16 @@ function renderMarketDealChart(entries, labels, baselineOn, aeSeriesAll) {
   const datasets = [];
   if (splitMode !== 'tier') {
     groups.forEach(g => datasets.push({
-      type: 'bar', label: groups.length > 1 ? `Deals — ${g.label}` : 'Deals Closed',
+      type: 'bar', label: groups.length > 1 ? `Deals — ${marketShortGroupLabel(splitMode, g)}` : 'Deals Closed',
       data: entries.map(e => { const m = marketEntryMetrics(e, splitMode, g.key, baselineOn); return m ? m.closed : null; }),
       backgroundColor: entries.map((e, i) => (maturingIdxs.has(i) || !e.sdr ? marketMuted(g.color) : g.color)),
-      yAxisID: 'y', order: 3
+      yAxisID: 'y', order: 3, _legendColor: g.color
     }));
     if (baselineOn && splitMode === 'team') {
       datasets.push({
         type: 'bar', label: 'Deals — AE era (all)',
         data: entries.map(e => { const m = marketAeMetricsForSplit(e, splitMode, null); return m ? m.closed : null; }),
-        backgroundColor: '#c7cdd8', yAxisID: 'y', order: 3
+        backgroundColor: '#c7cdd8', yAxisID: 'y', order: 3, _legendColor: '#c7cdd8'
       });
     }
   }
@@ -7685,12 +7777,23 @@ function renderMarketDealChart(entries, labels, baselineOn, aeSeriesAll) {
         return m ? m[ld.field] : null;
       });
       const ds = {
-        type: 'line', label: groups.length > 1 ? `${ld.label} — ${g.label}` : ld.label,
+        type: 'line', label: groups.length > 1 ? `${ld.label} — ${marketShortGroupLabel(splitMode, g)}` : ld.label,
         data, borderColor: color, backgroundColor: color,
-        yAxisID: 'y1', tension: 0.2, pointRadius: 3, spanGaps: true, order: 1
+        yAxisID: 'y1', tension: 0.2, pointRadius: 3, spanGaps: true, order: 1, _legendColor: color
       };
       if (ld.id === 'qualToClose' && groups.length > 1) ds.borderDash = [6, 3];
-      if (aeBoundaryIdx > 0) ds.segment = { borderDash: ctx => (ctx.p1DataIndex < aeBoundaryIdx ? [5, 5] : undefined) };
+      // Pre-May (AE-era) portion of the line drawn dashed AND grey — same
+      // "different era, same metric" treatment as the Conversion Rate Trend
+      // chart's % Qual line, restricted to the SDR's own two Request Type
+      // tiers (MARKET_SDR_SCOPE_TIERS) so the AE-era values being compared
+      // against are the same product mix the SDR side has always worked,
+      // not diluted by >1k/complex deals only AEs ever touched.
+      if (aeBoundaryIdx > 0) {
+        ds.segment = {
+          borderDash: ctx => (ctx.p1DataIndex < aeBoundaryIdx ? [5, 5] : undefined),
+          borderColor: ctx => (ctx.p1DataIndex < aeBoundaryIdx ? '#8a8f98' : undefined)
+        };
+      }
       datasets.push(ds);
     });
   });
@@ -7698,14 +7801,15 @@ function renderMarketDealChart(entries, labels, baselineOn, aeSeriesAll) {
   if (baselineOn) {
     // Same aeRecentLeadToDealPct() the Lead to Deal summary card uses — one
     // shared function, so this line and that card's AE Baseline row can
-    // never disagree.
+    // never disagree. Also tier-restricted to lt1k/incomplete (see
+    // MARKET_SDR_SCOPE_TIERS) for the same apples-to-apples reason as above.
     const aeL2D = aeRecentLeadToDealPct();
     if (aeL2D != null) {
       datasets.push({
         type: 'line', label: `AE avg Lead to Deal, Jan–May 2026 (${aeL2D.toFixed(1)}%)`,
         data: entries.map(() => aeL2D),
         borderColor: '#8a8f98', borderDash: [3, 3], borderWidth: 1.5,
-        pointRadius: 0, yAxisID: 'y1', order: 0
+        pointRadius: 0, yAxisID: 'y1', order: 0, _legendColor: '#8a8f98'
       });
     }
   }
@@ -7715,6 +7819,7 @@ function renderMarketDealChart(entries, labels, baselineOn, aeSeriesAll) {
     data: { labels, datasets: marketDropEmptyDatasets(datasets) },
     options: marketChartOptions('chartMarketDeal', 'Deals Closed', true)
   });
+  renderMarketLegend('chartMarketDeal', datasets);
 }
 
 // Show $ figures off by default so this table can be shared/screen-shared
