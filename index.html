@@ -1118,7 +1118,7 @@
           </div>
           <div class="chart-card full" data-chart-id="chartMarketDeal">
             <div class="chart-header">
-              <span class="chart-title">Lead to Deal <span class="goal-info" title="Bars = deals closed (left axis), by creation-month cohort. Lines = Lead to Deal %, Qualified to Close %, and Meeting Done to Close % (right axis) — same definition as the Market table's own Meeting Done to Close % column: Closed ÷ Meeting Status = Meeting Done specifically, not just any booked meeting, since a Scheduled/Rejected/Not Atended meeting was never actually held. With Pre-SDR baseline on (Split: Total or by Tier), Lead to Deal % and Qual to Close % extend back through the AE era — the pre-May portion is dashed and grey to mark it as a different era on the same metric — restricted to the &lt;1k/incomplete Request Type tiers so the AE-era comparison is the same product mix the SDR team actually works, not diluted by &gt;1k/complex deals only AEs ever touched. Meeting Done to Close % never extends into the AE era — Meeting Status was rarely logged back then (~15% populated), so the rate would read as an artifact of logging discipline, not performance (same reason the Conversion Rate Trend chart's Meeting Booked % line stops there too). A flat dashed grey reference line also marks the AE-era average Lead to Deal % (Jan–May 2026). Split: by Team can't extend lines into the AE era (no US/OUS split existed then) — it shows AE-era deals as their own muted bar instead. The most recent 2 months are shown lighter — deals from a recent cohort are still closing, so those bars/rates will keep rising.">ⓘ</span></span>
+              <span class="chart-title">Lead to Deal <span class="goal-info" title="Bars = deals closed (left axis), by creation-month cohort. Lines (right axis): Lead to Deal % and Qualified to Close %; Meeting Done to Close % = Closed ÷ Meeting Done (same as the Market table's column); Meeting Done % = Meeting Done ÷ Business Leads — what share of leads actually had a completed meeting, not just a booked one. Meeting Done to Close % and Meeting Done % never extend into the AE era — Meeting Status was rarely logged back then (~15% populated), so the rate would read as an artifact of logging discipline, not performance (same reason the Conversion Rate Trend chart's Meeting Booked % line stops there too). With Pre-SDR baseline on (Split: Total or by Tier), Lead to Deal % and Qual to Close % do extend back through the AE era — the pre-May portion is dashed and grey to mark it as a different era on the same metric — restricted to the &lt;1k/incomplete Request Type tiers so the AE-era comparison is the same product mix the SDR team actually works, not diluted by &gt;1k/complex deals only AEs ever touched. A flat dashed grey reference line also marks the AE-era average Lead to Deal % (Jan–May 2026). Split: by Team can't extend lines into the AE era (no US/OUS split existed then) — it shows AE-era deals as their own muted bar instead. The most recent 2 months are shown lighter — deals from a recent cohort are still closing, so those bars/rates will keep rising.">ⓘ</span></span>
               <div class="chart-header-right">
                 <div class="chart-legend" id="legend-chartMarketDeal"></div>
                 <span class="activity-metric-checks">
@@ -1136,6 +1136,11 @@
                     <input type="checkbox" id="marketDealLine-meetingDoneToClose" onchange="renderMarketCharts()">
                     <span class="toggle-track"></span>
                     <span class="toggle-text">Meeting Done to Close %</span>
+                  </label>
+                  <label class="chart-cumulative-toggle">
+                    <input type="checkbox" id="marketDealLine-meetingDoneRate" onchange="renderMarketCharts()">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-text">Meeting Done %</span>
                   </label>
                 </span>
                 <button class="chart-expand-btn" onclick="toggleChartExpand('chartMarketDeal')" title="Expand">&#10530;</button>
@@ -7236,6 +7241,7 @@ function marketMetrics(rows) {
     nbrBL, qalBL, meetingBooked, meetingDone, closed,
     pctQal: nbrBL ? qalBL / nbrBL * 100 : null,
     meetingPct: nbrBL ? meetingBooked / nbrBL * 100 : null,
+    meetingDonePct: nbrBL ? meetingDone / nbrBL * 100 : null,
     qalToClosePct: qalBL ? closed / qalBL * 100 : null,
     meetingDoneToClosePct: meetingDone ? closed / meetingDone * 100 : null,
     leadToDealPct: nbrBL ? closed / nbrBL * 100 : null
@@ -7249,6 +7255,7 @@ function marketMergeMetrics(list) {
     nbrBL, qalBL, meetingBooked, meetingDone, closed,
     pctQal: nbrBL ? qalBL / nbrBL * 100 : null,
     meetingPct: nbrBL ? meetingBooked / nbrBL * 100 : null,
+    meetingDonePct: nbrBL ? meetingDone / nbrBL * 100 : null,
     qalToClosePct: qalBL ? closed / qalBL * 100 : null,
     meetingDoneToClosePct: meetingDone ? closed / meetingDone * 100 : null,
     leadToDealPct: nbrBL ? closed / nbrBL * 100 : null
@@ -7963,7 +7970,12 @@ function renderMarketDealChart(entries, labels, baselineOn, aeSeriesAll) {
     // chart: Meeting Status was rarely logged pre-SDR (~15% populated), so
     // the rate would read as an artifact of logging discipline, not an
     // actual meeting-to-close performance number.
-    { id: 'meetingDoneToClose', label: 'Meeting Done to Close %', field: 'meetingDoneToClosePct', soloColor: '#c94f7c', noAE: true }
+    { id: 'meetingDoneToClose', label: 'Meeting Done to Close %', field: 'meetingDoneToClosePct', soloColor: '#c94f7c', noAE: true },
+    // Meeting Done ÷ Business Leads — what share of leads actually got a
+    // completed meeting (not just booked). Same AE-era exclusion as Meeting
+    // Done to Close % above, for the same reason: Meeting Status barely
+    // exists pre-SDR, so there's nothing reliable to plot there.
+    { id: 'meetingDoneRate', label: 'Meeting Done %', field: 'meetingDonePct', soloColor: '#43a047', noAE: true }
   ];
   lineDefs.forEach(ld => {
     const cb = document.getElementById('marketDealLine-' + ld.id);
@@ -7985,6 +7997,7 @@ function renderMarketDealChart(entries, labels, baselineOn, aeSeriesAll) {
       };
       if (ld.id === 'qualToClose' && groups.length > 1) ds.borderDash = [6, 3];
       if (ld.id === 'meetingDoneToClose' && groups.length > 1) ds.borderDash = [2, 2];
+      if (ld.id === 'meetingDoneRate' && groups.length > 1) ds.borderDash = [1, 3];
       // Pre-May (AE-era) portion of the line drawn dashed AND grey — same
       // "different era, same metric" treatment as the Conversion Rate Trend
       // chart's % Qual line, restricted to the SDR's own two Request Type
