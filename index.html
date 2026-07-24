@@ -7255,9 +7255,23 @@ function marketPctCell(v) { return v == null ? '—' : v.toFixed(1) + '%'; }
 // empty >1k/complex row (or any other empty segment/month) actually means,
 // rather than a wall of zeros that looks like a rendering bug.
 function marketCountCell(v, m) { return m.nbrBL === 0 ? '—' : v.toLocaleString(); }
+// r,g,b for the two TEAM_GROUPS colors — used to wash Sub total/Team total
+// rows in a barely-there tint of that team's own color (see marketRowHtml's
+// opts.tint), so the US/OUS color-coding used everywhere else on this
+// dashboard extends into the table without being loud about it.
+function hexToRgbTriplet(hex) {
+  const h = hex.replace('#', '');
+  return [parseInt(h.substr(0, 2), 16), parseInt(h.substr(2, 2), 16), parseInt(h.substr(4, 2), 16)].join(',');
+}
+// opts.tint: { color: '#2f6fed', alpha: 0.05 } — a near-invisible background
+// wash, not a real highlight; alpha stays under ~0.1 everywhere it's used so
+// it reads as "this row belongs to a subtotal" at a glance without fighting
+// the text for attention. Team total rows use a slightly higher alpha than
+// Sub total rows (still faint) so the two tint levels stay tellable apart.
 function marketRowHtml(label, m, opts) {
   opts = opts || {};
-  return `<tr${opts.total ? ' class="mandate-kpi-total"' : ''}>
+  const rowStyle = opts.tint ? ` style="background:rgba(${hexToRgbTriplet(opts.tint.color)},${opts.tint.alpha})"` : '';
+  return `<tr${opts.total ? ' class="mandate-kpi-total"' : ''}${rowStyle}>
     <td class="mandate-kpi-name"${opts.indent ? ' style="padding-left:24px"' : ''}>${escapeHtml(label)}</td>
     <td>${marketCountCell(m.nbrBL, m)}</td>
     <td>${marketCountCell(m.qalBL, m)}</td>
@@ -7319,10 +7333,10 @@ function renderMarketSection() {
     bodyRows += `<tr><td class="mandate-kpi-name" colspan="9" style="padding-top:16px">${escapeHtml(team.label)}</td></tr>`;
     MARKET_TIERS.forEach((t, i) => {
       bodyRows += marketRowHtml(t.label, tierMetrics[t.key], { indent: true });
-      if (i === 1) bodyRows += marketRowHtml('Sub total', sub1, { indent: true, total: true });
-      if (i === 3) bodyRows += marketRowHtml('Sub total', sub2, { indent: true, total: true });
+      if (i === 1) bodyRows += marketRowHtml('Sub total', sub1, { indent: true, total: true, tint: { color: team.color, alpha: 0.05 } });
+      if (i === 3) bodyRows += marketRowHtml('Sub total', sub2, { indent: true, total: true, tint: { color: team.color, alpha: 0.05 } });
     });
-    bodyRows += marketRowHtml(`Total ${team.label.replace(' Team', '')}`, teamTotal, { total: true });
+    bodyRows += marketRowHtml(`Total ${team.label.replace(' Team', '')}`, teamTotal, { total: true, tint: { color: team.color, alpha: 0.11 } });
   });
 
   // AE-era block for any month the historical dataset covers — the whole
