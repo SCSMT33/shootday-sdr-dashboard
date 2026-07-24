@@ -1048,7 +1048,7 @@
         <div class="charts-grid">
           <div class="chart-card full" data-chart-id="chartMarketVolume">
             <div class="chart-header">
-              <span class="chart-title">Volume Trend <span class="goal-info" title="Metric mode: monthly count of the chosen metric, grouped side-by-side by Team/Tier split. Funnel mode: Business Leads/Qualified/Meetings Booked/Deals Closed drawn as four side-by-side bars per month (not summed — every Qualified lead is also a Business Lead, and so on down the funnel, so stacking or overlaying them would double-count), each labeled with its exact number since the funnel drop-off is steep enough that a short bar (e.g. Deals Closed) can be just a few pixels tall next to Business Leads. Above each stage's number (except Business Leads, the first) is its step conversion rate off the PREVIOUS stage only — Qualified ÷ Business Leads, Meetings Booked ÷ Qualified, Deals Closed ÷ Meetings Booked — not off Business Leads every time, so it reads as a chain of hand-offs rather than the overall Lead to Deal % (that one's on the Lead to Deal chart). In funnel mode, the checkboxes where the metric dropdown normally sits (&lt;1k/incomplete/&gt;1k/complex) pick which Request Type tiers feed it — defaults to &lt;1k/incomplete (what this team currently works), independent of the Split dropdown above. Same Duplicate/Wrong-info exclusion as the table above either way.">ⓘ</span></span>
+              <span class="chart-title">Volume Trend <span class="goal-info" title="Metric mode: monthly count of the chosen metric, grouped side-by-side by Team/Tier split. Funnel mode: Business Leads/Qualified/Meetings Booked/Deals Closed drawn as four side-by-side bars per month (not summed — every Qualified lead is also a Business Lead, and so on down the funnel, so stacking or overlaying them would double-count), each labeled with its exact number since the funnel drop-off is steep enough that a short bar (e.g. Deals Closed) can be just a few pixels tall next to Business Leads. Above each stage's number (except Business Leads, the first) is its conversion rate off Business Leads specifically — Qualified ÷ BL, Meetings Booked ÷ BL, Deals Closed ÷ BL (this last one is the same figure as the Lead to Deal chart's own Lead to Deal %) — never off the stage right before it, rounded to a whole percent. Hover a bar for the exact math (e.g. "Meetings Booked ÷ Business Leads = 147 ÷ 445 = 33%"). In funnel mode, the checkboxes where the metric dropdown normally sits (&lt;1k/incomplete/&gt;1k/complex) pick which Request Type tiers feed it — defaults to &lt;1k/incomplete (what this team currently works), independent of the Split dropdown above. Same Duplicate/Wrong-info exclusion as the table above either way.">ⓘ</span></span>
               <div class="chart-header-right">
                 <div class="chart-legend" id="legend-chartMarketVolume"></div>
                 <label class="chart-cumulative-toggle" style="margin-right:0">
@@ -3786,12 +3786,15 @@ const COLORS = { Team: '#6c63ff', Goal: 'rgba(0,0,0,0.35)', Pace: '#9c6dff', AEB
 // every chart instance regardless of type.
 //
 // chart.$stepRates (optional): an array, one entry per dataset, giving the
-// index of the PREVIOUS dataset to divide this one by for a step-conversion
-// rate (null = no rate for this dataset, e.g. the first funnel stage). Drawn
-// as a bolder, larger line ABOVE the count — e.g. Qualified's bar shows
-// "47.7%" then "347" underneath, where 47.7% = 347 ÷ that month's Business
-// Leads count — so the step-over-step conversion is the first thing you
-// read, with the raw count right there for reference underneath it.
+// index of the dataset to divide this one by for a conversion rate (null =
+// no rate for this dataset, e.g. Business Leads itself). Drawn as a bolder,
+// larger line ABOVE the count, rounded to a whole percent (no decimal — one
+// less thing to parse at a glance) — e.g. Qualified's bar shows "48%" then
+// "347" underneath. In the Volume Trend funnel, every stage's rate is off
+// Business Leads specifically (not the stage right before it), so Meetings
+// Booked ÷ Business Leads and Deals Closed ÷ Business Leads (the latter
+// equal to the Lead to Deal chart's own Lead to Deal %) — never Meetings ÷
+// Qualified or Deals ÷ Meetings, which would answer a different question.
 const VALUE_LABELS_PLUGIN = {
   id: 'valueLabels',
   afterDatasetsDraw(chart) {
@@ -3811,7 +3814,7 @@ const VALUE_LABELS_PLUGIN = {
         const denom = denomDs ? denomDs.data[j] : null;
         const showRate = denom != null && denom !== 0;
         if (showRate) {
-          const pct = (v / denom * 100).toFixed(1) + '%';
+          const pct = Math.round(v / denom * 100) + '%';
           ctx.font = '800 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
           ctx.fillStyle = '#6c63ff';
           ctx.fillText(pct, el.x, el.y - 18);
@@ -7735,32 +7738,55 @@ function renderMarketVolumeChart(entries, labels, baselineOn) {
   }
 
   const keptDatasets = marketDropEmptyDatasets(datasets);
+  const chartOpts = marketChartOptions('chartMarketVolume', yTitle, false, false, funnelStack ? 30 : 0);
+  // Hovering a funnel bar spells out the same math the on-bar rate label
+  // shows — "Meetings Booked ÷ Business Leads = 147 ÷ 445 = 33%" — so the
+  // rate's denominator is never ambiguous. Reads chart.$stepRates, set right
+  // after construction below; harmless no-op in metric mode (no $stepRates).
+  chartOpts.plugins.tooltip = {
+    callbacks: {
+      label(ctx) {
+        const chart = ctx.chart;
+        const v = ctx.parsed.y;
+        const lines = [`${ctx.dataset.label}: ${v.toLocaleString()}`];
+        const denomIdx = chart.$stepRates ? chart.$stepRates[ctx.datasetIndex] : null;
+        if (denomIdx != null) {
+          const denomDs = chart.data.datasets[denomIdx];
+          const denom = denomDs.data[ctx.dataIndex];
+          if (denom != null && denom !== 0) {
+            const pct = Math.round(v / denom * 100);
+            lines.push(`${ctx.dataset.label} ÷ ${denomDs.label} = ${v.toLocaleString()} ÷ ${denom.toLocaleString()} = ${pct}%`);
+          }
+        }
+        return lines;
+      }
+    }
+  };
   if (charts.chartMarketVolume) charts.chartMarketVolume.destroy();
   charts.chartMarketVolume = new Chart(el.getContext('2d'), {
     type: 'bar',
     data: { labels, datasets: keptDatasets },
     // Extra top padding in funnel mode only — leaves headroom for the two-line
     // count+rate value labels above the tallest (Business Leads) bar.
-    options: marketChartOptions('chartMarketVolume', yTitle, false, false, funnelStack ? 30 : 0)
+    options: chartOpts
   });
   // Funnel view only — its whole point is reading each stage's exact number
-  // (and its conversion off the previous stage) even when the bar itself is
-  // too short to see (see VALUE_LABELS_PLUGIN).
+  // (and its conversion off Business Leads) even when the bar itself is too
+  // short to see (see VALUE_LABELS_PLUGIN).
   charts.chartMarketVolume.$valueLabels = funnelStack;
   if (funnelStack) {
-    // Maps each kept dataset to the index (within keptDatasets) of the
-    // PREVIOUS funnel stage, so the plugin can draw e.g. Qualified's
-    // count-÷-Business-Leads rate underneath it. Looked up by stage label
-    // rather than a fixed offset since marketDropEmptyDatasets above can
-    // drop a stage entirely if it's zero across the whole visible range.
+    // Every stage's rate is off Business Leads specifically — Qualified÷BL,
+    // Meetings÷BL, Deals÷BL — never off the stage right before it (Meetings÷
+    // Qualified, Deals÷Meetings answer "conversion since the last stage,"
+    // not "share of everyone who came in," which is the question this view
+    // is for). Looked up by stage label rather than a fixed index 0 since
+    // marketDropEmptyDatasets above can drop Business Leads' own dataset
+    // entirely if it's zero across the whole visible range.
     const stageOrder = MARKET_FUNNEL_STAGES.map(s => s.label);
+    const blPos = keptDatasets.findIndex(d => stageOrder.indexOf(d.label) === 0);
     charts.chartMarketVolume.$stepRates = keptDatasets.map((d, i) => {
-      const stageIdx = stageOrder.indexOf(d.label);
-      if (stageIdx <= 0) return null;
-      for (let k = i - 1; k >= 0; k--) {
-        if (stageOrder.indexOf(keptDatasets[k].label) === stageIdx - 1) return k;
-      }
-      return null;
+      if (blPos < 0 || i === blPos) return null;
+      return blPos;
     });
   } else {
     charts.chartMarketVolume.$stepRates = null;
