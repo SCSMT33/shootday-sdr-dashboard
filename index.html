@@ -713,6 +713,45 @@
   .mandate-status.off { color: var(--red); }
   .mandate-status.na { color: var(--muted); font-weight: 500; }
   .mandate-status.pending { color: var(--muted); font-weight: 500; }
+  .coaching-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+  .coaching-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+  .coaching-table td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .coaching-table th:nth-child(1), .coaching-table td:nth-child(1) { width: 12%; }
+  .coaching-table th:nth-child(2), .coaching-table td:nth-child(2) { width: 16%; }
+  .coaching-table th:nth-child(3), .coaching-table td:nth-child(3) { width: 26%; }
+  .coaching-table th:nth-child(4), .coaching-table td:nth-child(4) { width: 30%; }
+  .coaching-table th:nth-child(5), .coaching-table td:nth-child(5) { width: 16%; }
+  .coaching-sdr-name { font-weight: 600; white-space: nowrap; }
+  .coaching-input, .coaching-textarea {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+  .coaching-textarea { resize: vertical; min-height: 60px; }
+  .coaching-input:focus, .coaching-textarea:focus { outline: none; border-color: var(--accent); }
+  .coaching-action-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; height: 30px; box-sizing: border-box; }
+  .coaching-action-row:last-child { margin-bottom: 0; }
+  .coaching-action-num { color: var(--muted); font-size: 11px; width: 14px; flex: 0 0 14px; text-align: right; }
+  .coaching-action-row .coaching-input { flex: 1 1 auto; height: 30px; }
+  .coaching-save-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .coaching-save-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .coaching-save-btn:hover { opacity: 0.9; }
+  .coaching-save-note { font-size: 11px; color: var(--muted); }
   .mandate-intro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
   @media (max-width: 768px) { .mandate-intro-grid { grid-template-columns: 1fr; } }
   .mandate-intro-col { min-width: 0; }
@@ -1607,24 +1646,21 @@
       </div>
     </div>
 
-    <!-- DATA HYGIENE -->
-    <div class="hygiene-section" id="hygieneSection">
-      <div class="hygiene-header" onclick="toggleHygieneSection()">
-        <div class="hygiene-header-left">
-          <span class="hygiene-title">Data Hygiene <span class="goal-info" title="Under construction — not finalized. Checks every lead (all SDRs, B2B+B2C, regardless of the Leads: filter) against the marking laws below — rules derived from the team's own majority conventions. Weekly score = 100 − (weighted violation points ÷ leads handled that week) × 100, floored at 0 — one severe violation in a 30-lead week costs 10 points; clean marking scores 100. Recomputed from the current CSV every load, so fixing a lead in Airtable clears its violation next refresh. Deliberately left on its own older qualified-status logic (isQualifiedStatus/QUALIFIED_SALES_STATUSES) during the 2026-07-23 Qualified Lead redefinition — no need to touch this section until it's addressed directly.">ⓘ</span></span>
-          <span class="hygiene-sub" id="hygieneHeaderNote">Marking-quality score per SDR — click a bar to see the violations behind it</span>
+    <!-- SDR COACHING -->
+    <div class="mandate-section" id="coachingSection">
+      <div class="mandate-header" onclick="toggleCoachingSection()">
+        <div class="mandate-header-left">
+          <span class="mandate-title">SDR Coaching <span class="goal-info" title="A running coaching plan per SDR: their current focus area, freeform notes, and up to three action items with due dates. Saved to this browser (localStorage) — click Save to persist your edits, or they'll be lost on refresh.">ⓘ</span></span>
+          <span class="mandate-sub">Focus areas, notes, and action items per SDR — click Save to keep changes across a refresh</span>
         </div>
-        <span class="hygiene-chevron">&#9654;</span>
+        <span class="mandate-chevron">&#9654;</span>
       </div>
-      <div class="hygiene-body">
-        <div class="hygiene-facts-grid" id="hygieneSummary"></div>
-        <div class="chart-header">
-          <span class="chart-title">Weekly Hygiene Score by SDR</span>
-          <div class="chart-legend" id="legend-chartHygiene"></div>
+      <div class="mandate-body">
+        <div style="overflow-x:auto"><table class="coaching-table" id="coachingTable"></table></div>
+        <div class="coaching-save-row">
+          <button class="coaching-save-btn" onclick="event.stopPropagation(); saveCoachingPlan(true)">Save</button>
+          <span class="coaching-save-note" id="coachingSaveNote"></span>
         </div>
-        <canvas id="chartHygiene"></canvas>
-        <div id="hygieneDrilldown" class="speed-to-lead-drilldown" style="display:none"></div>
-        <div class="hygiene-laws" id="hygieneLaws"></div>
       </div>
     </div>
 
@@ -1739,6 +1775,27 @@
         </div>
         <div style="overflow-x:auto"><table class="mandate-kpi-table" id="mandateKpiTable"></table></div>
         <div class="mandate-inputs" id="mandateInputs"></div>
+      </div>
+    </div>
+
+    <!-- DATA HYGIENE -->
+    <div class="hygiene-section" id="hygieneSection">
+      <div class="hygiene-header" onclick="toggleHygieneSection()">
+        <div class="hygiene-header-left">
+          <span class="hygiene-title">Data Hygiene <span class="goal-info" title="Under construction — not finalized. Checks every lead (all SDRs, B2B+B2C, regardless of the Leads: filter) against the marking laws below — rules derived from the team's own majority conventions. Weekly score = 100 − (weighted violation points ÷ leads handled that week) × 100, floored at 0 — one severe violation in a 30-lead week costs 10 points; clean marking scores 100. Recomputed from the current CSV every load, so fixing a lead in Airtable clears its violation next refresh. Deliberately left on its own older qualified-status logic (isQualifiedStatus/QUALIFIED_SALES_STATUSES) during the 2026-07-23 Qualified Lead redefinition — no need to touch this section until it's addressed directly.">ⓘ</span></span>
+          <span class="hygiene-sub" id="hygieneHeaderNote">Marking-quality score per SDR — click a bar to see the violations behind it</span>
+        </div>
+        <span class="hygiene-chevron">&#9654;</span>
+      </div>
+      <div class="hygiene-body">
+        <div class="hygiene-facts-grid" id="hygieneSummary"></div>
+        <div class="chart-header">
+          <span class="chart-title">Weekly Hygiene Score by SDR</span>
+          <div class="chart-legend" id="legend-chartHygiene"></div>
+        </div>
+        <canvas id="chartHygiene"></canvas>
+        <div id="hygieneDrilldown" class="speed-to-lead-drilldown" style="display:none"></div>
+        <div class="hygiene-laws" id="hygieneLaws"></div>
       </div>
     </div>
 
@@ -8683,6 +8740,76 @@ function exportQualifiedReport() {
   window.print();
 }
 
+// ─── SDR COACHING ────────────────────────────────────────────────────────────
+// Saved to localStorage only (no backend on this static site) — click Save
+// to persist edits; unsaved edits are lost on refresh, same as every other
+// manual-entry field on this dashboard.
+function coachingDefaultRow() {
+  return { focus: '', notes: '', actions: [{ text: '', due: '' }, { text: '', due: '' }, { text: '', due: '' }] };
+}
+function coachingState() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('sdr_coaching') || '{}'); } catch (e) {}
+  const state = {};
+  SDRS.forEach(s => {
+    const row = saved[s.key] || {};
+    const actions = [0, 1, 2].map(i => ({
+      text: (row.actions && row.actions[i] && row.actions[i].text) || '',
+      due: (row.actions && row.actions[i] && row.actions[i].due) || ''
+    }));
+    state[s.key] = { focus: row.focus || '', notes: row.notes || '', actions };
+  });
+  return state;
+}
+function renderCoachingTable() {
+  const table = document.getElementById('coachingTable');
+  if (!table) return;
+  const state = coachingState();
+  let html = '<thead><tr><th>SDR</th><th>Focus</th><th>Notes</th><th>Actions</th><th>Due Date</th></tr></thead><tbody>';
+  SDRS.forEach(s => {
+    const row = state[s.key];
+    const actionRows = (labelCol) => [0, 1, 2].map(i => {
+      if (labelCol === 'text') {
+        return `<div class="coaching-action-row"><span class="coaching-action-num">${i + 1}.</span><input type="text" class="coaching-input" id="coachingAction-${s.key}-${i}" value="${escapeHtml(row.actions[i].text)}" placeholder="Action item"></div>`;
+      }
+      return `<div class="coaching-action-row"><input type="date" class="coaching-input" id="coachingDue-${s.key}-${i}" value="${escapeHtml(row.actions[i].due)}"></div>`;
+    }).join('');
+    html += `<tr>
+      <td class="coaching-sdr-name">${escapeHtml(s.name)}</td>
+      <td><input type="text" class="coaching-input" id="coachingFocus-${s.key}" value="${escapeHtml(row.focus)}" placeholder="e.g. Speed-to-lead"></td>
+      <td><textarea class="coaching-textarea" id="coachingNotes-${s.key}" placeholder="Coaching notes">${escapeHtml(row.notes)}</textarea></td>
+      <td>${actionRows('text')}</td>
+      <td>${actionRows('date')}</td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  table.innerHTML = html;
+}
+function saveCoachingPlan(showNote) {
+  const state = {};
+  SDRS.forEach(s => {
+    state[s.key] = {
+      focus: document.getElementById(`coachingFocus-${s.key}`).value,
+      notes: document.getElementById(`coachingNotes-${s.key}`).value,
+      actions: [0, 1, 2].map(i => ({
+        text: document.getElementById(`coachingAction-${s.key}-${i}`).value,
+        due: document.getElementById(`coachingDue-${s.key}-${i}`).value
+      }))
+    };
+  });
+  try { localStorage.setItem('sdr_coaching', JSON.stringify(state)); } catch (e) {}
+  if (showNote) {
+    const note = document.getElementById('coachingSaveNote');
+    if (note) {
+      note.textContent = 'Saved just now — will still be here after a refresh on this browser.';
+      setTimeout(() => { if (note.textContent.startsWith('Saved just now')) note.textContent = ''; }, 4000);
+    }
+  }
+}
+function toggleCoachingSection() {
+  document.getElementById('coachingSection').classList.toggle('expanded');
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 renderViewTabs();
 loadGoals();
@@ -8693,6 +8820,7 @@ loadAutoBookedToggle();
 loadReportScope();
 loadCardDetailsToggle();
 loadExcludedAEBaselineOwners();
+renderCoachingTable();
 // One-time migration (2026-07): AE Baselines manually uploaded BEFORE the
 // committed data/ae-baseline.csv existed were smaller partial exports saved
 // in localStorage, and localStorage always wins over the auto-fetch — so
