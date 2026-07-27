@@ -1649,7 +1649,7 @@
       </div>
       <div class="chart-card full" data-chart-id="chartAircallConnect">
         <div class="chart-header">
-          <span class="chart-title">Aircall Connect Rate <span class="goal-info" id="info-chartAircallConnect" title="Connect = an outbound call with talk time ('duration (in call)') of 45 seconds or more — long enough to indicate an actual conversation happened, not just a pickup-and-hangup. Connect Rate = connects ÷ total outbound calls placed, per bucket/SDR/team (denominator is the SDR's own call volume, not leads received). Group dropdown: Combined, US vs OUS Teams, or Per SDR. B2B/B2C/All dropdown is a display split only (by phone-number match against leads) — leads never factor into the denominator. Bar vs line trend follows the dashboard's global Chart Style toggle (top of page). Requires a Call History CSV.">ⓘ</span></span>
+          <span class="chart-title">Aircall Connect Rate <span class="goal-info" id="info-chartAircallConnect" title="Measured per CONTACT (a unique phone number an SDR dialed), not per raw call — grouping every call to that number by that SDR across the whole call log, regardless of which day it landed on. A contact counts as Connected if its LAST call on record (chronologically, however many earlier attempts came first) ran 50 seconds or longer; an earlier long call doesn't save it if the final call on file is short. This keeps a rate from being dragged down just because an SDR needed a few follow-up dials to reach the same lead. Connect Rate = connected contacts ÷ total contacts dialed, per bucket/SDR/team. Bucketed by the day of that contact's first call, so a lead worked this week stays in this week even if the connecting call landed next week. Group dropdown: Combined, US vs OUS Teams, or Per SDR. B2B/B2C/All dropdown is a display split only (by phone-number match against leads) — leads never factor into the denominator. Bar vs line trend follows the dashboard's global Chart Style toggle (top of page). Requires a Call History CSV.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartAircallConnect"></div>
             <select class="chart-granularity" id="teamsComparison-chartAircallConnect" onchange="renderCharts(getFilteredDays())">
@@ -2782,6 +2782,15 @@ function recomputeAllData() {
 // in either B2B/B2C split. Depends on rawByDay (for the phone lookup), so it
 // runs at the end of recomputeAllData() rather than only from parseCallCSV —
 // re-derived any time either the leads or the calls CSV changes.
+//
+// Also derives contacts/contacts_connected for the Aircall Connect Rate chart:
+// grouped by (SDR, phone number) across the ENTIRE call log (not just the day
+// in question), so a follow-up call three days later still counts toward the
+// same contact. A contact is "connected" if its LAST call on record (by time,
+// regardless of how many shorter calls came before it) ran 50s or longer —
+// per-call rates were penalizing SDRs who need multiple attempts to reach the
+// same lead, since every short follow-up dial counted as its own failure.
+const CONNECT_THRESHOLD_SEC = 50;
 function recomputeCallData() {
   allCallsDataAll = {};
   allCallsDataB2B = {};
@@ -2802,8 +2811,11 @@ function recomputeCallData() {
 
   const summarize = calls => ({
     calls: calls.length,
-    calls_over60: calls.filter(c => c.durationSec != null && c.durationSec >= 60).length,
-    calls_over45: calls.filter(c => c.durationSec != null && c.durationSec >= 45).length
+    calls_over60: calls.filter(c => c.durationSec != null && c.durationSec >= 60).length
+  });
+  const summarizeContacts = outs => ({
+    contacts: outs.length,
+    contacts_connected: outs.filter(o => o.connected).length
   });
 
   const byDay = {};
@@ -2813,23 +2825,50 @@ function recomputeCallData() {
     if (byDay[day][c.sdrKey]) byDay[day][c.sdrKey].push(c);
   });
 
+  // One outcome per (SDR, phone) pair, bucketed under the day of its FIRST
+  // call — a lead worked this week stays in this week's cohort even if the
+  // connecting follow-up call landed next week.
+  const byContact = new Map();
+  rawCalls.forEach(c => {
+    if (!c.phoneDigits) return;
+    const key = c.sdrKey + '|' + c.phoneDigits;
+    if (!byContact.has(key)) byContact.set(key, []);
+    byContact.get(key).push(c);
+  });
+  const contactsByDay = {};
+  byContact.forEach(calls => {
+    calls.sort((a, b) => a.utcMs - b.utcMs);
+    const sdrKey = calls[0].sdrKey;
+    const phoneDigits = calls[0].phoneDigits;
+    const last = calls[calls.length - 1];
+    const connected = last.durationSec != null && last.durationSec >= CONNECT_THRESHOLD_SEC;
+    const day = dubaiDayKeyFromUTCMs(calls[0].utcMs);
+    if (!contactsByDay[day]) contactsByDay[day] = Object.fromEntries(SDRS.map(s => [s.key, []]));
+    if (contactsByDay[day][sdrKey]) contactsByDay[day][sdrKey].push({ phoneDigits, connected });
+  });
+
   Object.keys(byDay).sort().forEach(day => {
     allCallsDataAll[day] = {};
     allCallsDataB2B[day] = {};
     allCallsDataB2C[day] = {};
     const teamAll = [], teamB2B = [], teamB2C = [];
+    const teamContactsAll = [], teamContactsB2B = [], teamContactsB2C = [];
     SDRS.forEach(s => {
       const calls = byDay[day][s.key] || [];
       const b2b = calls.filter(c => phoneIsBusiness.get(c.phoneDigits) === true);
       const b2c = calls.filter(c => phoneIsBusiness.get(c.phoneDigits) === false);
-      allCallsDataAll[day][s.key] = summarize(calls);
-      allCallsDataB2B[day][s.key] = summarize(b2b);
-      allCallsDataB2C[day][s.key] = summarize(b2c);
+      const contacts = (contactsByDay[day] && contactsByDay[day][s.key]) || [];
+      const contactsB2B = contacts.filter(o => phoneIsBusiness.get(o.phoneDigits) === true);
+      const contactsB2C = contacts.filter(o => phoneIsBusiness.get(o.phoneDigits) === false);
+      allCallsDataAll[day][s.key] = { ...summarize(calls), ...summarizeContacts(contacts) };
+      allCallsDataB2B[day][s.key] = { ...summarize(b2b), ...summarizeContacts(contactsB2B) };
+      allCallsDataB2C[day][s.key] = { ...summarize(b2c), ...summarizeContacts(contactsB2C) };
       teamAll.push(...calls); teamB2B.push(...b2b); teamB2C.push(...b2c);
+      teamContactsAll.push(...contacts); teamContactsB2B.push(...contactsB2B); teamContactsB2C.push(...contactsB2C);
     });
-    allCallsDataAll[day].Team = summarize(teamAll);
-    allCallsDataB2B[day].Team = summarize(teamB2B);
-    allCallsDataB2C[day].Team = summarize(teamB2C);
+    allCallsDataAll[day].Team = { ...summarize(teamAll), ...summarizeContacts(teamContactsAll) };
+    allCallsDataB2B[day].Team = { ...summarize(teamB2B), ...summarizeContacts(teamContactsB2B) };
+    allCallsDataB2C[day].Team = { ...summarize(teamB2C), ...summarizeContacts(teamContactsB2C) };
   });
 }
 function saveLeadTypeFilter() {
@@ -6134,7 +6173,8 @@ function callMetricsForSelection(dataset, day, view) {
   return {
     calls: parts.reduce((a, p) => a + (p.calls || 0), 0),
     calls_over60: parts.reduce((a, p) => a + (p.calls_over60 || 0), 0),
-    calls_over45: parts.reduce((a, p) => a + (p.calls_over45 || 0), 0)
+    contacts: parts.reduce((a, p) => a + (p.contacts || 0), 0),
+    contacts_connected: parts.reduce((a, p) => a + (p.contacts_connected || 0), 0)
   };
 }
 function sumCallsMetricFrom(dataset, days, view, key) {
@@ -6219,13 +6259,15 @@ function renderCallActivityChart(days) {
 }
 
 // ─── AIRCALL CONNECT RATE ──────────────────────────────────────────────────────
-// A dedicated connect-rate view (unlike Call Activity above, which also offers
-// a raw-count mode) — "connected" here means 45s+ of talk time, a lower bar
-// than Call Activity's 60s+ since the ask was specifically "spoke on the phone
-// for anything of substance", not a full qualifying conversation. Same
-// {calls, calls_over45} shape recomputeCallData() already produces, same
-// group/lead-type pattern as Call Activity, so it reuses that machinery
-// rather than re-deriving it.
+// A dedicated connect-rate view (unlike Call Activity above, which counts raw
+// calls) — measured per CONTACT (a unique phone number an SDR dialed, grouped
+// across every call to that number regardless of day), not per call. A repeat
+// dial to reach the same lead used to count as its own separate failure,
+// dragging down the rate of SDRs who simply need more attempts to connect;
+// now a contact is "connected" if its LAST call on record ran 50s+, no matter
+// how many shorter calls came before it. See recomputeCallData()'s
+// contacts/contacts_connected fields. Same group/lead-type dropdown pattern as
+// Call Activity, so it reuses that machinery rather than re-deriving it.
 function aircallConnectGroups() {
   const id = 'chartAircallConnect';
   const groupEl = document.getElementById('teamsComparison-' + id);
@@ -6255,9 +6297,9 @@ function renderAircallConnectChart(days) {
     const data = buckets.map(b => {
       const present = b.days.filter(d => callsSource && callsSource[d]);
       if (!present.length) return null;
-      const total = sumCallsMetricFrom(callsSource, present, g.key, 'calls');
+      const total = sumCallsMetricFrom(callsSource, present, g.key, 'contacts');
       if (!total) return 0;
-      const connected = sumCallsMetricFrom(callsSource, present, g.key, 'calls_over45');
+      const connected = sumCallsMetricFrom(callsSource, present, g.key, 'contacts_connected');
       return parseFloat((connected / total * 100).toFixed(1));
     });
     return barMode
