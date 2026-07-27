@@ -1672,6 +1672,35 @@
         </div>
         <canvas id="chartAircallConnect"></canvas>
       </div>
+      <div class="chart-card full" id="chartCardLeadCallCoverage" data-chart-id="chartLeadCallCoverage">
+        <div class="chart-header">
+          <span class="chart-title">Lead Call Coverage <span class="goal-info" id="info-chartLeadCallCoverage" title="Of the leads assigned that day/bucket, what share did the owning SDR actually dial at all? ANY call counts here — duration is irrelevant, unlike the Connect Rate chart above; a 3-second dial that rang once counts the same as an hour-long conversation. Leads created before the Call History export's own earliest call are excluded from both sides (can't tell if they were called or not), same reliability gate Speed-to-Lead uses. Raw Counts = Leads Assigned vs Leads Called as separate bars/lines per group; % Leads Called = Leads Called ÷ Leads Assigned. Bucketed by the day the LEAD was created (not when it was eventually called), so a lead worked this week stays in this week's cohort even if the covering call landed later. Group dropdown: Combined, US vs OUS Teams, or Per SDR. B2B/B2C/All dropdown is a chart-local filter, independent of the global Leads: filter. Requires a Call History CSV.">ⓘ</span></span>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartLeadCallCoverage"></div>
+            <select class="chart-granularity" id="metric-chartLeadCallCoverage" onchange="renderCharts(getFilteredDays())">
+              <option value="raw" selected>Raw Counts</option>
+              <option value="pct">% Leads Called (100% view)</option>
+            </select>
+            <select class="chart-granularity" id="teamsComparison-chartLeadCallCoverage" onchange="renderCharts(getFilteredDays())">
+              <option value="off" selected>Group: Combined</option>
+              <option value="on">Group: US vs OUS Teams</option>
+              <option value="sdr">Group: Per SDR</option>
+            </select>
+            <select class="chart-granularity" id="granularity-chartLeadCallCoverage" onchange="renderCharts(getFilteredDays())">
+              <option value="daily">Daily</option>
+              <option value="weekly" selected>Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <select class="chart-granularity" id="leadType-chartLeadCallCoverage" onchange="renderCharts(getFilteredDays())">
+              <option value="all">All leads</option>
+              <option value="business">B2B only</option>
+              <option value="b2c">B2C only</option>
+            </select>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartLeadCallCoverage')" title="Expand">&#10530;</button>
+          </div>
+        </div>
+        <canvas id="chartLeadCallCoverage"></canvas>
+      </div>
     </div>
       </div>
     </div>
@@ -2364,7 +2393,7 @@ function matchSpeedToLead() {
     SDRS.forEach(s => {
       (rawByDay[day][s.key] || []).forEach(r => {
         delete r._speedToLeadMinutes; delete r._speedToLeadMatched; delete r._speedToLeadMismatch; delete r._speedToLeadEligible;
-        delete r._speedToLeadCallUtcMs; delete r._speedToLeadCreatedUtcMs;
+        delete r._speedToLeadCallUtcMs; delete r._speedToLeadCreatedUtcMs; delete r._calledAtAll;
         r._onHours = isOnHours(s.key, toUTCMillis(r['Creation Date']));
       });
     });
@@ -2407,9 +2436,15 @@ function matchSpeedToLead() {
     const calls = callsByPhone.get(phoneDigits);
     entries.forEach((entry, idx) => {
       entry.row._speedToLeadMatched = false;
+      entry.row._calledAtAll = false;
       if (!entry.row._speedToLeadEligible || !calls) return;
       const windowEnd = idx + 1 < entries.length ? entries[idx + 1].creationUtcMs : Infinity;
       const candidates = calls.filter(c => c.utcMs >= entry.creationUtcMs && c.utcMs < windowEnd);
+      // _calledAtAll: did the OWNING SDR ever dial this lead's number at all,
+      // any duration, any time later — no 48h reliability cap, since that cap
+      // exists only to keep the Speed-to-Lead MINUTE value honest, not to
+      // decide whether a call happened. Feeds the Lead Call Coverage chart.
+      entry.row._calledAtAll = candidates.some(c => c.sdrKey === entry.sdrKey);
       if (!candidates.length) return;
       const sameSDR = candidates.find(c => c.sdrKey === entry.sdrKey);
       const call = sameSDR || candidates[0];
@@ -3163,7 +3198,8 @@ function computeMetrics(leads, opts) {
   opts = opts || {};
   if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, non_responsive_terminal: 0, ae_dq: 0, sdr_dq: 0, closed: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, meetings_no_show_denom: 0, meetings_held: 0, meetings_no_show: 0, speed_to_lead_matched: 0, speed_to_lead_eligible: 0, speed_to_lead_mismatch: 0,
     speed_to_lead_on_matched: 0, speed_to_lead_on_eligible: 0,
-    speed_to_lead_off_matched: 0, speed_to_lead_off_eligible: 0 };
+    speed_to_lead_off_matched: 0, speed_to_lead_off_eligible: 0,
+    call_covered: 0, call_eligible: 0 };
   const isAEImpliedMeeting = r => opts.closedImpliesMeeting && r['Sales status'] === 'Closed' && !(r['Meeting Status'] || '').trim();
   // opts.commissionMeetings: used by allDataStrict/allDataStrictB2B (Lead
   // Rules: Strict path) — swaps in isMeetingBookedStrict (a genuine Meeting
@@ -3219,6 +3255,14 @@ function computeMetrics(leads, opts) {
   const speed_to_lead_matched = leads.filter(r => r._speedToLeadMatched).length;
   const speed_to_lead_eligible = leads.filter(r => r._speedToLeadEligible).length;
   const speed_to_lead_mismatch = leads.filter(r => r._speedToLeadMismatch).length;
+  // Lead Call Coverage: of the leads assigned that were even eligible to
+  // check (created after the call log's own earliest call — same reliability
+  // gate as Speed-to-Lead), how many did the owning SDR call at all, any
+  // duration, whenever it happened. No 48h cutoff here — that cap only
+  // protects the Speed-to-Lead MINUTE value from stale matches, not whether
+  // a call occurred.
+  const call_covered = leads.filter(r => r._calledAtAll).length;
+  const call_eligible = leads.filter(r => r._speedToLeadEligible).length;
   // On-hours/off-hours split, per the SDR Lead Routing Logic shift windows —
   // lets Speed-to-Lead be viewed separately for leads that landed during an
   // SDR's on-shift window vs everything else (partner's solo shift + overnight).
@@ -3253,7 +3297,9 @@ function computeMetrics(leads, opts) {
     speed_to_lead_on_matched: onSplit.matched,
     speed_to_lead_on_eligible: onSplit.eligible,
     speed_to_lead_off_matched: offSplit.matched,
-    speed_to_lead_off_eligible: offSplit.eligible
+    speed_to_lead_off_eligible: offSplit.eligible,
+    call_covered,
+    call_eligible
   };
 }
 
@@ -3440,13 +3486,15 @@ function metricsForSelection(dataset, day, view) {
         meetings_not_attended = sum('meetings_not_attended'), meetings_resolved = sum('meetings_resolved'), meetings_no_show_denom = sum('meetings_no_show_denom'), meetings_held = sum('meetings_held'), meetings_no_show = sum('meetings_no_show'),
         speed_to_lead_matched = sum('speed_to_lead_matched'), speed_to_lead_eligible = sum('speed_to_lead_eligible'), speed_to_lead_mismatch = sum('speed_to_lead_mismatch'),
         speed_to_lead_on_matched = sum('speed_to_lead_on_matched'), speed_to_lead_on_eligible = sum('speed_to_lead_on_eligible'),
-        speed_to_lead_off_matched = sum('speed_to_lead_off_matched'), speed_to_lead_off_eligible = sum('speed_to_lead_off_eligible');
+        speed_to_lead_off_matched = sum('speed_to_lead_off_matched'), speed_to_lead_off_eligible = sum('speed_to_lead_off_eligible'),
+        call_covered = sum('call_covered'), call_eligible = sum('call_eligible');
   return {
     leads, meetings, qualified, non_responsive, non_responsive_terminal, ae_dq, sdr_dq, active_pipeline,
     meetings_not_attended, meetings_resolved, meetings_no_show_denom, meetings_held, meetings_no_show,
     speed_to_lead_matched, speed_to_lead_eligible, speed_to_lead_mismatch,
     speed_to_lead_on_matched, speed_to_lead_on_eligible,
     speed_to_lead_off_matched, speed_to_lead_off_eligible,
+    call_covered, call_eligible,
     meeting_rate: leads ? meetings / leads * 100 : 0,
     pct_qualified: leads ? qualified / leads * 100 : 0,
     nr_rate: leads ? non_responsive / leads * 100 : 0
@@ -4463,12 +4511,14 @@ function renderCharts(days) {
   renderNoShowCountChart(days);
   renderCallActivityChart(days);
   renderAircallConnectChart(days);
+  renderLeadCallCoverageChart(days);
   ['chartMeetingRate', 'chartQualPct', 'chartNR', 'chartDQ', 'chartSpeedToLead']
     .forEach(id => updateChartInfoTooltip(id));
   updateChartInfoTooltip('chartMeetingAttendance', true);
   updateChartInfoTooltip('chartNoShowCount', true);
   updateChartInfoTooltip('chartCallActivity', true);
   updateChartInfoTooltip('chartAircallConnect', true);
+  updateChartInfoTooltip('chartLeadCallCoverage', true);
   updateChartInfoTooltip('chartDQReasons', true);
 }
 
@@ -6343,6 +6393,121 @@ function renderAircallConnectChart(days) {
   if (legendEl) {
     legendEl.innerHTML = groups.map(g =>
       `<span class="legend-item"><span class="legend-dot" style="background:${g.color}"></span>${g.label}</span>`
+    ).join('');
+  }
+}
+
+// ─── LEAD CALL COVERAGE ────────────────────────────────────────────────────────
+// "Of the leads assigned, how many did the SDR even dial?" — deliberately
+// duration-blind (unlike Connect Rate above): a 1-second dial counts the same
+// as a 10-minute call, since this chart answers a different question (did
+// outreach happen at all) rather than whether it landed. Reads call_covered/
+// call_eligible off the normal leads dataset (set by matchSpeedToLead() onto
+// each row as _calledAtAll/_speedToLeadEligible), not off the calls-log-keyed
+// allCallsData* structures the two charts above use — so it shares the
+// standard leadType-<id> B2B/B2C/All dropdown pattern (localLeadTypeDataset)
+// instead of the calls-log split.
+function leadCallCoverageGroups(id) {
+  const groupEl = document.getElementById('teamsComparison-' + id);
+  const val = groupEl ? groupEl.value : 'off';
+  if (val === 'on') return TEAM_GROUPS.map(g => ({ key: g.members, label: g.label, color: g.color }));
+  if (val === 'sdr') return SDRS.filter(s => selectedSDRs.has(s.key)).map(s => ({ key: s.key, label: s.label, color: s.color }));
+  return [{ key: Array.from(selectedSDRs), label: 'Team', color: COLORS.Team }];
+}
+function renderLeadCallCoverageChart(days) {
+  const id = 'chartLeadCallCoverage';
+  const cardEl = document.getElementById('chartCardLeadCallCoverage');
+  if (!rawCalls) {
+    if (cardEl) cardEl.style.display = 'none';
+    if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+    const legendEl = document.getElementById('legend-' + id);
+    if (legendEl) legendEl.innerHTML = '';
+    return;
+  }
+  if (cardEl) cardEl.style.display = '';
+
+  const dataSource = localLeadTypeDataset(id);
+  const metricEl = document.getElementById('metric-' + id);
+  const pct = metricEl ? metricEl.value === 'pct' : false;
+  const granularity = chartGranularity(id);
+  const buckets = bucketize(days, granularity);
+  const labels = buckets.map(b => b.label);
+  const groups = leadCallCoverageGroups(id);
+  const barMode = isBarMode();
+
+  const bucketValue = (b, view, key) => {
+    const present = b.days.filter(d => dataSource[d]);
+    if (!present.length) return null;
+    return sumMetricFrom(dataSource, present, view, key);
+  };
+
+  let datasets;
+  if (pct) {
+    datasets = groups.map(g => {
+      const data = buckets.map(b => {
+        const eligible = bucketValue(b, g.key, 'call_eligible');
+        if (eligible == null) return null;
+        if (!eligible) return 0;
+        const covered = bucketValue(b, g.key, 'call_covered');
+        return parseFloat((covered / eligible * 100).toFixed(1));
+      });
+      return barMode
+        ? { label: g.label, data, backgroundColor: g.color, borderRadius: 3, borderWidth: 0 }
+        : { label: g.label, data, borderColor: g.color, backgroundColor: g.color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false };
+    });
+  } else {
+    // Two bars/lines per group: total assigned (lighter) and covered (solid) —
+    // shown side by side, never stacked, since "called" is a subset of
+    // "assigned" and stacking would double-count.
+    datasets = groups.flatMap(g => {
+      const assigned = buckets.map(b => bucketValue(b, g.key, 'call_eligible'));
+      const covered = buckets.map(b => bucketValue(b, g.key, 'call_covered'));
+      return barMode
+        ? [
+            { label: `${g.label} — Leads Assigned`, data: assigned, backgroundColor: g.color + '4d', borderRadius: 3, borderWidth: 0 },
+            { label: `${g.label} — Leads Called`, data: covered, backgroundColor: g.color, borderRadius: 3, borderWidth: 0 }
+          ]
+        : [
+            { label: `${g.label} — Leads Assigned`, data: assigned, borderColor: g.color, backgroundColor: g.color + '11', tension: 0, pointRadius: 2, pointHoverRadius: 4, fill: false, borderWidth: 1.5, borderDash: [5, 3], spanGaps: false },
+            { label: `${g.label} — Leads Called`, data: covered, borderColor: g.color, backgroundColor: g.color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false }
+          ];
+    });
+  }
+
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id).getContext('2d');
+  const f = chartFontSizes(id);
+  charts[id] = new Chart(ctx, {
+    type: barMode ? 'bar' : 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
+          titleColor: '#ffffff', bodyColor: '#cfd2e3',
+          titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody },
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}${pct ? '%' : ''}` }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' } },
+        y: {
+          ticks: { color: '#5b5f78', font: { size: f.tick }, precision: pct ? undefined : 0, callback: v => pct ? `${v}%` : v },
+          grid: { color: '#e4e6ef' }, beginAtZero: true, max: pct ? 100 : undefined
+        }
+      }
+    }
+  });
+
+  const legendEl = document.getElementById('legend-' + id);
+  if (legendEl) {
+    const items = pct ? groups.map(g => ({ label: g.label, color: g.color })) : datasets.map(d => ({ label: d.label, color: d.backgroundColor || d.borderColor }));
+    legendEl.innerHTML = items.map(it =>
+      `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
     ).join('');
   }
 }
