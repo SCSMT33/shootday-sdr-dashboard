@@ -1082,6 +1082,11 @@
             </select>
             <select class="chart-granularity" id="marketRangeSelect" title="How much history the trend charts below show." onchange="saveMarketRange(this.value)">
             </select>
+            <label class="chart-cumulative-toggle" title="On (default): these charts count SDR-owned leads only, same as the Market table's Total SDR/Total AE split. Off: also folds in current-era AE production (data/ae-current.csv) across every tier — the >1k/complex deals AEs run in parallel, plus any SDR-tier leads that went straight to an AE instead — so the charts show the whole company's output. With Pre-SDR baseline on, the AE-era comparison line/bars widen to all 4 tiers too (not just <1k/incomplete), so the two stay a fair before/after either way.">
+              <input type="checkbox" id="marketSdrOnlyToggle" checked onchange="saveMarketSdrOnly(this.checked)">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">SDR only</span>
+            </label>
             <label class="chart-cumulative-toggle" title="Extends each chart back through the pre-SDR AE era (from the committed historical dataset) for a before/after comparison. AE-era months are muted and labeled '(AE)' — it's the whole company, not just US/OUS, since that split didn't exist yet. May 2026 (the transition month — AEs through May 18, SDRs after) combines both eras into one true total. Dashed line segments = AE-era portion of a rate line.">
               <input type="checkbox" id="marketBaselineToggle" onchange="saveMarketBaseline(this.checked)">
               <span class="toggle-track"></span>
@@ -7327,12 +7332,19 @@ function marketCleanB2BRows(periodKey, tzBasis, sdrKeys, granularity) {
 // AE splits close to evenly), so a per-AE label would misattribute real
 // leads either way — a per-lead location doesn't have that problem. Same
 // clean-B2B rule as the SDR rows (marketLeadTypeMatches + !isLeadExcluded).
-function marketAECurrentRows(monthKey, tzBasis, teamKey) {
+function marketAECurrentRows(periodKey, tzBasis, teamKey, granularity) {
+  granularity = granularity || 'monthly';
   if (!rawAECurrent) return [];
   return rawAECurrent.filter(r => {
     const raw = (r['Creation Date'] || '').trim();
-    const mk = tzBasis === 'eest' ? raw.slice(0, 7) : toDubaiDayKey(raw).slice(0, 7);
-    if (mk !== monthKey || !marketLeadTypeMatches(r) || isLeadExcluded(r)) return false;
+    let period;
+    if (granularity === 'weekly') {
+      const dayKey = toDubaiDayKey(raw);
+      period = dayKey ? dubaiWeekStart(dayKey) : null;
+    } else {
+      period = tzBasis === 'eest' ? raw.slice(0, 7) : toDubaiDayKey(raw).slice(0, 7);
+    }
+    if (period !== periodKey || !marketLeadTypeMatches(r) || isLeadExcluded(r)) return false;
     const isUS = (r['Country'] || '').trim() === 'United States';
     return teamKey === 'US' ? isUS : !isUS;
   });
@@ -7591,6 +7603,20 @@ function saveMarketBaseline(checked) {
   try { localStorage.setItem('sdr_market_baseline', checked ? '1' : '0'); } catch (e) {}
   renderMarketCharts();
 }
+// On (default) = current-era numbers are SDR-owned leads only, matching the
+// Market table's Total SDR/Total AE split. Off = also folds in current-era
+// AE production (data/ae-current.csv, every tier) into those same numbers —
+// the >1k/complex deals AEs run in parallel, plus any SDR-tier leads that
+// leaked to an AE instead (see the Market table's Total SDR flag) — so the
+// three trend charts show the whole company's output, not just the SDR
+// team's slice of it.
+function marketSdrOnly() {
+  try { return localStorage.getItem('sdr_market_sdr_only') !== '0'; } catch (e) { return true; }
+}
+function saveMarketSdrOnly(checked) {
+  try { localStorage.setItem('sdr_market_sdr_only', checked ? '1' : '0'); } catch (e) {}
+  renderMarketCharts();
+}
 function marketMonthlySeries(monthKeys, tzBasis) { return marketPeriodSeries(monthKeys, tzBasis, 'monthly'); }
 // Generalized version of marketMonthlySeries — periodKeys are month keys
 // ('2026-06') or week-start keys ('2026-06-06') depending on granularity.
@@ -7598,13 +7624,18 @@ function marketMonthlySeries(monthKeys, tzBasis) { return marketPeriodSeries(mon
 // periodKey) so every downstream consumer — marketSdrMetricsForSplit,
 // the sdrByMonth lookup in renderMarketCharts, etc. — needs no changes to
 // support weekly buckets; it's just an opaque period identifier to them.
-function marketPeriodSeries(periodKeys, tzBasis, granularity) {
+// includeAECurrent (the "SDR only" toggle, inverted): when true, every tier
+// also picks up current-era AE production (data/ae-current.csv) for that
+// team/period — country-attributed, same as the Market table's Total AE row
+// — not just >1k/complex, so a leaked SDR-tier lead (routing lag) counts too.
+function marketPeriodSeries(periodKeys, tzBasis, granularity, includeAECurrent) {
   return periodKeys.map(monthKey => {
     const teamMetrics = {};
     TEAM_GROUPS.forEach(team => {
       const tierMetrics = {};
       MARKET_TIERS.forEach(t => {
-        const rows = marketCleanB2BRows(monthKey, tzBasis, team.members, granularity).filter(r => marketRequestTier(r) === t.key);
+        let rows = marketCleanB2BRows(monthKey, tzBasis, team.members, granularity).filter(r => marketRequestTier(r) === t.key);
+        if (includeAECurrent) rows = rows.concat(marketAECurrentRows(monthKey, tzBasis, team.key, granularity).filter(r => marketRequestTier(r) === t.key));
         tierMetrics[t.key] = marketMetrics(rows);
       });
       teamMetrics[team.key] = { tiers: tierMetrics, total: marketMergeMetrics(MARKET_TIERS.map(t => tierMetrics[t.key])) };
@@ -7655,7 +7686,18 @@ function aeBaselineMonthlySeries(tzBasis) { return aeBaselineSeriesForPeriod(tzB
 // bound by this — they go through aeCleanB2BByMonth directly, not this
 // function, and are meant to show the full historical span regardless.
 const AE_BASELINE_TREND_CUTOFF = { monthly: '2026-01', weekly: '2026-01-01' };
-function aeBaselineSeriesForPeriod(tzBasis, granularity) {
+// overallTierKeys: which tiers `overall` sums — defaults to the two SDR-scope
+// tiers (MARKET_SDR_SCOPE_TIERS), matching aeRecentLeadToDealPct()'s summary
+// card and the trend charts' default "SDR only" comparison: same product
+// scope on both sides of the before/after line, not diluted by >1k/complex
+// deals the SDR side never touches. renderMarketCharts passes all 4 tiers
+// instead when the "SDR only" toggle is off — with AE-current production
+// now folded into the current-era side across every tier too, the fair
+// comparison widens to match: whole company then vs. whole company now.
+// `tiers` below is always the full per-tier breakdown regardless, for
+// Tier-split mode, which reads it directly and isn't affected by this.
+function aeBaselineSeriesForPeriod(tzBasis, granularity, overallTierKeys) {
+  overallTierKeys = overallTierKeys || MARKET_SDR_SCOPE_TIERS;
   const byPeriod = aeCleanB2BByPeriod(tzBasis, granularity);
   const cutoff = AE_BASELINE_TREND_CUTOFF[granularity] || AE_BASELINE_TREND_CUTOFF.monthly;
   const result = {};
@@ -7664,16 +7706,7 @@ function aeBaselineSeriesForPeriod(tzBasis, granularity) {
     const rows = byPeriod[pk];
     const tiers = {};
     MARKET_TIERS.forEach(t => { tiers[t.key] = marketMetrics(rows.filter(r => marketRequestTier(r) === t.key)); });
-    // overall = sum of the two SDR-scope tiers only (MARKET_SDR_SCOPE_TIERS)
-    // — untyped leads AND >1k/complex are both excluded, the same way the
-    // Market table excludes untyped leads from every SDR team's Total, so
-    // the trend charts' Pre-SDR baseline stays apples-to-apples with the
-    // SDR-era numbers: same product scope, not just a wider historical
-    // population that happens to include request types the SDR team has
-    // never worked. `tiers` below still carries all 4 for Tier-split mode,
-    // where showing an AE-era >1k/complex bar next to a always-0 SDR one is
-    // informative, not misleading, since it's clearly its own tier row.
-    result[pk] = { overall: marketMergeMetrics(MARKET_SDR_SCOPE_TIERS.map(k => tiers[k])), tiers };
+    result[pk] = { overall: marketMergeMetrics(overallTierKeys.map(k => tiers[k])), tiers };
   });
   return result;
 }
@@ -7811,17 +7844,24 @@ function renderMarketCharts() {
   const baselineToggle = document.getElementById('marketBaselineToggle');
   const baselineOn = marketBaselineOn();
   if (baselineToggle) baselineToggle.checked = baselineOn;
+  const sdrOnlyToggle = document.getElementById('marketSdrOnlyToggle');
+  const sdrOnly = marketSdrOnly();
+  if (sdrOnlyToggle) sdrOnlyToggle.checked = sdrOnly;
 
   const tzBasis = marketTzBasis();
-  const aeSeries = baselineOn ? aeBaselineSeriesForPeriod(tzBasis, granularity) : {};
+  // When "SDR only" is off, the AE-era comparison widens to all 4 tiers too
+  // (not just <1k/incomplete) — the current-era side now includes AE
+  // production across every tier, so the fair "before" reference is the
+  // AE era's full population, not just its SDR-scope subset.
+  const aeSeries = baselineOn ? aeBaselineSeriesForPeriod(tzBasis, granularity, sdrOnly ? MARKET_SDR_SCOPE_TIERS : MARKET_TIERS.map(t => t.key)) : {};
   const n = parseInt(marketRangeMode(granularity), 10) || MARKET_RANGE_OPTIONS[granularity][0].value;
   const sdrPeriods = marketAvailablePeriods(granularity);
   const periodSet = new Set(sdrPeriods);
   if (baselineOn) Object.keys(aeSeries).forEach(pk => periodSet.add(pk));
   const periods = [...periodSet].sort().slice(-n);
 
-  const sdrOnlyPeriods = periods.filter(pk => sdrPeriods.includes(pk));
-  const sdrSeries = marketPeriodSeries(sdrOnlyPeriods, tzBasis, granularity);
+  const periodsWithSdrData = periods.filter(pk => sdrPeriods.includes(pk));
+  const sdrSeries = marketPeriodSeries(periodsWithSdrData, tzBasis, granularity, !sdrOnly);
   const sdrByPeriod = {};
   sdrSeries.forEach(s => { sdrByPeriod[s.monthKey] = s; });
 
