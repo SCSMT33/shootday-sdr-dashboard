@@ -7390,12 +7390,16 @@ function hexToRgbTriplet(hex) {
 // AE-sourced rows (>1k/complex tiers, Total AE) a distinct dark blue so
 // they read as "brought in by an AE" at a glance, separate from the team
 // background tint above (which marks US/OUS, a different axis entirely).
+// opts.flag: short tooltip text — renders a small ⓘ right after the label,
+// for a one-off caveat on this specific row/month (e.g. some of what should
+// be here went to an AE instead). Omit for the normal case; nothing shows.
 function marketRowHtml(label, m, opts) {
   opts = opts || {};
   const rowStyle = opts.tint ? ` style="background:rgba(${hexToRgbTriplet(opts.tint.color)},${opts.tint.alpha})"` : '';
   const valueStyle = opts.textColor ? ` style="color:${opts.textColor}"` : '';
+  const flag = opts.flag ? ` <span class="goal-info" style="font-size:11px" title="${escapeHtml(opts.flag)}">ⓘ</span>` : '';
   return `<tr${opts.total ? ' class="mandate-kpi-total"' : ''}${rowStyle}>
-    <td class="mandate-kpi-name"${opts.indent ? ' style="padding-left:24px"' : ''}>${escapeHtml(label)}</td>
+    <td class="mandate-kpi-name"${opts.indent ? ' style="padding-left:24px"' : ''}>${escapeHtml(label)}${flag}</td>
     <td${valueStyle}>${marketCountCell(m.nbrBL, m)}</td>
     <td${valueStyle}>${marketCountCell(m.qalBL, m)}</td>
     <td${valueStyle}>${marketPctCell(m.pctQal)}</td>
@@ -7464,10 +7468,16 @@ function renderMarketSection() {
     const teamTotal = marketMergeMetrics([sub1, sub2]);
     teamTotals.push(teamTotal);
 
+    // Routing-lag leak: some SDR-tier (<1k/incomplete) leads went straight to
+    // an AE instead, mostly a May/June handoff artifact (largely gone by
+    // July) — not folded into Total SDR, just flagged when it's nonzero.
+    const leakedToAE = marketAECurrentRows(monthKey, tzBasis, team.key).filter(r => ['lt1k', 'incomplete'].includes(marketRequestTier(r))).length;
+    const sdrFlag = leakedToAE ? `${leakedToAE} lead${leakedToAE === 1 ? '' : 's'} in these tiers went to an AE instead, not counted here.` : null;
+
     bodyRows += `<tr><td class="mandate-kpi-name" colspan="12" style="padding-top:16px">${escapeHtml(team.label)}</td></tr>`;
     MARKET_TIERS.forEach((t, i) => {
       bodyRows += marketRowHtml(t.label, tierMetrics[t.key], { indent: true, textColor: AE_AWARE_TIERS.has(t.key) ? COLORS.AECurrent : null });
-      if (i === 1) bodyRows += marketRowHtml('Total SDR', sub1, { indent: true, total: true, tint: { color: team.color, alpha: 0.05 } });
+      if (i === 1) bodyRows += marketRowHtml('Total SDR', sub1, { indent: true, total: true, tint: { color: team.color, alpha: 0.05 }, flag: sdrFlag });
       if (i === 3) bodyRows += marketRowHtml('Total AE', sub2, { indent: true, total: true, tint: { color: team.color, alpha: 0.05 }, textColor: COLORS.AECurrent });
     });
     bodyRows += marketRowHtml(`Total ${team.label.replace(' Team', '')}`, teamTotal, { total: true, tint: { color: team.color, alpha: 0.11 } });
