@@ -1655,7 +1655,7 @@
     <div class="mandate-section" id="coachingSection">
       <div class="mandate-header" onclick="toggleCoachingSection()">
         <div class="mandate-header-left">
-          <span class="mandate-title">SDR Coaching <span class="goal-info" title="A running coaching plan per SDR: their current focus area, freeform notes, and up to three action items with due dates. Saved to this browser (localStorage) — click Save to persist your edits, or they'll be lost on refresh.">ⓘ</span></span>
+          <span class="mandate-title">SDR Coaching and Initiatives <span class="goal-info" title="A running coaching plan per SDR: their current focus area, freeform notes, and up to three action items with due dates. Saved to this browser (localStorage) — click Save to persist your edits, or they'll be lost on refresh.">ⓘ</span></span>
           <span class="mandate-sub">Focus areas, notes, and action items per SDR — click Save to keep changes across a refresh</span>
         </div>
         <span class="mandate-chevron">&#9654;</span>
@@ -1665,6 +1665,15 @@
         <div class="coaching-save-row">
           <button class="coaching-save-btn" onclick="event.stopPropagation(); saveCoachingPlan(true)">Save</button>
           <span class="coaching-save-note" id="coachingSaveNote"></span>
+        </div>
+
+        <div class="mandate-subheading-row" style="margin-top:24px">
+          <div class="mandate-subheading">Initiatives <span class="goal-info" title="Same idea as SDR Coaching above, but for team/company-wide initiatives instead of a person — up to 3 at a time, each with a focus, notes, and up to three action items with due dates. Saved to this browser (localStorage) — click Save to persist your edits.">ⓘ</span></div>
+        </div>
+        <div style="overflow-x:auto"><table class="coaching-table" id="initiativesTable"></table></div>
+        <div class="coaching-save-row">
+          <button class="coaching-save-btn" onclick="event.stopPropagation(); saveInitiativesPlan(true)">Save</button>
+          <span class="coaching-save-note" id="initiativesSaveNote"></span>
         </div>
       </div>
     </div>
@@ -8860,6 +8869,73 @@ function toggleCoachingSection() {
   document.getElementById('coachingSection').classList.toggle('expanded');
 }
 
+// ─── INITIATIVES ──────────────────────────────────────────────────────────────
+// Same shape as SDR Coaching above (focus/notes/up-to-3 actions with due
+// dates), just 3 fixed rows ("Initiative 1/2/3") instead of one per SDR —
+// reuses the same .coaching-* table/input styling so the two sections read
+// as one family. Separate localStorage key and Save button — logically
+// distinct data from the per-SDR coaching plan above.
+const INITIATIVE_SLOTS = [1, 2, 3];
+function initiativesState() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('sdr_initiatives') || '{}'); } catch (e) {}
+  const state = {};
+  INITIATIVE_SLOTS.forEach(n => {
+    const row = saved[n] || {};
+    const actions = [0, 1, 2].map(i => ({
+      text: (row.actions && row.actions[i] && row.actions[i].text) || '',
+      due: (row.actions && row.actions[i] && row.actions[i].due) || ''
+    }));
+    state[n] = { focus: row.focus || '', notes: row.notes || '', actions };
+  });
+  return state;
+}
+function renderInitiativesTable() {
+  const table = document.getElementById('initiativesTable');
+  if (!table) return;
+  const state = initiativesState();
+  let html = '<thead><tr><th>Initiative</th><th>Focus</th><th>Notes</th><th>Actions</th><th>Due Date</th></tr></thead><tbody>';
+  INITIATIVE_SLOTS.forEach(n => {
+    const row = state[n];
+    const actionRows = (labelCol) => [0, 1, 2].map(i => {
+      if (labelCol === 'text') {
+        return `<div class="coaching-action-row"><span class="coaching-action-num">${i + 1}.</span><input type="text" class="coaching-input" id="initiativeAction-${n}-${i}" value="${escapeHtml(row.actions[i].text)}" placeholder="Action item"></div>`;
+      }
+      return `<div class="coaching-action-row"><input type="date" class="coaching-input" id="initiativeDue-${n}-${i}" value="${escapeHtml(row.actions[i].due)}"></div>`;
+    }).join('');
+    html += `<tr>
+      <td class="coaching-sdr-name">Initiative ${n}</td>
+      <td><input type="text" class="coaching-input" id="initiativeFocus-${n}" value="${escapeHtml(row.focus)}" placeholder="e.g. Speed-to-lead process"></td>
+      <td><textarea class="coaching-textarea" id="initiativeNotes-${n}" placeholder="Notes">${escapeHtml(row.notes)}</textarea></td>
+      <td>${actionRows('text')}</td>
+      <td>${actionRows('date')}</td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  table.innerHTML = html;
+}
+function saveInitiativesPlan(showNote) {
+  const state = {};
+  INITIATIVE_SLOTS.forEach(n => {
+    state[n] = {
+      focus: document.getElementById(`initiativeFocus-${n}`).value,
+      notes: document.getElementById(`initiativeNotes-${n}`).value,
+      actions: [0, 1, 2].map(i => ({
+        text: document.getElementById(`initiativeAction-${n}-${i}`).value,
+        due: document.getElementById(`initiativeDue-${n}-${i}`).value
+      }))
+    };
+  });
+  try { localStorage.setItem('sdr_initiatives', JSON.stringify(state)); } catch (e) {}
+  if (showNote) {
+    const note = document.getElementById('initiativesSaveNote');
+    if (note) {
+      note.textContent = 'Saved just now — will still be here after a refresh on this browser.';
+      setTimeout(() => { if (note.textContent.startsWith('Saved just now')) note.textContent = ''; }, 4000);
+    }
+  }
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 renderViewTabs();
 loadGoals();
@@ -8871,6 +8947,7 @@ loadReportScope();
 loadCardDetailsToggle();
 loadExcludedAEBaselineOwners();
 renderCoachingTable();
+renderInitiativesTable();
 // One-time migration (2026-07): AE Baselines manually uploaded BEFORE the
 // committed data/ae-baseline.csv existed were smaller partial exports saved
 // in localStorage, and localStorage always wins over the auto-fetch — so
