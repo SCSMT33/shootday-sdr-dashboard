@@ -1649,7 +1649,7 @@
       </div>
       <div class="chart-card full" data-chart-id="chartAircallConnect">
         <div class="chart-header">
-          <span class="chart-title">Aircall Connect Rate <span class="goal-info" id="info-chartAircallConnect" title="Measured per CONTACT (a unique phone number an SDR dialed), not per raw call — grouping every call to that number by that SDR across the whole call log, regardless of which day it landed on. A contact counts as Connected if its LAST call on record (chronologically, however many earlier attempts came first) ran 50 seconds or longer; an earlier long call doesn't save it if the final call on file is short. This keeps a rate from being dragged down just because an SDR needed a few follow-up dials to reach the same lead. Connect Rate = connected contacts ÷ total contacts dialed, per bucket/SDR/team. Bucketed by the day of that contact's first call, so a lead worked this week stays in this week even if the connecting call landed next week. Group dropdown: Combined, US vs OUS Teams, or Per SDR. B2B/B2C/All dropdown is a display split only (by phone-number match against leads) — leads never factor into the denominator. Bar vs line trend follows the dashboard's global Chart Style toggle (top of page). Requires a Call History CSV.">ⓘ</span></span>
+          <span class="chart-title">Aircall Connect Rate <span class="goal-info" id="info-chartAircallConnect" title="Measured per CONTACT (a unique phone number an SDR dialed), not per raw call — grouping every call to that number by that SDR across the whole call log, regardless of which day it landed on. A contact counts as Connected if its BEST (longest) call on record ran 50 seconds or longer, no matter where in the sequence that call falls — a real conversation on an earlier attempt still counts even if a later follow-up call was short. This keeps a rate from being dragged down just because an SDR needed a few follow-up dials to reach the same lead. Connect Rate = connected contacts ÷ total contacts dialed, per bucket/SDR/team. Bucketed by the day of that contact's first call, so a lead worked this week stays in this week even if the connecting call landed next week. Group dropdown: Combined, US vs OUS Teams, or Per SDR. B2B/B2C/All dropdown is a display split only (by phone-number match against leads) — leads never factor into the denominator. Bar vs line trend follows the dashboard's global Chart Style toggle (top of page). Requires a Call History CSV.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartAircallConnect"></div>
             <select class="chart-granularity" id="teamsComparison-chartAircallConnect" onchange="renderCharts(getFilteredDays())">
@@ -2786,10 +2786,13 @@ function recomputeAllData() {
 // Also derives contacts/contacts_connected for the Aircall Connect Rate chart:
 // grouped by (SDR, phone number) across the ENTIRE call log (not just the day
 // in question), so a follow-up call three days later still counts toward the
-// same contact. A contact is "connected" if its LAST call on record (by time,
-// regardless of how many shorter calls came before it) ran 50s or longer —
+// same contact. A contact is "connected" if its BEST call on record (the
+// longest one, no matter where it falls in the sequence) ran 50s or longer —
 // per-call rates were penalizing SDRs who need multiple attempts to reach the
 // same lead, since every short follow-up dial counted as its own failure.
+// (Previously used the LAST call instead of the longest — switched because a
+// real conversation on call #2 followed by a 10s "talk tomorrow" call #4
+// shouldn't erase the connect that already happened.)
 const CONNECT_THRESHOLD_SEC = 50;
 function recomputeCallData() {
   allCallsDataAll = {};
@@ -2840,8 +2843,8 @@ function recomputeCallData() {
     calls.sort((a, b) => a.utcMs - b.utcMs);
     const sdrKey = calls[0].sdrKey;
     const phoneDigits = calls[0].phoneDigits;
-    const last = calls[calls.length - 1];
-    const connected = last.durationSec != null && last.durationSec >= CONNECT_THRESHOLD_SEC;
+    const bestDurationSec = calls.reduce((max, c) => Math.max(max, c.durationSec || 0), 0);
+    const connected = bestDurationSec >= CONNECT_THRESHOLD_SEC;
     const day = dubaiDayKeyFromUTCMs(calls[0].utcMs);
     if (!contactsByDay[day]) contactsByDay[day] = Object.fromEntries(SDRS.map(s => [s.key, []]));
     if (contactsByDay[day][sdrKey]) contactsByDay[day][sdrKey].push({ phoneDigits, connected });
@@ -6264,8 +6267,8 @@ function renderCallActivityChart(days) {
 // across every call to that number regardless of day), not per call. A repeat
 // dial to reach the same lead used to count as its own separate failure,
 // dragging down the rate of SDRs who simply need more attempts to connect;
-// now a contact is "connected" if its LAST call on record ran 50s+, no matter
-// how many shorter calls came before it. See recomputeCallData()'s
+// now a contact is "connected" if its BEST (longest) call on record ran 50s+,
+// wherever that call falls in the sequence. See recomputeCallData()'s
 // contacts/contacts_connected fields. Same group/lead-type dropdown pattern as
 // Call Activity, so it reuses that machinery rather than re-deriving it.
 function aircallConnectGroups() {
