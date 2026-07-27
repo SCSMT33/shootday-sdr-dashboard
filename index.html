@@ -1356,6 +1356,64 @@
         </div>
         <canvas id="chartActivity"></canvas>
       </div>
+      <div class="chart-card full" data-chart-id="chartLeadToClosed">
+        <div class="chart-header">
+          <span class="chart-title">Lead to Closed Rate % <span class="goal-info" id="info-chartLeadToClosed" title="Closed deals ÷ Lead Volume per bucket, by creation-date cohort — summed first, then divided (never an average of daily rates, which over-weights thin days). Recent buckets always read low until their leads have had time to close (deals typically take weeks), same caveat as the Lead to Deal summary card up top. Dashed Pace = trailing 3-bucket rolling rate; dashed AE Baseline (when on) = the pre-SDR historical Lead to Deal rate.">ⓘ</span></span>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartLeadToClosed"></div>
+            <select class="chart-granularity" id="teamsComparison-chartLeadToClosed" onchange="renderCharts(getFilteredDays())">
+              <option value="off">Teams comparison: Off</option>
+              <option value="on">Teams comparison: On</option>
+            </select>
+            <select class="chart-granularity" id="granularity-chartLeadToClosed" onchange="renderCharts(getFilteredDays())">
+              <option value="daily">Daily</option>
+              <option value="weekly" selected>Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="modeToggle-chartLeadToClosed" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Combined</span>
+            </label>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="excludeCurrentWeek-chartLeadToClosed" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Exclude current week</span>
+            </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartLeadToClosed')" title="Expand">&#10530;</button>
+          </div>
+        </div>
+        <canvas id="chartLeadToClosed"></canvas>
+      </div>
+      <div class="chart-card full" data-chart-id="chartLeadToMeetingDone">
+        <div class="chart-header">
+          <span class="chart-title">Lead to Meeting Done Rate % <span class="goal-info" id="info-chartLeadToMeetingDone" title="Meeting Status = Meeting Done specifically (a completed meeting — not still-upcoming Scheduled, and not Rejected/Not Atended), or an Instant Close counted the same way the summary cards do, ÷ Lead Volume per bucket, summed first then divided. Different from the Meeting Booked Rate chart above it, which counts a meeting the moment it's booked regardless of whether it actually happens. Dashed Pace = trailing 3-bucket rolling rate; dashed AE Baseline (when on) is the pre-SDR historical rate, computed the same Instant-Close-aware way to stay comparable despite Meeting Status being rarely logged back then.">ⓘ</span></span>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartLeadToMeetingDone"></div>
+            <select class="chart-granularity" id="teamsComparison-chartLeadToMeetingDone" onchange="renderCharts(getFilteredDays())">
+              <option value="off">Teams comparison: Off</option>
+              <option value="on">Teams comparison: On</option>
+            </select>
+            <select class="chart-granularity" id="granularity-chartLeadToMeetingDone" onchange="renderCharts(getFilteredDays())">
+              <option value="daily">Daily</option>
+              <option value="weekly" selected>Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="modeToggle-chartLeadToMeetingDone" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Combined</span>
+            </label>
+            <label class="chart-cumulative-toggle">
+              <input type="checkbox" id="excludeCurrentWeek-chartLeadToMeetingDone" onchange="renderCharts(getFilteredDays())">
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Exclude current week</span>
+            </label>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartLeadToMeetingDone')" title="Expand">&#10530;</button>
+          </div>
+        </div>
+        <canvas id="chartLeadToMeetingDone"></canvas>
+      </div>
       <div class="chart-card full" data-chart-id="chartMeetingRate">
         <div class="chart-header">
           <span class="chart-title">Meeting Booked Rate % <span class="goal-info" id="info-chartMeetingRate" title="Meetings Booked ÷ Lead Volume per bucket — summed first, then divided (never an average of daily rates, which over-weights thin days). Dashed Target = your Meeting Booked Rate goal; dashed Pace = trailing 3-bucket rolling rate.">ⓘ</span></span>
@@ -3491,7 +3549,8 @@ function metricsForSelection(dataset, day, view) {
         speed_to_lead_matched = sum('speed_to_lead_matched'), speed_to_lead_eligible = sum('speed_to_lead_eligible'), speed_to_lead_mismatch = sum('speed_to_lead_mismatch'),
         speed_to_lead_on_matched = sum('speed_to_lead_on_matched'), speed_to_lead_on_eligible = sum('speed_to_lead_on_eligible'),
         speed_to_lead_off_matched = sum('speed_to_lead_off_matched'), speed_to_lead_off_eligible = sum('speed_to_lead_off_eligible'),
-        call_covered = sum('call_covered'), call_eligible = sum('call_eligible');
+        call_covered = sum('call_covered'), call_eligible = sum('call_eligible'),
+        closed = sum('closed');
   return {
     leads, meetings, qualified, non_responsive, non_responsive_terminal, ae_dq, sdr_dq, active_pipeline,
     meetings_not_attended, meetings_resolved, meetings_no_show_denom, meetings_held, meetings_no_show,
@@ -3499,6 +3558,7 @@ function metricsForSelection(dataset, day, view) {
     speed_to_lead_on_matched, speed_to_lead_on_eligible,
     speed_to_lead_off_matched, speed_to_lead_off_eligible,
     call_covered, call_eligible,
+    closed,
     meeting_rate: leads ? meetings / leads * 100 : 0,
     pct_qualified: leads ? qualified / leads * 100 : 0,
     nr_rate: leads ? non_responsive / leads * 100 : 0
@@ -4507,6 +4567,8 @@ function renderCharts(days) {
   makeChart('chartMeetingRate', chartDays, { type: 'rate', num: 'meetings', denom: 'leadVol', goal: d.goalMeetingRate, pace: true, aeBaseline: ae ? ae.overall.meeting_rate : null });
   makeChart('chartQualPct', chartDays, { type: 'rate', num: 'qualified', denom: 'leadVol', goal: d.goalPctQual, pace: true, aeBaseline: ae ? ae.overall.pct_qualified : null });
   makeChart('chartNR', chartDays, { type: 'rate', num: 'non_responsive', denom: 'leadVol', goal: d.goalNRRate, pace: true, aeBaseline: ae ? ae.overall.nr_rate : null });
+  makeChart('chartLeadToClosed', chartDays, { type: 'rate', num: 'closed', denom: 'leadVol', pace: true, aeBaseline: ae && ae.overall.leads ? parseFloat((ae.overall.closed / ae.overall.leads * 100).toFixed(1)) : null });
+  makeChart('chartLeadToMeetingDone', chartDays, { type: 'rate', num: 'meetings_held', denom: 'leadVol', pace: true, aeBaseline: ae && ae.overall.leads ? parseFloat((ae.overall.meetings_held / ae.overall.leads * 100).toFixed(1)) : null });
   renderDQChart(chartDays);
   renderDQReasonsChart(days);
   renderActivityChart(chartDays, d, ae);
@@ -4516,7 +4578,7 @@ function renderCharts(days) {
   renderCallActivityChart(days);
   renderAircallConnectChart(days);
   renderLeadCallCoverageChart(days);
-  ['chartMeetingRate', 'chartQualPct', 'chartNR', 'chartDQ', 'chartSpeedToLead']
+  ['chartMeetingRate', 'chartQualPct', 'chartNR', 'chartDQ', 'chartSpeedToLead', 'chartLeadToClosed', 'chartLeadToMeetingDone']
     .forEach(id => updateChartInfoTooltip(id));
   updateChartInfoTooltip('chartMeetingAttendance', true);
   updateChartInfoTooltip('chartNoShowCount', true);
