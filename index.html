@@ -1647,6 +1647,31 @@
         </div>
         <canvas id="chartCallActivity"></canvas>
       </div>
+      <div class="chart-card full" data-chart-id="chartAircallConnect">
+        <div class="chart-header">
+          <span class="chart-title">Aircall Connect Rate <span class="goal-info" id="info-chartAircallConnect" title="Connect = an outbound call with talk time ('duration (in call)') of 45 seconds or more — long enough to indicate an actual conversation happened, not just a pickup-and-hangup. Connect Rate = connects ÷ total outbound calls placed, per bucket/SDR/team (denominator is the SDR's own call volume, not leads received). Group dropdown: Combined, US vs OUS Teams, or Per SDR. B2B/B2C/All dropdown is a display split only (by phone-number match against leads) — leads never factor into the denominator. Bar vs line trend follows the dashboard's global Chart Style toggle (top of page). Requires a Call History CSV.">ⓘ</span></span>
+          <div class="chart-header-right">
+            <div class="chart-legend" id="legend-chartAircallConnect"></div>
+            <select class="chart-granularity" id="teamsComparison-chartAircallConnect" onchange="renderCharts(getFilteredDays())">
+              <option value="off" selected>Group: Combined</option>
+              <option value="on">Group: US vs OUS Teams</option>
+              <option value="sdr">Group: Per SDR</option>
+            </select>
+            <select class="chart-granularity" id="granularity-chartAircallConnect" onchange="renderCharts(getFilteredDays())">
+              <option value="daily">Daily</option>
+              <option value="weekly" selected>Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <select class="chart-granularity" id="leadType-chartAircallConnect" onchange="renderCharts(getFilteredDays())">
+              <option value="all">All leads</option>
+              <option value="business">B2B only</option>
+              <option value="b2c">B2C only</option>
+            </select>
+            <button class="chart-expand-btn" onclick="toggleChartExpand('chartAircallConnect')" title="Expand">&#10530;</button>
+          </div>
+        </div>
+        <canvas id="chartAircallConnect"></canvas>
+      </div>
     </div>
       </div>
     </div>
@@ -2768,7 +2793,8 @@ function recomputeCallData() {
 
   const summarize = calls => ({
     calls: calls.length,
-    calls_over60: calls.filter(c => c.durationSec != null && c.durationSec >= 60).length
+    calls_over60: calls.filter(c => c.durationSec != null && c.durationSec >= 60).length,
+    calls_over45: calls.filter(c => c.durationSec != null && c.durationSec >= 45).length
   });
 
   const byDay = {};
@@ -4385,11 +4411,13 @@ function renderCharts(days) {
   renderMeetingAttendanceChart(days);
   renderNoShowCountChart(days);
   renderCallActivityChart(days);
+  renderAircallConnectChart(days);
   ['chartMeetingRate', 'chartQualPct', 'chartNR', 'chartDQ', 'chartSpeedToLead']
     .forEach(id => updateChartInfoTooltip(id));
   updateChartInfoTooltip('chartMeetingAttendance', true);
   updateChartInfoTooltip('chartNoShowCount', true);
   updateChartInfoTooltip('chartCallActivity', true);
+  updateChartInfoTooltip('chartAircallConnect', true);
   updateChartInfoTooltip('chartDQReasons', true);
 }
 
@@ -6096,7 +6124,8 @@ function callMetricsForSelection(dataset, day, view) {
   if (!parts.length) return null;
   return {
     calls: parts.reduce((a, p) => a + (p.calls || 0), 0),
-    calls_over60: parts.reduce((a, p) => a + (p.calls_over60 || 0), 0)
+    calls_over60: parts.reduce((a, p) => a + (p.calls_over60 || 0), 0),
+    calls_over45: parts.reduce((a, p) => a + (p.calls_over45 || 0), 0)
   };
 }
 function sumCallsMetricFrom(dataset, days, view, key) {
@@ -6167,6 +6196,90 @@ function renderCallActivityChart(days) {
         y: {
           ticks: { color: '#5b5f78', font: { size: f.tick }, precision: pct ? undefined : 0, callback: v => pct ? `${v}%` : v },
           grid: { color: '#e4e6ef' }, beginAtZero: true, max: pct ? 100 : undefined
+        }
+      }
+    }
+  });
+
+  const legendEl = document.getElementById('legend-' + id);
+  if (legendEl) {
+    legendEl.innerHTML = groups.map(g =>
+      `<span class="legend-item"><span class="legend-dot" style="background:${g.color}"></span>${g.label}</span>`
+    ).join('');
+  }
+}
+
+// ─── AIRCALL CONNECT RATE ──────────────────────────────────────────────────────
+// A dedicated connect-rate view (unlike Call Activity above, which also offers
+// a raw-count mode) — "connected" here means 45s+ of talk time, a lower bar
+// than Call Activity's 60s+ since the ask was specifically "spoke on the phone
+// for anything of substance", not a full qualifying conversation. Same
+// {calls, calls_over45} shape recomputeCallData() already produces, same
+// group/lead-type pattern as Call Activity, so it reuses that machinery
+// rather than re-deriving it.
+function aircallConnectGroups() {
+  const id = 'chartAircallConnect';
+  const groupEl = document.getElementById('teamsComparison-' + id);
+  const val = groupEl ? groupEl.value : 'off';
+  if (val === 'on') return TEAM_GROUPS.map(g => ({ key: g.members, label: g.label, color: g.color }));
+  if (val === 'sdr') return SDRS.filter(s => selectedSDRs.has(s.key)).map(s => ({ key: s.key, label: s.label, color: s.color }));
+  return [{ key: Array.from(selectedSDRs), label: 'Team', color: COLORS.Team }];
+}
+function renderAircallConnectChart(days) {
+  const id = 'chartAircallConnect';
+  if (!rawCalls) {
+    if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+    const legendEl = document.getElementById('legend-' + id);
+    if (legendEl) legendEl.innerHTML = '';
+    return;
+  }
+  const leadTypeEl = document.getElementById('leadType-' + id);
+  const leadType = leadTypeEl ? leadTypeEl.value : 'all';
+  const callsSource = leadType === 'business' ? allCallsDataB2B : leadType === 'b2c' ? allCallsDataB2C : allCallsDataAll;
+  const granularity = chartGranularity(id);
+  const buckets = bucketize(days, granularity);
+  const labels = buckets.map(b => b.label);
+  const groups = aircallConnectGroups();
+  const barMode = isBarMode();
+
+  const datasets = groups.map(g => {
+    const data = buckets.map(b => {
+      const present = b.days.filter(d => callsSource && callsSource[d]);
+      if (!present.length) return null;
+      const total = sumCallsMetricFrom(callsSource, present, g.key, 'calls');
+      if (!total) return 0;
+      const connected = sumCallsMetricFrom(callsSource, present, g.key, 'calls_over45');
+      return parseFloat((connected / total * 100).toFixed(1));
+    });
+    return barMode
+      ? { label: g.label, data, backgroundColor: g.color, borderRadius: 3, borderWidth: 0 }
+      : { label: g.label, data, borderColor: g.color, backgroundColor: g.color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false };
+  });
+
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id).getContext('2d');
+  const f = chartFontSizes(id);
+  charts[id] = new Chart(ctx, {
+    type: barMode ? 'bar' : 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
+          titleColor: '#ffffff', bodyColor: '#cfd2e3',
+          titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody },
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}%` }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' } },
+        y: {
+          ticks: { color: '#5b5f78', font: { size: f.tick }, callback: v => `${v}%` },
+          grid: { color: '#e4e6ef' }, beginAtZero: true, max: 100
         }
       }
     }
