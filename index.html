@@ -1649,9 +1649,13 @@
       </div>
       <div class="chart-card full" data-chart-id="chartAircallConnect">
         <div class="chart-header">
-          <span class="chart-title">Aircall Connect Rate <span class="goal-info" id="info-chartAircallConnect" title="Measured per CONTACT (a unique phone number an SDR dialed), not per raw call — grouping every call to that number by that SDR across the whole call log, regardless of which day it landed on. A contact counts as Connected if its BEST (longest) call on record ran 50 seconds or longer, no matter where in the sequence that call falls — a real conversation on an earlier attempt still counts even if a later follow-up call was short. This keeps a rate from being dragged down just because an SDR needed a few follow-up dials to reach the same lead. Connect Rate = connected contacts ÷ total contacts dialed, per bucket/SDR/team. Bucketed by the day of that contact's first call, so a lead worked this week stays in this week even if the connecting call landed next week. Group dropdown: Combined, US vs OUS Teams, or Per SDR. B2B/B2C/All dropdown is a display split only (by phone-number match against leads) — leads never factor into the denominator. Bar vs line trend follows the dashboard's global Chart Style toggle (top of page). Requires a Call History CSV.">ⓘ</span></span>
+          <span class="chart-title">Aircall Connect Rate <span class="goal-info" id="info-chartAircallConnect" title="Measured per CONTACT (a unique phone number an SDR dialed), not per raw call — grouping every call to that number by that SDR across the whole call log, regardless of which day it landed on. A contact counts as Connected if its BEST (longest) call on record ran 50 seconds or longer, no matter where in the sequence that call falls — a real conversation on an earlier attempt still counts even if a later follow-up call was short. This keeps a rate from being dragged down just because an SDR needed a few follow-up dials to reach the same lead. % Connect Rate = connected contacts ÷ total contacts dialed, per bucket/SDR/team; Raw Counts shows both whole numbers instead (Contacts Dialed vs Contacts Connected), side by side. Bucketed by the day of that contact's first call, so a lead worked this week stays in this week even if the connecting call landed next week. Group dropdown: Combined, US vs OUS Teams, or Per SDR. B2B/B2C/All dropdown is a display split only (by phone-number match against leads) — leads never factor into the denominator. Bar vs line trend follows the dashboard's global Chart Style toggle (top of page). Requires a Call History CSV.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartAircallConnect"></div>
+            <select class="chart-granularity" id="metric-chartAircallConnect" onchange="renderCharts(getFilteredDays())">
+              <option value="pct" selected>% Connect Rate</option>
+              <option value="raw">Raw Counts</option>
+            </select>
             <select class="chart-granularity" id="teamsComparison-chartAircallConnect" onchange="renderCharts(getFilteredDays())">
               <option value="off" selected>Group: Combined</option>
               <option value="on">Group: US vs OUS Teams</option>
@@ -6340,25 +6344,52 @@ function renderAircallConnectChart(days) {
   const leadTypeEl = document.getElementById('leadType-' + id);
   const leadType = leadTypeEl ? leadTypeEl.value : 'all';
   const callsSource = leadType === 'business' ? allCallsDataB2B : leadType === 'b2c' ? allCallsDataB2C : allCallsDataAll;
+  const metricEl = document.getElementById('metric-' + id);
+  const pct = metricEl ? metricEl.value !== 'raw' : true;
   const granularity = chartGranularity(id);
   const buckets = bucketize(days, granularity);
   const labels = buckets.map(b => b.label);
   const groups = aircallConnectGroups();
   const barMode = isBarMode();
 
-  const datasets = groups.map(g => {
-    const data = buckets.map(b => {
-      const present = b.days.filter(d => callsSource && callsSource[d]);
-      if (!present.length) return null;
-      const total = sumCallsMetricFrom(callsSource, present, g.key, 'contacts');
-      if (!total) return 0;
-      const connected = sumCallsMetricFrom(callsSource, present, g.key, 'contacts_connected');
-      return parseFloat((connected / total * 100).toFixed(1));
+  const bucketValue = (b, view, key) => {
+    const present = b.days.filter(d => callsSource && callsSource[d]);
+    if (!present.length) return null;
+    return sumCallsMetricFrom(callsSource, present, view, key);
+  };
+
+  let datasets;
+  if (pct) {
+    datasets = groups.map(g => {
+      const data = buckets.map(b => {
+        const total = bucketValue(b, g.key, 'contacts');
+        if (total == null) return null;
+        if (!total) return 0;
+        const connected = bucketValue(b, g.key, 'contacts_connected');
+        return parseFloat((connected / total * 100).toFixed(1));
+      });
+      return barMode
+        ? { label: g.label, data, backgroundColor: g.color, borderRadius: 3, borderWidth: 0 }
+        : { label: g.label, data, borderColor: g.color, backgroundColor: g.color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false };
     });
-    return barMode
-      ? { label: g.label, data, backgroundColor: g.color, borderRadius: 3, borderWidth: 0 }
-      : { label: g.label, data, borderColor: g.color, backgroundColor: g.color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false };
-  });
+  } else {
+    // Two bars/lines per group: total contacts dialed (lighter) and connected
+    // (solid) — side by side, never stacked, since "connected" is a subset
+    // of "dialed" (same convention as the Lead Call Coverage chart).
+    datasets = groups.flatMap(g => {
+      const total = buckets.map(b => bucketValue(b, g.key, 'contacts'));
+      const connected = buckets.map(b => bucketValue(b, g.key, 'contacts_connected'));
+      return barMode
+        ? [
+            { label: `${g.label} — Contacts Dialed`, data: total, backgroundColor: g.color + '4d', borderRadius: 3, borderWidth: 0 },
+            { label: `${g.label} — Contacts Connected`, data: connected, backgroundColor: g.color, borderRadius: 3, borderWidth: 0 }
+          ]
+        : [
+            { label: `${g.label} — Contacts Dialed`, data: total, borderColor: g.color, backgroundColor: g.color + '11', tension: 0, pointRadius: 2, pointHoverRadius: 4, fill: false, borderWidth: 1.5, borderDash: [5, 3], spanGaps: false },
+            { label: `${g.label} — Contacts Connected`, data: connected, borderColor: g.color, backgroundColor: g.color + '22', tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false }
+          ];
+    });
+  }
 
   if (charts[id]) charts[id].destroy();
   const ctx = document.getElementById(id).getContext('2d');
@@ -6376,14 +6407,14 @@ function renderAircallConnectChart(days) {
           backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
           titleColor: '#ffffff', bodyColor: '#cfd2e3',
           titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody },
-          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}%` }
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}${pct ? '%' : ''}` }
         }
       },
       scales: {
         x: { ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { color: '#e4e6ef' } },
         y: {
-          ticks: { color: '#5b5f78', font: { size: f.tick }, callback: v => `${v}%` },
-          grid: { color: '#e4e6ef' }, beginAtZero: true, max: 100
+          ticks: { color: '#5b5f78', font: { size: f.tick }, precision: pct ? undefined : 0, callback: v => pct ? `${v}%` : v },
+          grid: { color: '#e4e6ef' }, beginAtZero: true, max: pct ? 100 : undefined
         }
       }
     }
@@ -6391,8 +6422,9 @@ function renderAircallConnectChart(days) {
 
   const legendEl = document.getElementById('legend-' + id);
   if (legendEl) {
-    legendEl.innerHTML = groups.map(g =>
-      `<span class="legend-item"><span class="legend-dot" style="background:${g.color}"></span>${g.label}</span>`
+    const items = pct ? groups.map(g => ({ label: g.label, color: g.color })) : datasets.map(d => ({ label: d.label, color: d.backgroundColor || d.borderColor }));
+    legendEl.innerHTML = items.map(it =>
+      `<span class="legend-item"><span class="legend-dot" style="background:${it.color}"></span>${it.label}</span>`
     ).join('');
   }
 }
