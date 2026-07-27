@@ -1051,7 +1051,7 @@
     <div class="mandate-section" id="marketSection">
       <div class="mandate-header" onclick="toggleMarketSection()">
         <div class="mandate-header-left">
-          <span class="mandate-title">Market Split by Request Type <span class="goal-info" id="marketSectionInfo" title="B2B (default) funnel for a single chosen month — switch the new leads dropdown next to Month to B2C or B2B+B2C to run this whole table and the three trend charts below on that pool instead; B2C leads carry the same Request Type tagging and every rule below applies unchanged. Grouped by Team (US: MJ + Gospel; OUS: Mark + Levi) and Request Type tier. &lt;1k = '&lt;$1k - Share Quote', incomplete = 'Incomplete - Request Info' — the only two Request Types this team currently works; &gt;1k and complex are reserved for a different team's request types and will read 0 here until/unless this team ever gets that work. Leads with a blank or unrecognized Request Type aren't shown in any row, so each team's Total equals the sum of its two Sub totals. Qualified/Meeting Booked use the same strict definitions as the QAL Funnel by SDR table (Capacity &amp; Cost) — Duplicate-record/Wrong-info leads excluded from every count. Meeting Done = Meeting Status = Meeting Done specifically (a completed meeting, not still-upcoming Scheduled or a Rejected/Not-Atended one) ÷ Nbr of BL for Meeting Done %. Qal to Close % = Closed ÷ Qualified. Meeting Done to Close % = Closed ÷ Meeting Done. Closed Deals = count of Sales status = Closed. Lead to Deal % = Closed ÷ Nbr of BL — the overall conversion rate, on the far right. Months labeled (AE era) predate the SDRs: they come from the committed historical dataset and show the whole company's funnel under AEs as one block. Same untyped-lead rule as the SDR teams above: an (untyped) row is shown for visibility but excluded from Total AE era, so it stays apples-to-apples with the SDR side's Total (also tier-sum only). May 2026 is the transition month and shows both (AEs ran it through May 18; Total shootday combines the two).">ⓘ</span></span>
+          <span class="mandate-title">Market Split by Request Type <span class="goal-info" id="marketSectionInfo" title="B2B (default) funnel for a single chosen month — switch the new leads dropdown next to Month to B2C or B2B+B2C to run this whole table and the three trend charts below on that pool instead; B2C leads carry the same Request Type tagging and every rule below applies unchanged. Grouped by Team (US: MJ + Gospel; OUS: Mark + Levi) and Request Type tier. &lt;1k = '&lt;$1k - Share Quote', incomplete = 'Incomplete - Request Info' — the two tiers the SDR team works itself, rolled up into the "Total SDR" row. &gt;1k and complex are a different team's request types — Account Executives run these in parallel with the SDR team (data/ae-current.csv, current-era, auto-updated), rolled up into "Total AE" — both rows sit right above "Total US"/"Total OUS", which is the sum of the two and unaffected by which one a lead came through. AE-sourced rows/numbers render in dark blue to keep SDR-brought-in and AE-brought-in figures visually distinct. AE team attribution is by the shoot's own Country (US = United States, otherwise OUS) rather than by which AE owns the lead — several AEs run a genuinely mixed US/international book, so a per-AE label would misattribute real leads either way; a per-lead location doesn't have that problem. Leads with a blank or unrecognized Request Type aren't shown in any row, so each team's Total equals the sum of Total SDR + Total AE. Qualified/Meeting Booked use the same strict definitions as the QAL Funnel by SDR table (Capacity &amp; Cost) — Duplicate-record/Wrong-info leads excluded from every count. Meeting Done = Meeting Status = Meeting Done specifically (a completed meeting, not still-upcoming Scheduled or a Rejected/Not-Atended one) ÷ Nbr of BL for Meeting Done %. Qal to Close % = Closed ÷ Qualified. Meeting Done to Close % = Closed ÷ Meeting Done. Closed Deals = count of Sales status = Closed. Lead to Deal % = Closed ÷ Nbr of BL — the overall conversion rate, on the far right. Months labeled (AE era) predate the SDRs: they come from the committed historical dataset and show the whole company's funnel under AEs as one block. Same untyped-lead rule as the SDR teams above: an (untyped) row is shown for visibility but excluded from Total AE era, so it stays apples-to-apples with the SDR side's Total (also tier-sum only). May 2026 is the transition month and shows both (AEs ran it through May 18; Total shootday combines the two).">ⓘ</span></span>
           <span class="mandate-sub" id="marketHeaderNote">B2B funnel by team and request-type tier, for a single chosen month</span>
         </div>
         <span class="mandate-chevron">&#9654;</span>
@@ -1883,7 +1883,7 @@
           <div class="definition-item"><dt>Lead</dt><dd>Any Bookings CSV row with a recognized SDR Owner and a non-blank Creation Date. Rows that don't match either are dropped before anything else on the dashboard is computed.</dd></div>
           <div class="definition-item"><dt>Lead → Closed Rate</dt><dd>Closed deals ÷ all leads from the same creation-date cohort. Recent periods always read low — a lead created this week hasn't had time to close yet — this is a running tally that rises as those leads close later, not a same-period conversion rate.</dd></div>
           <div class="definition-item"><dt>Lead Rules (Strict/Loose toggle)</dt><dd>Top controls bar, defaults to Strict. Governs the Summary Cards ONLY (Lead Volume, Meetings Booked, Meeting Booked Rate, Leads Qualified, % Leads Qualified, Non-Responsive Rate) — every other section (charts, Mandate Scoreboard, Sales Funnel, AE Baseline, Capacity &amp; Cost) is unaffected; the Commission Calculator always uses Strict-equivalent rules regardless of this toggle. Strict: Duplicate-record and Wrong-info leads are dropped from every count (including Lead Volume itself), and Meetings Booked requires a genuine Meeting Status (an Instant Close never counts) — applies on every Leads: filter (B2B only, B2C only, All leads, Commission View). Loose: the older, broader counts (duplicates included, Instant Closes credited as meetings) — useful for comparing against how the dashboard used to read.</dd></div>
-          <div class="definition-item"><dt>Market Split by Request Type</dt><dd>Its own section, own month picker, above the Sales Funnel. Grouped by Team (US: MJ + Gospel; OUS: Mark + Levi) and Request Type tier. &lt;1k = "&lt;$1k - Share Quote", incomplete = "Incomplete - Request Info" — the only two Request Types this team currently works, per the onboarding brief's own scope description. &gt;1k and complex are a different team's request types, kept as their own rows (always 0 for this team) rather than hidden. A blank/unrecognized Request Type isn't counted in any row, so each team's Total always equals the sum of its two Sub totals. Qualified/Meeting Booked reuse the same strict definitions as the QAL Funnel by SDR table — Duplicate-record/Wrong-info leads excluded from every count. Meeting Done/Meeting Done % = count/rate of Meeting Status = Meeting Done specifically (a completed meeting, not Scheduled/Rejected/Not Atended). Qal to Close % = Closed ÷ Qualified. Meeting Done to Close % = Closed ÷ Meeting Done. Closed Deals = count of Sales status = Closed. Lead to Deal % = Closed ÷ Nbr of BL, on the far right column. Months are bucketed in Dubai time, same as every other month cutoff on this dashboard.</dd></div>
+          <div class="definition-item"><dt>Market Split by Request Type</dt><dd>Its own section, own month picker, above the Sales Funnel. Grouped by Team (US: MJ + Gospel; OUS: Mark + Levi) and Request Type tier. &lt;1k = "&lt;$1k - Share Quote", incomplete = "Incomplete - Request Info" — the two tiers the SDR team works itself ("Total SDR" row). &gt;1k and complex are run in parallel by Account Executives (data/ae-current.csv, current-era, auto-updated), rolled into "Total AE" — team attribution there is by the shoot's own Country (US = United States, otherwise OUS), not by which AE owns the lead, since several AEs run a genuinely mixed US/international book. Total SDR and Total AE sit right above "Total US"/"Total OUS," which is just their sum regardless of which one brought a lead in; AE-sourced rows/numbers render in dark blue to keep the two visually distinct. A blank/unrecognized Request Type isn't counted in any row. Qualified/Meeting Booked reuse the same strict definitions as the QAL Funnel by SDR table — Duplicate-record/Wrong-info leads excluded from every count. Meeting Done/Meeting Done % = count/rate of Meeting Status = Meeting Done specifically (a completed meeting, not Scheduled/Rejected/Not Atended). Qal to Close % = Closed ÷ Qualified. Meeting Done to Close % = Closed ÷ Meeting Done. Closed Deals = count of Sales status = Closed. Lead to Deal % = Closed ÷ Nbr of BL, on the far right column. Months are bucketed in Dubai time, same as every other month cutoff on this dashboard.</dd></div>
           <div class="definition-item"><dt>Meeting → Closed Rate</dt><dd>Closed deals ÷ meetings done from the same creation-date cohort. Same "reads low until leads catch up" caveat as the other cohort rates. Only exists in the Sales Funnel — the Mandate Scoreboard doesn't have this row. AE Baseline column shows the playbook's static ~50% benchmark ("Online meetings convert at approximately 50%") instead of a computed number — 66% of the AE-era's closed deals have a blank Meeting Status, so a computed ratio here comes out to either ~93-96% or 266%+ depending on how those blanks are treated, neither of which is trustworthy.</dd></div>
           <div class="definition-item"><dt>Meeting Booked</dt><dd>Two versions in use. General (charts, Mandate Scoreboard, Sales Funnel, AE Baseline, Capacity &amp; Cost's own SDR/AE tables): Meeting Status is Scheduled, Done, Rejected, or Not Atended, or the deal was an Instant Close (unless the Auto-Booked Meetings Toggle is set to Excluded). Strict/commission (Summary Cards under Lead Rules: Strict, the Commission Calculator, the Meeting Quality Multiplier, the printable report): Meeting Status only — an Instant Close never counts, regardless of the Auto-Booked toggle. Either way, "Meeting Requested" doesn't count on its own — roughly three-quarters of those end up disqualified, so it means "asked for," not "confirmed."</dd></div>
           <div class="definition-item"><dt>Meeting Held (Meetings Done)</dt><dd>Meeting Status is Meeting Done, or an instant close (unless the Auto-Booked Meetings Toggle is set to Excluded). Narrower than Meeting Booked, which also counts still-upcoming Scheduled meetings.</dd></div>
@@ -3877,7 +3877,7 @@ function speedToLeadCard(label, medianMinutes, matched, eligible, mismatch, sdrL
 }
 
 // ─── CHARTS ───────────────────────────────────────────────────────────────────
-const COLORS = { Team: '#6c63ff', Goal: 'rgba(0,0,0,0.35)', Pace: '#9c6dff', AEBaseline: '#a0522d', Trend: '#f4b400' };
+const COLORS = { Team: '#6c63ff', Goal: 'rgba(0,0,0,0.35)', Pace: '#9c6dff', AEBaseline: '#a0522d', Trend: '#f4b400', AECurrent: '#1a3d7c' };
 
 // Always-visible value labels drawn above each bar — opt-in per chart via
 // chart.$valueLabels (a plain flag stashed on the Chart instance), so this
@@ -7319,6 +7319,24 @@ function marketCleanB2BRows(periodKey, tzBasis, sdrKeys, granularity) {
   });
   return rows;
 }
+// Current-era AE production (data/ae-current.csv) — the >1k/complex deals
+// AEs still run in parallel with the SDR team, for a given month/team.
+// Team attribution is by the shoot's own Country, NOT by which AE owns the
+// lead: several AEs run a genuinely mixed book (even the ones treated as
+// "OUS" carry a real ~15-18% slice of US-located events, and at least one
+// AE splits close to evenly), so a per-AE label would misattribute real
+// leads either way — a per-lead location doesn't have that problem. Same
+// clean-B2B rule as the SDR rows (marketLeadTypeMatches + !isLeadExcluded).
+function marketAECurrentRows(monthKey, tzBasis, teamKey) {
+  if (!rawAECurrent) return [];
+  return rawAECurrent.filter(r => {
+    const raw = (r['Creation Date'] || '').trim();
+    const mk = tzBasis === 'eest' ? raw.slice(0, 7) : toDubaiDayKey(raw).slice(0, 7);
+    if (mk !== monthKey || !marketLeadTypeMatches(r) || isLeadExcluded(r)) return false;
+    const isUS = (r['Country'] || '').trim() === 'United States';
+    return teamKey === 'US' ? isUS : !isUS;
+  });
+}
 function marketMetrics(rows) {
   const nbrBL = rows.length;
   const qalBL = rows.filter(isQualifiedLead).length;
@@ -7368,22 +7386,27 @@ function hexToRgbTriplet(hex) {
 // it reads as "this row belongs to a subtotal" at a glance without fighting
 // the text for attention. Team total rows use a slightly higher alpha than
 // Sub total rows (still faint) so the two tint levels stay tellable apart.
+// opts.textColor: colors every value cell (not the row label) — used to mark
+// AE-sourced rows (>1k/complex tiers, Total AE) a distinct dark blue so
+// they read as "brought in by an AE" at a glance, separate from the team
+// background tint above (which marks US/OUS, a different axis entirely).
 function marketRowHtml(label, m, opts) {
   opts = opts || {};
   const rowStyle = opts.tint ? ` style="background:rgba(${hexToRgbTriplet(opts.tint.color)},${opts.tint.alpha})"` : '';
+  const valueStyle = opts.textColor ? ` style="color:${opts.textColor}"` : '';
   return `<tr${opts.total ? ' class="mandate-kpi-total"' : ''}${rowStyle}>
     <td class="mandate-kpi-name"${opts.indent ? ' style="padding-left:24px"' : ''}>${escapeHtml(label)}</td>
-    <td>${marketCountCell(m.nbrBL, m)}</td>
-    <td>${marketCountCell(m.qalBL, m)}</td>
-    <td>${marketPctCell(m.pctQal)}</td>
-    <td>${marketCountCell(m.meetingBooked, m)}</td>
-    <td>${marketPctCell(m.meetingPct)}</td>
-    <td>${marketCountCell(m.meetingDone, m)}</td>
-    <td>${marketPctCell(m.meetingDonePct)}</td>
-    <td>${marketPctCell(m.qalToClosePct)}</td>
-    <td>${marketPctCell(m.meetingDoneToClosePct)}</td>
-    <td>${marketCountCell(m.closed, m)}</td>
-    <td>${marketPctCell(m.leadToDealPct)}</td>
+    <td${valueStyle}>${marketCountCell(m.nbrBL, m)}</td>
+    <td${valueStyle}>${marketCountCell(m.qalBL, m)}</td>
+    <td${valueStyle}>${marketPctCell(m.pctQal)}</td>
+    <td${valueStyle}>${marketCountCell(m.meetingBooked, m)}</td>
+    <td${valueStyle}>${marketPctCell(m.meetingPct)}</td>
+    <td${valueStyle}>${marketCountCell(m.meetingDone, m)}</td>
+    <td${valueStyle}>${marketPctCell(m.meetingDonePct)}</td>
+    <td${valueStyle}>${marketPctCell(m.qalToClosePct)}</td>
+    <td${valueStyle}>${marketPctCell(m.meetingDoneToClosePct)}</td>
+    <td${valueStyle}>${marketCountCell(m.closed, m)}</td>
+    <td${valueStyle}>${marketPctCell(m.leadToDealPct)}</td>
   </tr>`;
 }
 function toggleMarketSection() {
@@ -7422,10 +7445,18 @@ function renderMarketSection() {
   let bodyRows = '';
   const teamTotals = [];
   const hasSdrData = sdrMonths.includes(monthKey);
+  // AE_AWARE_TIERS: >1k/complex — the two tiers the SDR team never books
+  // itself, now filled in with AE-current production (data/ae-current.csv,
+  // current-era >1k/complex deals) on top of whatever SDR-owned rows land
+  // there (normally none). Their numbers — and "Total AE" below — render in
+  // a distinct dark blue so it's visually obvious which figures an SDR
+  // actually brought in vs. an AE.
+  const AE_AWARE_TIERS = new Set(['gt1k', 'complex']);
   if (hasSdrData) TEAM_GROUPS.forEach(team => {
     const tierMetrics = {};
     MARKET_TIERS.forEach(t => {
-      const rows = marketCleanB2BRows(monthKey, tzBasis, team.members).filter(r => marketRequestTier(r) === t.key);
+      let rows = marketCleanB2BRows(monthKey, tzBasis, team.members).filter(r => marketRequestTier(r) === t.key);
+      if (AE_AWARE_TIERS.has(t.key)) rows = rows.concat(marketAECurrentRows(monthKey, tzBasis, team.key).filter(r => marketRequestTier(r) === t.key));
       tierMetrics[t.key] = marketMetrics(rows);
     });
     const sub1 = marketMergeMetrics([tierMetrics.lt1k, tierMetrics.incomplete]);
@@ -7435,9 +7466,9 @@ function renderMarketSection() {
 
     bodyRows += `<tr><td class="mandate-kpi-name" colspan="12" style="padding-top:16px">${escapeHtml(team.label)}</td></tr>`;
     MARKET_TIERS.forEach((t, i) => {
-      bodyRows += marketRowHtml(t.label, tierMetrics[t.key], { indent: true });
-      if (i === 1) bodyRows += marketRowHtml('Sub total', sub1, { indent: true, total: true, tint: { color: team.color, alpha: 0.05 } });
-      if (i === 3) bodyRows += marketRowHtml('Sub total', sub2, { indent: true, total: true, tint: { color: team.color, alpha: 0.05 } });
+      bodyRows += marketRowHtml(t.label, tierMetrics[t.key], { indent: true, textColor: AE_AWARE_TIERS.has(t.key) ? COLORS.AECurrent : null });
+      if (i === 1) bodyRows += marketRowHtml('Total SDR', sub1, { indent: true, total: true, tint: { color: team.color, alpha: 0.05 } });
+      if (i === 3) bodyRows += marketRowHtml('Total AE', sub2, { indent: true, total: true, tint: { color: team.color, alpha: 0.05 }, textColor: COLORS.AECurrent });
     });
     bodyRows += marketRowHtml(`Total ${team.label.replace(' Team', '')}`, teamTotal, { total: true, tint: { color: team.color, alpha: 0.11 } });
   });
