@@ -1136,6 +1136,38 @@
                 <button class="chart-expand-btn" onclick="toggleChartExpand('chartMarketVolume')" title="Expand">&#10530;</button>
               </div>
             </div>
+            <div class="activity-metric-checks" id="marketVolumeSdrChecks" style="display:none; margin-bottom:10px" title="Funnel view only. Adds that SDR's (or team's) own conversion rates — % Qualified, Meeting Booked %, Lead to Deal % — as extra bars right next to the team totals, on their own 0-100% scale (not raw counts, which would be too small next to the whole team's numbers to compare). US SDR/OUS SDR combine their two SDRs into one rate. Pick as many as you want to compare side by side; none selected keeps the chart exactly as the team-total bars alone. AE-era months are blank for these — no individual SDRs existed yet.">
+              <label class="chart-cumulative-toggle" style="margin-right:0">
+                <input type="checkbox" id="marketVolumeSdr-MJ" onchange="saveMarketVolumeSdrOverlay()">
+                <span class="toggle-track"></span>
+                <span class="toggle-text">MJ</span>
+              </label>
+              <label class="chart-cumulative-toggle" style="margin-right:0">
+                <input type="checkbox" id="marketVolumeSdr-Gospel" onchange="saveMarketVolumeSdrOverlay()">
+                <span class="toggle-track"></span>
+                <span class="toggle-text">Gospel</span>
+              </label>
+              <label class="chart-cumulative-toggle" style="margin-right:0">
+                <input type="checkbox" id="marketVolumeSdr-Mark" onchange="saveMarketVolumeSdrOverlay()">
+                <span class="toggle-track"></span>
+                <span class="toggle-text">Mark</span>
+              </label>
+              <label class="chart-cumulative-toggle" style="margin-right:0">
+                <input type="checkbox" id="marketVolumeSdr-Levi" onchange="saveMarketVolumeSdrOverlay()">
+                <span class="toggle-track"></span>
+                <span class="toggle-text">Levi</span>
+              </label>
+              <label class="chart-cumulative-toggle" style="margin-right:0">
+                <input type="checkbox" id="marketVolumeSdr-US" onchange="saveMarketVolumeSdrOverlay()">
+                <span class="toggle-track"></span>
+                <span class="toggle-text">US SDR</span>
+              </label>
+              <label class="chart-cumulative-toggle" style="margin-right:0">
+                <input type="checkbox" id="marketVolumeSdr-OUS" onchange="saveMarketVolumeSdrOverlay()">
+                <span class="toggle-track"></span>
+                <span class="toggle-text">OUS SDR</span>
+              </label>
+            </div>
             <canvas id="chartMarketVolume"></canvas>
           </div>
           <div class="chart-card full" data-chart-id="chartMarketRate">
@@ -4118,7 +4150,10 @@ const VALUE_LABELS_PLUGIN = {
         }
         ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         ctx.fillStyle = '#22263a';
-        ctx.fillText(v.toLocaleString(), el.x, el.y - 4);
+        // ds._pctValue: this dataset's own value already IS a rate (the
+        // per-SDR/team conversion-rate overlay), not a count — labeled with
+        // a % sign instead of the bold derived-rate line above.
+        ctx.fillText(ds._pctValue ? Math.round(v) + '%' : v.toLocaleString(), el.x, el.y - 4);
       });
     });
     ctx.restore();
@@ -8221,6 +8256,42 @@ function saveMarketVolumeTierKeys() {
   try { localStorage.setItem('sdr_market_volume_tiers', JSON.stringify(keys)); } catch (e) {}
   renderMarketCharts();
 }
+// Funnel view's per-SDR/team rate overlay (marketVolumeSdrChecks in the chart
+// header) — MJ/Gospel/Mark/Levi individually, or their two team combos. Always
+// pure SDR-owned rows (marketCleanB2BRows), regardless of the "SDR only"
+// toggle — there's no such thing as "an AE's share of MJ's rate," so these
+// stay a clean per-SDR read no matter what the rest of the chart is showing.
+const MARKET_VOLUME_SDR_OVERLAY_GROUPS = [
+  { key: 'MJ', label: 'MJ', color: '#1a9e94', sdrKeys: ['MJ'] },
+  { key: 'Gospel', label: 'Gospel', color: '#e07b1a', sdrKeys: ['Gospel'] },
+  { key: 'Mark', label: 'Mark', color: '#c94f7c', sdrKeys: ['Mark'] },
+  { key: 'Levi', label: 'Levi', color: '#4a7fd4', sdrKeys: ['Levi'] },
+  { key: 'US', label: 'US SDR', color: '#2f6fed', sdrKeys: ['MJ', 'Gospel'] },
+  { key: 'OUS', label: 'OUS SDR', color: '#e0871a', sdrKeys: ['Mark', 'Levi'] }
+];
+function marketVolumeSdrOverlayKeys() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('sdr_market_volume_sdr_overlay') || 'null');
+    if (Array.isArray(saved)) return saved.filter(k => MARKET_VOLUME_SDR_OVERLAY_GROUPS.some(g => g.key === k));
+  } catch (e) {}
+  return [];
+}
+function saveMarketVolumeSdrOverlay() {
+  const keys = MARKET_VOLUME_SDR_OVERLAY_GROUPS.map(g => g.key).filter(k => {
+    const el = document.getElementById('marketVolumeSdr-' + k);
+    return el && el.checked;
+  });
+  try { localStorage.setItem('sdr_market_volume_sdr_overlay', JSON.stringify(keys)); } catch (e) {}
+  renderMarketCharts();
+}
+// One overlay group's rate metrics for one period entry — always straight
+// SDR-owned rows (marketCleanB2BRows), tier-filtered the same as the funnel
+// bars themselves (selectedTiers), so "MJ's % Qualified" means the same
+// thing as the team-total bars' % Qualified right next to it.
+function marketVolumeSdrOverlayMetrics(entry, group, selectedTiers, tzBasis, granularity) {
+  const rows = marketCleanB2BRows(entry.monthKey, tzBasis, group.sdrKeys, granularity).filter(r => selectedTiers.includes(marketRequestTier(r)));
+  return rows.length ? marketMetrics(rows) : null;
+}
 // Legend declutter: a dataset that never has a value (a tier this team
 // doesn't work, a rate with no data anywhere in range) earns no legend
 // entry or axis space. All-zero bars are dropped too — same reasoning as
@@ -8294,7 +8365,7 @@ function renderMarketCharts() {
   const entries = periods.map(pk => ({ monthKey: pk, sdr: sdrByPeriod[pk] || null, ae: aeSeries[pk] || null }));
   const labels = entries.map(e => marketPeriodLabel(e.monthKey, granularity) + (e.sdr ? '' : ' (AE)'));
 
-  renderMarketVolumeChart(entries, labels, baselineOn);
+  renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granularity);
   renderMarketRateChart(entries, labels, baselineOn);
   renderMarketDealChart(entries, labels, baselineOn, aeSeries);
 }
@@ -8355,7 +8426,7 @@ const MARKET_FUNNEL_STAGES = [
   { field: 'meetingBooked', label: 'Meetings Booked', color: '#2f6fed' },
   { field: 'closed', label: 'Deals Closed', color: '#1a9e94' }
 ];
-function renderMarketVolumeChart(entries, labels, baselineOn) {
+function renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granularity) {
   const el = document.getElementById('chartMarketVolume');
   if (!el) return;
   const funnelStackEl = document.getElementById('marketVolumeFunnelStack');
@@ -8369,6 +8440,13 @@ function renderMarketVolumeChart(entries, labels, baselineOn) {
     const cb = document.getElementById('marketVolumeTier-' + t.key);
     if (cb) cb.checked = selectedTiers.includes(t.key);
   });
+  const sdrChecksEl = document.getElementById('marketVolumeSdrChecks');
+  if (sdrChecksEl) sdrChecksEl.style.display = funnelStack ? 'inline-flex' : 'none';
+  const overlayKeys = marketVolumeSdrOverlayKeys();
+  MARKET_VOLUME_SDR_OVERLAY_GROUPS.forEach(g => {
+    const cb = document.getElementById('marketVolumeSdr-' + g.key);
+    if (cb) cb.checked = overlayKeys.includes(g.key);
+  });
 
   let datasets, yTitle;
   if (funnelStack) {
@@ -8380,6 +8458,37 @@ function renderMarketVolumeChart(entries, labels, baselineOn) {
       barPercentage: 0.9,
       _legendColor: stage.color
     }));
+    // Per-SDR/team rate overlay — 3 bars per selected group (% Qualified,
+    // Meeting Booked %, Lead to Deal %), on their own 0-100% axis (yAxisID
+    // 'y1') right next to the team-total count bars. _pctValue/_isRateOverlay
+    // keep these out of the count-bar value-label/stepRate machinery below —
+    // a rate needs no further "rate of a rate" derived line, and its value
+    // label is a % sign, not a raw count.
+    const OVERLAY_FIELDS = [
+      { field: 'pctQal', label: '% Qualified' },
+      { field: 'meetingPct', label: 'Meeting Booked %' },
+      { field: 'leadToDealPct', label: 'Lead to Deal %' }
+    ];
+    overlayKeys.forEach(key => {
+      const group = MARKET_VOLUME_SDR_OVERLAY_GROUPS.find(g => g.key === key);
+      if (!group) return;
+      OVERLAY_FIELDS.forEach(f => {
+        datasets.push({
+          label: `${group.label} ${f.label}`,
+          data: entries.map(e => {
+            const m = marketVolumeSdrOverlayMetrics(e, group, selectedTiers, tzBasis, granularity);
+            return m ? m[f.field] : null;
+          }),
+          backgroundColor: group.color,
+          yAxisID: 'y1',
+          categoryPercentage: 0.8,
+          barPercentage: 0.9,
+          _pctValue: true,
+          _isRateOverlay: true,
+          _legendColor: group.color
+        });
+      });
+    });
     yTitle = 'Count (Business Leads / Qualified / Meetings Booked / Deals Closed)';
   } else {
     const metric = metricSelect ? metricSelect.value : 'nbrBL';
@@ -8406,16 +8515,21 @@ function renderMarketVolumeChart(entries, labels, baselineOn) {
   }
 
   const keptDatasets = marketDropEmptyDatasets(datasets);
-  const chartOpts = marketChartOptions('chartMarketVolume', yTitle, false, false, funnelStack ? 30 : 0);
+  const hasOverlay = funnelStack && keptDatasets.some(d => d._isRateOverlay);
+  const chartOpts = marketChartOptions('chartMarketVolume', yTitle, hasOverlay, false, funnelStack ? 30 : 0);
+  if (hasOverlay) chartOpts.scales.y1.title.text = 'Rate (SDR/team overlay)';
   // Hovering a funnel bar spells out the same math the on-bar rate label
   // shows — "Meetings Booked ÷ Business Leads = 147 ÷ 445 = 33%" — so the
   // rate's denominator is never ambiguous. Reads chart.$stepRates, set right
   // after construction below; harmless no-op in metric mode (no $stepRates).
+  // Overlay (_pctValue) datasets are already a rate — no further division,
+  // just the value with a % sign.
   chartOpts.plugins.tooltip = {
     callbacks: {
       label(ctx) {
         const chart = ctx.chart;
         const v = ctx.parsed.y;
+        if (ctx.dataset._pctValue) return `${ctx.dataset.label}: ${v.toFixed(1)}%`;
         const lines = [`${ctx.dataset.label}: ${v.toLocaleString()}`];
         const denomIdx = chart.$stepRates ? chart.$stepRates[ctx.datasetIndex] : null;
         if (denomIdx != null) {
@@ -8453,7 +8567,7 @@ function renderMarketVolumeChart(entries, labels, baselineOn) {
     const stageOrder = MARKET_FUNNEL_STAGES.map(s => s.label);
     const blPos = keptDatasets.findIndex(d => stageOrder.indexOf(d.label) === 0);
     charts.chartMarketVolume.$stepRates = keptDatasets.map((d, i) => {
-      if (blPos < 0 || i === blPos) return null;
+      if (blPos < 0 || i === blPos || d._isRateOverlay) return null;
       return blPos;
     });
   } else {
