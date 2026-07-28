@@ -4159,11 +4159,47 @@ const VALUE_LABELS_PLUGIN = {
     ctx.restore();
   }
 };
+// Volume Trend's percentage-comparison mode packs several series (Team +
+// however many SDRs/teams are picked) × 4 steps into one bar chart with no
+// stacking to lean on for grouping — with everything the same color family
+// and no gap, the eye can't tell where "% Qualified" ends and "Meeting
+// Booked %" begins. chart.$stepBoundaries (set by the caller): dataset
+// indices where a new step's cluster starts, used to draw a light vertical
+// rule down each category right at that boundary — a pure visual overlay
+// that doesn't touch the bars/data/legend/tooltip at all, so it can't
+// introduce a stray "0%" bar or legend entry the way a fake spacer dataset
+// would.
+const STEP_DIVIDERS_PLUGIN = {
+  id: 'stepDividers',
+  afterDatasetsDraw(chart) {
+    const boundaries = chart.$stepBoundaries;
+    if (!boundaries || !boundaries.length) return;
+    const { ctx, chartArea } = chart;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(20,20,30,0.15)';
+    ctx.lineWidth = 1;
+    boundaries.forEach(idx => {
+      const prevMeta = chart.getDatasetMeta(idx - 1);
+      const curMeta = chart.getDatasetMeta(idx);
+      if (!prevMeta || !curMeta) return;
+      prevMeta.data.forEach((el, catIdx) => {
+        const curEl = curMeta.data[catIdx];
+        if (!el || !curEl) return;
+        const midX = (el.x + curEl.x) / 2;
+        ctx.beginPath();
+        ctx.moveTo(midX, chartArea.top);
+        ctx.lineTo(midX, chartArea.bottom);
+        ctx.stroke();
+      });
+    });
+    ctx.restore();
+  }
+};
 // Guarded: if the Chart.js CDN ever fails to load (slow network, ad-blocker,
 // corporate proxy), this must not throw and abort the rest of this script —
 // every table/card/section below Chart.js relies on code that runs after
 // this line, and none of it depends on Chart existing.
-if (typeof Chart !== 'undefined') Chart.register(VALUE_LABELS_PLUGIN);
+if (typeof Chart !== 'undefined') { Chart.register(VALUE_LABELS_PLUGIN); Chart.register(STEP_DIVIDERS_PLUGIN); }
 
 function isCumulative(id) {
   const el = document.getElementById('cumulativeToggle-' + id);
@@ -8597,6 +8633,16 @@ function renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granulari
   } else {
     charts.chartMarketVolume.$stepRates = null;
   }
+  // Comparison mode: a light vertical rule between each step's cluster of
+  // bars (Team + whichever SDRs/teams are picked), so "% Qualified" visually
+  // separates from "Meeting Booked %" instead of reading as one unbroken
+  // wall of same-family bars. Boundary = the first kept dataset whose label
+  // ends in that step's own label — found by label, not a fixed multiple of
+  // seriesList.length, since marketDropEmptyDatasets above can drop a
+  // series' bar for a step with no data anywhere in the visible range.
+  charts.chartMarketVolume.$stepBoundaries = pctMode
+    ? OVERLAY_FIELDS.slice(1).map(f => keptDatasets.findIndex(d => d.label.endsWith(f.label))).filter(i => i > 0)
+    : null;
   renderMarketLegend('chartMarketVolume', datasets);
 }
 function renderMarketRateChart(entries, labels, baselineOn) {
