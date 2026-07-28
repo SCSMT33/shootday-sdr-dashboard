@@ -1097,7 +1097,7 @@
         <div class="charts-grid">
           <div class="chart-card full" data-chart-id="chartMarketVolume">
             <div class="chart-header">
-              <span class="chart-title">Volume Trend <span class="goal-info" title="Metric mode: monthly count of the chosen metric, grouped side-by-side by Team/Tier split. Funnel mode: Business Leads/Qualified/Meetings Booked/Deals Closed drawn as four side-by-side bars per month (not summed — every Qualified lead is also a Business Lead, and so on down the funnel, so stacking or overlaying them would double-count), each labeled with its exact number since the funnel drop-off is steep enough that a short bar (e.g. Deals Closed) can be just a few pixels tall next to Business Leads. Above each stage's number (except Business Leads, the first) is its conversion rate off Business Leads specifically — Qualified ÷ BL, Meetings Booked ÷ BL, Deals Closed ÷ BL (this last one is the same figure as the Lead to Deal chart's own Lead to Deal %) — never off the stage right before it, rounded to a whole percent. Hover a bar for the exact math (e.g. "Meetings Booked ÷ Business Leads = 147 ÷ 445 = 33%"). In funnel mode, the checkboxes where the metric dropdown normally sits (&lt;1k/incomplete/&gt;1k/complex) pick which Request Type tiers feed it — defaults to &lt;1k/incomplete (what this team currently works), independent of the Split dropdown above. Same Duplicate/Wrong-info exclusion as the table above either way.">ⓘ</span></span>
+              <span class="chart-title">Volume Trend <span class="goal-info" title="Metric mode: monthly count of the chosen metric, grouped side-by-side by Team/Tier split. Funnel mode: Business Leads/Qualified/Meetings Booked/Meeting Done/Deals Closed drawn as five side-by-side bars per month (not summed — every Qualified lead is also a Business Lead, and so on down the funnel, so stacking or overlaying them would double-count), each labeled with its exact number since the funnel drop-off is steep enough that a short bar (e.g. Deals Closed) can be just a few pixels tall next to Business Leads. Above each stage's number (except Business Leads, the first) is its conversion rate off Business Leads specifically — Qualified ÷ BL, Meetings Booked ÷ BL, Meeting Done ÷ BL, Deals Closed ÷ BL (this last one is the same figure as the Lead to Deal chart's own Lead to Deal %) — never off the stage right before it, rounded to a whole percent. Hover a bar for the exact math (e.g. "Meetings Booked ÷ Business Leads = 147 ÷ 445 = 33%"). In funnel mode, the checkboxes where the metric dropdown normally sits (&lt;1k/incomplete/&gt;1k/complex) pick which Request Type tiers feed it — defaults to &lt;1k/incomplete (what this team currently works), independent of the Split dropdown above. The MJ/Gospel/Mark/Levi/US SDR/OUS SDR row below adds that SDR's or team's own % Qualified/Meeting Booked %/Meeting Done %/Lead to Deal % as extra bars on a separate 0-100% axis. Same Duplicate/Wrong-info exclusion as the table above either way.">ⓘ</span></span>
               <div class="chart-header-right">
                 <div class="chart-legend" id="legend-chartMarketVolume"></div>
                 <label class="chart-cumulative-toggle" style="margin-right:0">
@@ -1136,7 +1136,7 @@
                 <button class="chart-expand-btn" onclick="toggleChartExpand('chartMarketVolume')" title="Expand">&#10530;</button>
               </div>
             </div>
-            <div class="activity-metric-checks" id="marketVolumeSdrChecks" style="display:none; margin-bottom:10px" title="Funnel view only. Adds that SDR's (or team's) own conversion rates — % Qualified, Meeting Booked %, Lead to Deal % — as extra bars right next to the team totals, on their own 0-100% scale (not raw counts, which would be too small next to the whole team's numbers to compare). US SDR/OUS SDR combine their two SDRs into one rate. Pick as many as you want to compare side by side; none selected keeps the chart exactly as the team-total bars alone. AE-era months are blank for these — no individual SDRs existed yet.">
+            <div class="activity-metric-checks" id="marketVolumeSdrChecks" style="display:none; margin-bottom:10px" title="Funnel view only. Adds that SDR's (or team's) own conversion rates — % Qualified, Meeting Booked %, Meeting Done %, Lead to Deal % — as extra bars right next to the team totals, on their own 0-100% scale (not raw counts, which would be too small next to the whole team's numbers to compare). US SDR/OUS SDR combine their two SDRs into one rate. Pick as many as you want to compare side by side; none selected keeps the chart exactly as the team-total bars alone. AE-era months are blank for these — no individual SDRs existed yet.">
               <label class="chart-cumulative-toggle" style="margin-right:0">
                 <input type="checkbox" id="marketVolumeSdr-MJ" onchange="saveMarketVolumeSdrOverlay()">
                 <span class="toggle-track"></span>
@@ -8424,6 +8424,7 @@ const MARKET_FUNNEL_STAGES = [
   { field: 'nbrBL', label: 'Business Leads', color: '#c7d2e8' },
   { field: 'qalBL', label: 'Qualified', color: '#8fa6d6' },
   { field: 'meetingBooked', label: 'Meetings Booked', color: '#2f6fed' },
+  { field: 'meetingDone', label: 'Meeting Done', color: '#17a2b8' },
   { field: 'closed', label: 'Deals Closed', color: '#1a9e94' }
 ];
 function renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granularity) {
@@ -8458,15 +8459,16 @@ function renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granulari
       barPercentage: 0.9,
       _legendColor: stage.color
     }));
-    // Per-SDR/team rate overlay — 3 bars per selected group (% Qualified,
-    // Meeting Booked %, Lead to Deal %), on their own 0-100% axis (yAxisID
-    // 'y1') right next to the team-total count bars. _pctValue/_isRateOverlay
-    // keep these out of the count-bar value-label/stepRate machinery below —
-    // a rate needs no further "rate of a rate" derived line, and its value
-    // label is a % sign, not a raw count.
+    // Per-SDR/team rate overlay — 4 bars per selected group (% Qualified,
+    // Meeting Booked %, Meeting Done %, Lead to Deal %), on their own 0-100%
+    // axis (yAxisID 'y1') right next to the team-total count bars.
+    // _pctValue/_isRateOverlay keep these out of the count-bar value-label/
+    // stepRate machinery below — a rate needs no further "rate of a rate"
+    // derived line, and its value label is a % sign, not a raw count.
     const OVERLAY_FIELDS = [
       { field: 'pctQal', label: '% Qualified' },
       { field: 'meetingPct', label: 'Meeting Booked %' },
+      { field: 'meetingDonePct', label: 'Meeting Done %' },
       { field: 'leadToDealPct', label: 'Lead to Deal %' }
     ];
     overlayKeys.forEach(key => {
@@ -8489,7 +8491,7 @@ function renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granulari
         });
       });
     });
-    yTitle = 'Count (Business Leads / Qualified / Meetings Booked / Deals Closed)';
+    yTitle = 'Count (Business Leads / Qualified / Meetings Booked / Meeting Done / Deals Closed)';
   } else {
     const metric = metricSelect ? metricSelect.value : 'nbrBL';
     const splitMode = marketSplitMode();
