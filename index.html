@@ -8013,9 +8013,14 @@ const MARKET_TIER_COLORS = ['#1a9e94', '#e07b1a', '#c94f7c', '#4a7fd4'];
 // selected once shouldn't silently become "12 weeks" the next time Weekly is
 // picked) — stored under separate keys.
 const MARKET_RANGE_OPTIONS = {
-  monthly: [{ value: '6', label: 'Last 6 months' }, { value: '12', label: 'Last 12 months' }],
+  monthly: [{ value: '1', label: 'Last 1 month' }, { value: '3', label: 'Last 3 months' }, { value: '6', label: 'Last 6 months' }, { value: '12', label: 'Last 12 months' }],
   weekly: [{ value: '8', label: 'Last 8 weeks' }, { value: '13', label: 'Last 13 weeks' }, { value: '26', label: 'Last 26 weeks' }]
 };
+// Default range when nothing's saved yet — the un-migrated first option in
+// each list, not literally opts[0] (monthly's dropdown-display order now
+// starts at 1 month, added alongside 3 months below; the default shouldn't
+// silently change just because new shorter options were inserted first).
+const MARKET_RANGE_DEFAULT = { monthly: '6', weekly: '8' };
 function marketGranularityMode() {
   try { const v = localStorage.getItem('sdr_market_granularity'); return v === 'weekly' ? 'weekly' : 'monthly'; } catch (e) { return 'monthly'; }
 }
@@ -8029,7 +8034,7 @@ function marketRangeStorageKey(granularity) {
 function marketRangeMode(granularity) {
   granularity = granularity || marketGranularityMode();
   const opts = MARKET_RANGE_OPTIONS[granularity];
-  const fallback = opts[0].value;
+  const fallback = MARKET_RANGE_DEFAULT[granularity] || opts[0].value;
   try {
     const v = localStorage.getItem(marketRangeStorageKey(granularity));
     return opts.some(o => o.value === v) ? v : fallback;
@@ -8471,6 +8476,33 @@ function renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granulari
       { field: 'meetingDonePct', label: 'Meeting Done %' },
       { field: 'leadToDealPct', label: 'Lead to Deal %' }
     ];
+    if (overlayKeys.length) {
+      // The team-total's own rate, drawn as a REAL bar on the same 0-100%
+      // axis as every SDR/team overlay below — not the floating text label
+      // the funnel bars normally show (positioned above the count bar's own
+      // pixel height, which is on a totally different scale). Mixing "a
+      // label floating over a count bar" with "a bar whose height IS the
+      // percentage" made two equal-looking percentages land at very
+      // different visual heights (e.g. a real 25% bar reading taller than a
+      // 28% floating label) — every rate on this chart needs to be the same
+      // kind of mark to be honestly comparable. Same source data
+      // (marketVolumeEntryMetrics) as the count bars' own derived rate, so
+      // it's not a new number, just a fairer way to draw the one that
+      // already existed.
+      OVERLAY_FIELDS.forEach(f => {
+        datasets.push({
+          label: `Team ${f.label}`,
+          data: entries.map(e => { const m = marketVolumeEntryMetrics(e, selectedTiers, baselineOn); return m ? m[f.field] : null; }),
+          backgroundColor: '#6c6f7d',
+          yAxisID: 'y1',
+          categoryPercentage: 0.8,
+          barPercentage: 0.9,
+          _pctValue: true,
+          _isRateOverlay: true,
+          _legendColor: '#6c6f7d'
+        });
+      });
+    }
     overlayKeys.forEach(key => {
       const group = MARKET_VOLUME_SDR_OVERLAY_GROUPS.find(g => g.key === key);
       if (!group) return;
@@ -8558,7 +8590,14 @@ function renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granulari
   // (and its conversion off Business Leads) even when the bar itself is too
   // short to see (see VALUE_LABELS_PLUGIN).
   charts.chartMarketVolume.$valueLabels = funnelStack;
-  if (funnelStack) {
+  // The bold floating "35%"-style rate label only shows when no SDR/team
+  // overlay is on — the moment one is, the Team bars a few lines up already
+  // draw that exact rate as a real bar on the percentage axis, and showing
+  // both would mean the same rate is represented two visually
+  // incompatible ways on one chart (a text label positioned by the count
+  // bar's own height vs. a bar positioned by the percentage axis) — which is
+  // exactly what made two equal-ish percentages look like different heights.
+  if (funnelStack && !overlayKeys.length) {
     // Every stage's rate is off Business Leads specifically — Qualified÷BL,
     // Meetings÷BL, Deals÷BL — never off the stage right before it (Meetings÷
     // Qualified, Deals÷Meetings answer "conversion since the last stage,"
