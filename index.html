@@ -4159,11 +4159,42 @@ const VALUE_LABELS_PLUGIN = {
     ctx.restore();
   }
 };
+// Comparison mode's four metric groups (Qualified / Meeting Booked / Meeting
+// Done / Lead to Deal) repeat once per month with no built-in label of their
+// own — only the month name prints below the axis. chart.$stepGroupLabels
+// (set by the caller, only when a comparison is active and the visible
+// range is short enough for the text to stay legible — see
+// renderMarketVolumeChart) draws each group's short name centered under its
+// own cluster of bars, in the gap reserved by x.ticks.padding, above the
+// month label that Chart.js still draws in its normal spot beneath that.
+const STEP_GROUP_LABELS_PLUGIN = {
+  id: 'stepGroupLabels',
+  afterDraw(chart) {
+    const groups = chart.$stepGroupLabels;
+    if (!groups || !groups.length) return;
+    const { ctx, chartArea } = chart;
+    ctx.save();
+    ctx.font = '600 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillStyle = '#6c7280';
+    ctx.textAlign = 'center';
+    const y = chartArea.bottom + 12;
+    chart.data.labels.forEach((_, catIdx) => {
+      groups.forEach(g => {
+        const metas = g.datasetIndices.map(i => chart.getDatasetMeta(i)).filter(m => m && m.data[catIdx]);
+        if (!metas.length) return;
+        const xs = metas.map(m => m.data[catIdx].x);
+        const midX = (Math.min(...xs) + Math.max(...xs)) / 2;
+        ctx.fillText(g.label, midX, y);
+      });
+    });
+    ctx.restore();
+  }
+};
 // Guarded: if the Chart.js CDN ever fails to load (slow network, ad-blocker,
 // corporate proxy), this must not throw and abort the rest of this script —
 // every table/card/section below Chart.js relies on code that runs after
 // this line, and none of it depends on Chart existing.
-if (typeof Chart !== 'undefined') { Chart.register(VALUE_LABELS_PLUGIN); }
+if (typeof Chart !== 'undefined') { Chart.register(VALUE_LABELS_PLUGIN); Chart.register(STEP_GROUP_LABELS_PLUGIN); }
 
 function isCumulative(id) {
   const el = document.getElementById('cumulativeToggle-' + id);
@@ -8555,6 +8586,27 @@ function renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granulari
     chartOpts.scales.y.max = 100;
     chartOpts.scales.y.ticks.callback = v => v + '%';
   }
+  // Per-group step labels (Qualified / Meeting Booked / Meeting Done / Lead
+  // to Deal, under each metric's own cluster of bars) only make sense in
+  // comparison mode, and only when there's enough width per month for them
+  // to stay readable — the 6/12-month ranges pack too many months in for
+  // this extra row of text to survive at any legible size, so it's limited
+  // to the 1- and 3-month views.
+  const rangeN = parseInt(marketRangeMode(granularity), 10) || 0;
+  const showStepGroupLabels = pctMode && granularity === 'monthly' && (rangeN === 1 || rangeN === 3);
+  let stepGroupLabels = null;
+  if (showStepGroupLabels) {
+    const STEP_SHORT_LABELS = ['Qualified', 'Meeting Booked', 'Meeting Done', 'Lead to Deal'];
+    stepGroupLabels = OVERLAY_FIELDS.map((f, i) => ({
+      label: STEP_SHORT_LABELS[i],
+      datasetIndices: keptDatasets.map((d, idx) => (d.label && d.label.endsWith(f.label)) ? idx : -1).filter(idx => idx >= 0)
+    })).filter(g => g.datasetIndices.length);
+    // Push the month label down to make room for the step-group row drawn
+    // just below the axis by STEP_GROUP_LABELS_PLUGIN — Chart.js accounts for
+    // ticks.padding in its own layout sizing, so the chart area shrinks to
+    // fit rather than the new row overlapping anything.
+    chartOpts.scales.x.ticks.padding = 22;
+  }
   // Hovering a funnel bar spells out the same math the on-bar rate label
   // shows — "Meetings Booked ÷ Business Leads = 147 ÷ 445 = 33%" — so the
   // rate's denominator is never ambiguous. Reads chart.$stepRates, set right
@@ -8614,6 +8666,7 @@ function renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granulari
   } else {
     charts.chartMarketVolume.$stepRates = null;
   }
+  charts.chartMarketVolume.$stepGroupLabels = stepGroupLabels;
   renderMarketLegend('chartMarketVolume', datasets);
 }
 function renderMarketRateChart(entries, labels, baselineOn) {
