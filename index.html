@@ -1581,7 +1581,7 @@
       </div>
       <div class="chart-card full" data-chart-id="chartDQReasons">
         <div class="chart-header">
-          <span class="chart-title">Disqualification Reasons <span class="goal-info" id="info-chartDQReasons" title="The Disqualified reason field behind every disqualification in range, with its own source filter (SDR+AE / SDR only / AE only) and B2B/B2C/All dropdown (independent of the global filter). Blank reasons show as '(no reason given)' — flagged for cleanup in Data Hygiene. Team totals = one bar per reason (stacked SDR vs AE when both sources on); By SDR = same bars split by owner; Weekly trend = top 5 reasons tracked week by week, rest folded into 'Other' beyond the top 10. 100% view (Team totals only) = one full-width bar segmented by reason share, largest first, top 7 kept then folded into 'Other'.">ⓘ</span></span>
+          <span class="chart-title">Disqualification Reasons <span class="goal-info" id="info-chartDQReasons" title="The Disqualified reason field behind every disqualification in range, with its own source filter (SDR+AE / SDR only / AE only) and B2B/B2C/All dropdown (independent of the global filter). Blank reasons show as '(no reason given)' — flagged for cleanup in Data Hygiene. Team totals = one bar per reason (stacked SDR vs AE when both sources on); By SDR = same bars split by owner; Weekly trend = top 5 reasons tracked week by week, rest folded into 'Other' beyond the top 10. 100% view (Team totals only) = one 100%-width bar per period (Weekly/Monthly, most recent 6, newest on top), each segmented by that period's reason share, largest first, top 7 kept then folded into 'Other'.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartDQReasons"></div>
             <select class="chart-granularity" id="source-chartDQReasons" onchange="renderCharts(getFilteredDays())">
@@ -1604,6 +1604,10 @@
               <span class="toggle-track"></span>
               <span class="toggle-text">100% view</span>
             </label>
+            <select class="chart-granularity" id="pctGranularity-chartDQReasons" onchange="renderCharts(getFilteredDays())">
+              <option value="weekly" selected>Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
             <button class="chart-expand-btn" onclick="toggleChartExpand('chartDQReasons')" title="Expand">&#10530;</button>
           </div>
         </div>
@@ -6882,6 +6886,10 @@ const REASON_OTHER_COLOR = '#8c8f9f';
 // become unreadable/indistinguishable anyway, so the rest fold into one gray
 // "Other" segment rather than cycling or generating extra hues.
 const DQ_PCT_TOP_N = REASON_COLORS.length;
+// 100%-view periods: capped at 6 rows (Weekly or Monthly, picked by its own
+// dropdown) so the chart never grows unbounded with a wide date range —
+// beyond 6, individual rows would get too short to read the segment split.
+const DQ_PCT_MAX_PERIODS = 6;
 function dqSourceOf(r) {
   const s = normalizeSalesStatus(r['Sales status']);
   if (s === 'disqualified') return 'sdr';
@@ -6927,8 +6935,11 @@ function renderDQReasonsChart(days) {
   const pctWrap = document.getElementById('pctToggleWrap-' + id);
   if (pctWrap) pctWrap.style.display = viewMode === 'team' ? '' : 'none';
   const pct100 = viewMode === 'team' && !!document.getElementById('pctToggle-' + id) && document.getElementById('pctToggle-' + id).checked;
+  const pctGranWrap = document.getElementById('pctGranularity-' + id);
+  if (pctGranWrap) pctGranWrap.style.display = pct100 ? '' : 'none';
   const expanded = isChartExpanded(id);
-  updateDQReasonsCanvasHeight(pct100, expanded);
+  const periodCount = pct100 ? Math.min(DQ_PCT_MAX_PERIODS, bucketize(days, (pctGranWrap || {}).value || 'weekly').length) : 0;
+  updateDQReasonsCanvasHeight(pct100, expanded, periodCount);
   const f = chartFontSizes(id);
 
   if (charts[id]) { charts[id].destroy(); delete charts[id]; }
@@ -6955,27 +6966,53 @@ function renderDQReasonsChart(days) {
   let legendItems = [];
 
   if (pct100) {
-    // Single 100%-stacked horizontal bar: one bar, one segment per reason,
-    // segment width = that reason's share of every disqualification in
-    // range (not of a per-row count like the other views) — colored
-    // categorically by reason instead of by source/SDR, since the whole
-    // point is comparing reasons against each other at a glance.
+    // One 100%-stacked horizontal bar per period (Weekly or Monthly, picked
+    // by its own dropdown), most recent 6 periods, newest on top — same
+    // reason-segment idea as the old single combined bar, but broken out
+    // period by period so a shift in the reason mix over time is visible
+    // instead of averaged away into one bar. The reason list/colors/"Other"
+    // fold are still ranked off the WHOLE visible range (not each period
+    // separately) so a reason's color and its place in the legend stay
+    // fixed as you scan down the rows.
+    const pctGranEl = document.getElementById('pctGranularity-' + id);
+    const pctGranularity = (pctGranEl && pctGranEl.value) || 'weekly';
+    const allPeriods = bucketize(days, pctGranularity);
+    // bucketize returns oldest-first; take the trailing N, then reverse so
+    // the most recent period renders as the first/topmost category — Chart.js
+    // draws a horizontal bar's categories top-to-bottom in labels order.
+    const periods = allPeriods.slice(-DQ_PCT_MAX_PERIODS).reverse();
+    const periodLabels = periods.map(p => {
+      if (!p.days.length) return p.label;
+      return pctGranularity === 'weekly' ? weekLabelFromKey(dubaiWeekStart(p.days[0])) : monthLabelFromKey(p.days[0].slice(0, 7));
+    });
+    const periodRows = periods.map(p => { const daySet = new Set(p.days); return rows.filter(r => daySet.has(r.day)); });
+    const periodTotals = periodRows.map(prs => prs.length);
+
     const pctTop = ranked.slice(0, DQ_PCT_TOP_N);
-    const pctTopCounts = pctTop.map(r => countByReason.get(r));
-    const pctOtherCount = totalRows - pctTopCounts.reduce((a, n) => a + n, 0);
-    const pctLabels = pctOtherCount > 0 ? [...pctTop, `Other reasons (${ranked.length - pctTop.length})`] : pctTop;
-    const pctCounts = pctOtherCount > 0 ? [...pctTopCounts, pctOtherCount] : pctTopCounts;
+    const pctOtherAny = ranked.length > pctTop.length;
+    const pctLabels = pctOtherAny ? [...pctTop, `Other reasons (${ranked.length - pctTop.length})`] : pctTop;
     const pctColorFor = i => i < pctTop.length ? REASON_COLORS[i] : REASON_OTHER_COLOR;
-    const datasets = pctLabels.map((lbl, i) => ({
-      label: lbl,
-      data: [parseFloat((pctCounts[i] / totalRows * 100).toFixed(1))],
-      _count: pctCounts[i],
-      backgroundColor: pctColorFor(i), stack: 'pct', borderWidth: 0
-    }));
+    const otherLabelPct = pctOtherAny ? pctLabels[pctLabels.length - 1] : null;
+    const countInPeriod = (prs, lbl) => prs.reduce((a, r) => {
+      const inTop = pctTop.includes(r.reason);
+      if (lbl === otherLabelPct) return a + (inTop ? 0 : 1);
+      return a + (r.reason === lbl ? 1 : 0);
+    }, 0);
+    const datasets = pctLabels.map((lbl, i) => {
+      const counts = periodRows.map(prs => countInPeriod(prs, lbl));
+      const totals = periodTotals;
+      return {
+        label: lbl,
+        data: counts.map((n, pIdx) => totals[pIdx] ? parseFloat((n / totals[pIdx] * 100).toFixed(1)) : 0),
+        _counts: counts,
+        _totals: totals,
+        backgroundColor: pctColorFor(i), stack: 'pct', borderWidth: 0
+      };
+    });
     legendItems = pctLabels.map((lbl, i) => ({ label: lbl, color: pctColorFor(i) }));
     config = {
       type: 'bar',
-      data: { labels: [''], datasets },
+      data: { labels: periodLabels, datasets },
       options: {
         indexAxis: 'y',
         responsive: true,
@@ -6985,13 +7022,17 @@ function renderDQReasonsChart(days) {
           tooltip: {
             backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
             titleColor: '#ffffff', bodyColor: '#cfd2e3',
-            titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody },
-            callbacks: { label: c => ` ${c.dataset.label}: ${c.dataset._count} (${c.parsed.x}%)` }
+            footerColor: '#ffffff',
+            titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody }, footerFont: { size: f.tooltipFooter },
+            callbacks: {
+              label: c => ` ${c.dataset.label}: ${c.dataset._counts[c.dataIndex]} (${c.parsed.x}%)`,
+              footer: items => items.length ? ` Total: ${items[0].dataset._totals[items[0].dataIndex]} disqualified` : ''
+            }
           }
         },
         scales: {
           x: { stacked: true, min: 0, max: 100, ticks: { color: '#5b5f78', font: { size: f.tick }, callback: v => v + '%' }, grid: { color: '#e4e6ef' } },
-          y: { stacked: true, ticks: { display: false }, grid: { display: false } }
+          y: { stacked: true, ticks: { color: '#5b5f78', font: { size: f.tick } }, grid: { display: false } }
         }
       }
     };
@@ -7104,14 +7145,15 @@ function renderDQReasonsChart(days) {
     ).join('') + `<span class="legend-item" style="opacity:.7">${totalRows} disqualified lead${totalRows === 1 ? '' : 's'} in range</span>`;
   }
 }
-// The 100%-view single bar only needs enough height for one thick bar, not
-// the full multi-row canvas the per-reason breakdown uses. Sets the WRAPPER
-// div's height, not the canvas's own — Chart.js's responsive resize measures
-// the canvas's parent element, so sizing the canvas directly gets overwritten
-// on the next resize pass.
-function updateDQReasonsCanvasHeight(pct100, expanded) {
+// The 100%-view now draws one row per period (up to DQ_PCT_MAX_PERIODS), not
+// one thick bar — height scales with how many rows are actually showing,
+// plus fixed room for the x-axis ticks below them. Sets the WRAPPER div's
+// height, not the canvas's own — Chart.js's responsive resize measures the
+// canvas's parent element, so sizing the canvas directly gets overwritten on
+// the next resize pass.
+function updateDQReasonsCanvasHeight(pct100, expanded, periodCount) {
   const wrap = document.getElementById('chartDQReasonsWrap');
-  const base = pct100 ? 90 : 320;
+  const base = pct100 ? Math.max(1, periodCount || 1) * 46 + 40 : 320;
   if (wrap) wrap.style.height = (expanded ? base * 2 : base) + 'px';
 }
 
