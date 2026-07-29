@@ -8486,10 +8486,10 @@ function renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granulari
   });
 
   const OVERLAY_FIELDS = [
-    { field: 'pctQal', label: '% Qualified' },
-    { field: 'meetingPct', label: 'Meeting Booked %' },
-    { field: 'meetingDonePct', label: 'Meeting Done %' },
-    { field: 'leadToDealPct', label: 'Lead to Deal %' }
+    { field: 'pctQal', label: '% Qualified', numerField: 'qalBL', numerLabel: 'Qualified' },
+    { field: 'meetingPct', label: 'Meeting Booked %', numerField: 'meetingBooked', numerLabel: 'Meeting Booked' },
+    { field: 'meetingDonePct', label: 'Meeting Done %', numerField: 'meetingDone', numerLabel: 'Meeting Done' },
+    { field: 'leadToDealPct', label: 'Lead to Deal %', numerField: 'closed', numerLabel: 'Deals Closed' }
   ];
   let datasets, yTitle;
   if (funnelStack && overlayKeys.length) {
@@ -8525,19 +8525,25 @@ function renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granulari
         });
       }
       seriesList.forEach(s => {
+        const metricsPerEntry = entries.map(e => s.isTeam
+          ? marketVolumeEntryMetrics(e, selectedTiers, baselineOn)
+          : marketVolumeSdrOverlayMetrics(e, s, selectedTiers, tzBasis, granularity));
         datasets.push({
           label: `${s.label} ${f.label}`,
-          data: entries.map(e => {
-            const m = s.isTeam
-              ? marketVolumeEntryMetrics(e, selectedTiers, baselineOn)
-              : marketVolumeSdrOverlayMetrics(e, s, selectedTiers, tzBasis, granularity);
-            return m ? m[f.field] : null;
-          }),
+          data: metricsPerEntry.map(m => m ? m[f.field] : null),
           backgroundColor: s.color,
           categoryPercentage: 0.85,
           barPercentage: 0.9,
           _pctValue: true,
-          _legendColor: s.color
+          _legendColor: s.color,
+          // Kept per-category so the tooltip can show the same "whole
+          // numbers, then the math" breakdown the funnel view's bars already
+          // show — this dataset's own value is already the rate (Qualified÷
+          // Business Leads etc.), scoped to exactly this series (e.g. "OUS
+          // SDR" = only rows assigned to Mark/Levi), never the whole team's.
+          _rawMetrics: metricsPerEntry,
+          _numerField: f.numerField,
+          _numerLabel: f.numerLabel
         });
       });
     });
@@ -8611,15 +8617,28 @@ function renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granulari
   // shows — "Meetings Booked ÷ Business Leads = 147 ÷ 445 = 33%" — so the
   // rate's denominator is never ambiguous. Reads chart.$stepRates, set right
   // after construction below; harmless no-op in metric mode (no $stepRates).
-  // Overlay (_pctValue) datasets are already a rate — no further division,
-  // just the value with a % sign.
+  // Comparison-mode (_pctValue) datasets get the same treatment off their own
+  // _rawMetrics — scoped to exactly that series (e.g. "OUS SDR" = only
+  // rows assigned to Mark/Levi, not the whole team), never a fleet-wide count.
   chartOpts.plugins.tooltip = {
     filter: ctx => !ctx.dataset._isSpacer,
     callbacks: {
       label(ctx) {
         const chart = ctx.chart;
         const v = ctx.parsed.y;
-        if (ctx.dataset._pctValue) return `${ctx.dataset.label}: ${v.toFixed(1)}%`;
+        if (ctx.dataset._pctValue) {
+          const lines = [`${ctx.dataset.label}: ${v.toFixed(1)}%`];
+          const m = ctx.dataset._rawMetrics ? ctx.dataset._rawMetrics[ctx.dataIndex] : null;
+          if (m) {
+            const numer = m[ctx.dataset._numerField];
+            const denom = m.nbrBL;
+            if (denom != null && denom !== 0) {
+              lines.push(`${ctx.dataset._numerLabel}: ${numer.toLocaleString()} / ${denom.toLocaleString()}`);
+              lines.push(`${numer.toLocaleString()} ÷ ${denom.toLocaleString()} = ${Math.round(numer / denom * 100)}%`);
+            }
+          }
+          return lines;
+        }
         const lines = [`${ctx.dataset.label}: ${v.toLocaleString()}`];
         const denomIdx = chart.$stepRates ? chart.$stepRates[ctx.datasetIndex] : null;
         if (denomIdx != null) {
