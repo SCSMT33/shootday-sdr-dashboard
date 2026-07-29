@@ -1745,7 +1745,7 @@
       </div>
       <div class="chart-card full" data-chart-id="chartAircallConnect">
         <div class="chart-header">
-          <span class="chart-title">Aircall Connect Rate <span class="goal-info" id="info-chartAircallConnect" title="Measured per CONTACT (a unique phone number an SDR dialed), not per raw call — grouping every call to that number by that SDR across the whole call log, regardless of which day it landed on. A contact counts as Connected if its BEST (longest) call on record ran 50 seconds or longer, no matter where in the sequence that call falls — a real conversation on an earlier attempt still counts even if a later follow-up call was short. This keeps a rate from being dragged down just because an SDR needed a few follow-up dials to reach the same lead. % Connect Rate = connected contacts ÷ total contacts dialed, per bucket/SDR/team; Raw Counts shows both whole numbers instead (Contacts Dialed vs Contacts Connected), side by side. Of Connected: Meeting Booked %, Closed % follows the connected contacts themselves through to what they became — two bars per SDR/team: of the contacts that connected (50s+) this bucket, the share whose lead went on to book a meeting, and the share whose lead closed. Both share the same denominator (connected contacts), so the second bar is always at or below the first. Contacts whose number never matched a lead row stay in the denominator and correctly drag the conversion down. Hover a bar for its own raw counts — nothing else. Bucketed by the day of that contact's first call, so a lead worked this week stays in this week even if the connecting call landed next week. Group dropdown: Combined, US vs OUS Teams, or Per SDR. B2B/B2C/All dropdown is a display split only (by phone-number match against leads). Bar vs line trend follows the dashboard's global Chart Style toggle (top of page). Requires a Call History CSV.">ⓘ</span></span>
+          <span class="chart-title">Aircall Connect Rate <span class="goal-info" id="info-chartAircallConnect" title="Measured per CONTACT (a unique phone number an SDR dialed), not per raw call — grouping every call to that number by that SDR across the whole call log, regardless of which day it landed on. A contact counts as Connected if its BEST (longest) call on record ran 50 seconds or longer, no matter where in the sequence that call falls — a real conversation on an earlier attempt still counts even if a later follow-up call was short. This keeps a rate from being dragged down just because an SDR needed a few follow-up dials to reach the same lead. % Connect Rate = connected contacts ÷ total contacts dialed, per bucket/SDR/team; Raw Counts shows both whole numbers instead (Contacts Dialed vs Contacts Connected), side by side. Of Connected: Meeting Booked %, Closed % follows the connected contacts themselves through to what they became — two bars per SDR/team: of the contacts that connected (50s+) this bucket, the share whose lead went on to book a meeting, and the share whose lead closed. Both share the same denominator, so the second bar is always at or below the first. That denominator is connected contacts whose number resolves to a lead row — a dialed number that never became a lead can't report an outcome either way, so counting it as a failed conversion would measure data coverage rather than selling; the tooltip names how many were excluded. Note this view answers "of the conversations you got, how many converted" — it is NOT connect rate (that's reachability and dial strategy, on the % Connect Rate view), and Closed % is not comparable across US/OUS, whose deal types and close cycles differ. Hover a bar for its own raw counts — nothing else. Bucketed by the day of that contact's first call, so a lead worked this week stays in this week even if the connecting call landed next week. Group dropdown: Combined, US vs OUS Teams, or Per SDR. B2B/B2C/All dropdown is a display split only (by phone-number match against leads). Bar vs line trend follows the dashboard's global Chart Style toggle (top of page). Requires a Call History CSV.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartAircallConnect"></div>
             <select class="chart-granularity" id="metric-chartAircallConnect" onchange="renderCharts(getFilteredDays())">
@@ -2965,12 +2965,20 @@ function recomputeCallData() {
   });
   // contacts_connected_meeting/_closed are subsets of contacts_connected, not
   // of contacts — "of the people we actually reached, how many booked / how
-  // many closed." A contact with no matching lead row (a number that never
-  // became a lead) contributes to contacts/contacts_connected but can't
-  // contribute an outcome, so it correctly drags the conversion down.
+  // many closed."
+  //
+  // contacts_connected_matched: connected contacts whose number actually
+  // resolves to a lead row. A number that never became a lead can't report an
+  // outcome either way, so counting it as a failed conversion would be
+  // measuring data coverage, not selling — it's the conversion DENOMINATOR
+  // (see the funnel view) while contacts_connected stays the honest count of
+  // conversations had. Measured at ~3.5% of connected contacts on real data,
+  // and unevenly spread across SDRs (0–4.6%), which is exactly why it
+  // shouldn't sit in a denominator used to compare them.
   const summarizeContacts = outs => ({
     contacts: outs.length,
     contacts_connected: outs.filter(o => o.connected).length,
+    contacts_connected_matched: outs.filter(o => o.connected && o.outcome).length,
     contacts_connected_meeting: outs.filter(o => o.connected && o.outcome && o.outcome.meeting).length,
     contacts_connected_closed: outs.filter(o => o.connected && o.outcome && o.outcome.closed).length
   });
@@ -6393,6 +6401,7 @@ function callMetricsForSelection(dataset, day, view) {
     calls_over60: parts.reduce((a, p) => a + (p.calls_over60 || 0), 0),
     contacts: parts.reduce((a, p) => a + (p.contacts || 0), 0),
     contacts_connected: parts.reduce((a, p) => a + (p.contacts_connected || 0), 0),
+    contacts_connected_matched: parts.reduce((a, p) => a + (p.contacts_connected_matched || 0), 0),
     contacts_connected_meeting: parts.reduce((a, p) => a + (p.contacts_connected_meeting || 0), 0),
     contacts_connected_closed: parts.reduce((a, p) => a + (p.contacts_connected_closed || 0), 0)
   };
@@ -6563,20 +6572,29 @@ function renderAircallConnectChart(days) {
     // which mixed two different populations.
     datasets = groups.flatMap(g => {
       const connected = buckets.map(b => bucketValue(b, g.key, 'contacts_connected'));
+      const den = buckets.map(b => bucketValue(b, g.key, 'contacts_connected_matched'));
       const mtg = buckets.map(b => bucketValue(b, g.key, 'contacts_connected_meeting'));
       const cls = buckets.map(b => bucketValue(b, g.key, 'contacts_connected_closed'));
-      const asPct = arr => connected.map((den, i) => (den == null ? null : den ? parseFloat((arr[i] / den * 100).toFixed(1)) : null));
+      // Denominator is connected AND attributable to a lead. Unattributable
+      // connects are reported on their own tooltip line instead of silently
+      // counting as failures — see summarizeContacts.
+      const asPct = arr => den.map((d, i) => (d == null ? null : d ? parseFloat((arr[i] / d * 100).toFixed(1)) : null));
+      const countLine = arr => arr.map((n, i) => {
+        const skipped = (connected[i] ?? 0) - (den[i] ?? 0);
+        return `${n ?? 0} of ${den[i] ?? 0} connected contacts`
+          + (skipped > 0 ? ` (+${skipped} not matched to a lead, excluded)` : '');
+      });
       const mtgDs = {
         label: `${g.label} — Meeting Booked %`, data: asPct(mtg),
         _explain: 'Of contacts connected (best call 50s+), share whose lead booked a meeting',
-        _counts: mtg.map((n, i) => `${n ?? 0} of ${connected[i] ?? 0} connected contacts`),
+        _counts: countLine(mtg),
         _pctValue: true,
         backgroundColor: g.color + '66', borderRadius: 3, borderWidth: 0
       };
       const clsDs = {
         label: `${g.label} — Closed %`, data: asPct(cls),
         _explain: 'Of contacts connected (best call 50s+), share whose lead closed',
-        _counts: cls.map((n, i) => `${n ?? 0} of ${connected[i] ?? 0} connected contacts`),
+        _counts: countLine(cls),
         _pctValue: true,
         backgroundColor: g.color, borderRadius: 3, borderWidth: 0
       };
