@@ -8643,12 +8643,15 @@ function renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granulari
   }
   // Per-group step labels (Qualified / Meeting Booked / Meeting Done / Lead
   // to Deal, under each metric's own cluster of bars) only make sense in
-  // comparison mode, and only when there's enough width per month for them
-  // to stay readable — the 6/12-month ranges pack too many months in for
-  // this extra row of text to survive at any legible size, so it's limited
-  // to the 1- and 3-month views.
+  // comparison mode, and only when there's enough width per category for them
+  // to stay readable — the 6/12-month and 13/26-week ranges pack too many
+  // categories in for this extra row of text to survive at any legible size,
+  // so it's limited to the 1- and 3-month views, and the 4- and 8-week views.
   const rangeN = parseInt(marketRangeMode(granularity), 10) || 0;
-  const showStepGroupLabels = pctMode && granularity === 'monthly' && (rangeN === 1 || rangeN === 3);
+  const showStepGroupLabels = pctMode && (
+    (granularity === 'monthly' && (rangeN === 1 || rangeN === 3)) ||
+    (granularity === 'weekly' && (rangeN === 4 || rangeN === 8))
+  );
   let stepGroupLabels = null;
   if (showStepGroupLabels) {
     const STEP_SHORT_LABELS = ['Qualified', 'Meeting Booked', 'Meeting Done', 'Lead to Deal'];
