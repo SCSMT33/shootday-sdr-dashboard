@@ -1745,14 +1745,13 @@
       </div>
       <div class="chart-card full" data-chart-id="chartAircallConnect">
         <div class="chart-header">
-          <span class="chart-title">Aircall Connect Rate <span class="goal-info" id="info-chartAircallConnect" title="Measured per CONTACT (a unique phone number an SDR dialed), not per raw call — grouping every call to that number by that SDR across the whole call log, regardless of which day it landed on. A contact counts as Connected if its BEST (longest) call on record ran 50 seconds or longer, no matter where in the sequence that call falls — a real conversation on an earlier attempt still counts even if a later follow-up call was short. This keeps a rate from being dragged down just because an SDR needed a few follow-up dials to reach the same lead. % Connect Rate = connected contacts ÷ total contacts dialed, per bucket/SDR/team; Raw Counts shows both whole numbers instead (Contacts Dialed vs Contacts Connected), side by side. Connect Rate vs Meeting Booked %/Closed % puts the Connect Rate bar next to a second bar for that same bucket/group — Meetings Booked ÷ leads in range, or Deals Closed ÷ leads in range (the same lead-based definitions used elsewhere on the dashboard, NOT ÷ connected contacts) — so a gap between the two shows up as connects that didn't turn into a meeting/deal. Hover either bar for its raw counts. Bucketed by the day of that contact's first call, so a lead worked this week stays in this week even if the connecting call landed next week. Group dropdown: Combined, US vs OUS Teams, or Per SDR. B2B/B2C/All dropdown is a display split only (by phone-number match against leads) — leads never factor into the Connect Rate denominator, but does scope the Meeting Booked/Closed side. Bar vs line trend follows the dashboard's global Chart Style toggle (top of page). Requires a Call History CSV.">ⓘ</span></span>
+          <span class="chart-title">Aircall Connect Rate <span class="goal-info" id="info-chartAircallConnect" title="Measured per CONTACT (a unique phone number an SDR dialed), not per raw call — grouping every call to that number by that SDR across the whole call log, regardless of which day it landed on. A contact counts as Connected if its BEST (longest) call on record ran 50 seconds or longer, no matter where in the sequence that call falls — a real conversation on an earlier attempt still counts even if a later follow-up call was short. This keeps a rate from being dragged down just because an SDR needed a few follow-up dials to reach the same lead. % Connect Rate = connected contacts ÷ total contacts dialed, per bucket/SDR/team; Raw Counts shows both whole numbers instead (Contacts Dialed vs Contacts Connected), side by side. Of Connected: Meeting Booked %, Closed % follows the connected contacts themselves through to what they became — two bars per SDR/team: of the contacts that connected (50s+) this bucket, the share whose lead went on to book a meeting, and the share whose lead closed. Both share the same denominator (connected contacts), so the second bar is always at or below the first. Contacts whose number never matched a lead row stay in the denominator and correctly drag the conversion down. Hover a bar for its own raw counts — nothing else. Bucketed by the day of that contact's first call, so a lead worked this week stays in this week even if the connecting call landed next week. Group dropdown: Combined, US vs OUS Teams, or Per SDR. B2B/B2C/All dropdown is a display split only (by phone-number match against leads). Bar vs line trend follows the dashboard's global Chart Style toggle (top of page). Requires a Call History CSV.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartAircallConnect"></div>
             <select class="chart-granularity" id="metric-chartAircallConnect" onchange="renderCharts(getFilteredDays())">
               <option value="pct" selected>% Connect Rate</option>
               <option value="raw">Raw Counts</option>
-              <option value="vsMeeting">Connect Rate vs Meeting Booked %</option>
-              <option value="vsClosed">Connect Rate vs Closed %</option>
+              <option value="funnel">Of Connected: Meeting Booked %, Closed %</option>
             </select>
             <select class="chart-granularity" id="teamsComparison-chartAircallConnect" onchange="renderCharts(getFilteredDays())">
               <option value="off" selected>Group: Combined</option>
@@ -2938,12 +2937,23 @@ function recomputeCallData() {
   if (!rawCalls || !rawCalls.length) return;
 
   const phoneIsBusiness = new Map();
+  // phone -> what that lead actually became, so a CONNECTED contact can be
+  // followed through to its own outcome (see contacts_connected_meeting/
+  // _closed below). Same last-write-wins convention as phoneIsBusiness above
+  // when two leads share a number — rare, and picking either one is more
+  // useful than dropping the contact from the funnel entirely.
+  const phoneOutcome = new Map();
   if (rawByDay) {
     Object.keys(rawByDay).forEach(day => {
       SDRS.forEach(s => {
         (rawByDay[day][s.key] || []).forEach(r => {
           const phone = normalizePhoneDigits(r['Phone']);
-          if (phone) phoneIsBusiness.set(phone, isBusinessLead(r));
+          if (!phone) return;
+          phoneIsBusiness.set(phone, isBusinessLead(r));
+          phoneOutcome.set(phone, {
+            meeting: isMeetingBooked(r),
+            closed: normalizeSalesStatus(r['Sales status']) === 'closed'
+          });
         });
       });
     });
@@ -2953,9 +2963,16 @@ function recomputeCallData() {
     calls: calls.length,
     calls_over60: calls.filter(c => c.durationSec != null && c.durationSec >= 60).length
   });
+  // contacts_connected_meeting/_closed are subsets of contacts_connected, not
+  // of contacts — "of the people we actually reached, how many booked / how
+  // many closed." A contact with no matching lead row (a number that never
+  // became a lead) contributes to contacts/contacts_connected but can't
+  // contribute an outcome, so it correctly drags the conversion down.
   const summarizeContacts = outs => ({
     contacts: outs.length,
-    contacts_connected: outs.filter(o => o.connected).length
+    contacts_connected: outs.filter(o => o.connected).length,
+    contacts_connected_meeting: outs.filter(o => o.connected && o.outcome && o.outcome.meeting).length,
+    contacts_connected_closed: outs.filter(o => o.connected && o.outcome && o.outcome.closed).length
   });
 
   const byDay = {};
@@ -2984,7 +3001,7 @@ function recomputeCallData() {
     const connected = bestDurationSec >= CONNECT_THRESHOLD_SEC;
     const day = dubaiDayKeyFromUTCMs(calls[0].utcMs);
     if (!contactsByDay[day]) contactsByDay[day] = Object.fromEntries(SDRS.map(s => [s.key, []]));
-    if (contactsByDay[day][sdrKey]) contactsByDay[day][sdrKey].push({ phoneDigits, connected });
+    if (contactsByDay[day][sdrKey]) contactsByDay[day][sdrKey].push({ phoneDigits, connected, outcome: phoneOutcome.get(phoneDigits) || null });
   });
 
   Object.keys(byDay).sort().forEach(day => {
@@ -4156,7 +4173,10 @@ const VALUE_LABELS_PLUGIN = {
           ctx.fillStyle = '#6c63ff';
           ctx.fillText(pct, el.x, el.y - 18);
         }
-        ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        // $valueLabelSize: optional per-chart override — the Aircall funnel
+        // view packs up to 8 bars per bucket, where the default 13px labels
+        // would collide; every other chart leaves it unset and keeps 13px.
+        ctx.font = `600 ${chart.$valueLabelSize || 13}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
         ctx.fillStyle = '#22263a';
         // ds._pctValue: this dataset's own value already IS a rate (the
         // per-SDR/team conversion-rate overlay), not a count — labeled with
@@ -6372,7 +6392,9 @@ function callMetricsForSelection(dataset, day, view) {
     calls: parts.reduce((a, p) => a + (p.calls || 0), 0),
     calls_over60: parts.reduce((a, p) => a + (p.calls_over60 || 0), 0),
     contacts: parts.reduce((a, p) => a + (p.contacts || 0), 0),
-    contacts_connected: parts.reduce((a, p) => a + (p.contacts_connected || 0), 0)
+    contacts_connected: parts.reduce((a, p) => a + (p.contacts_connected || 0), 0),
+    contacts_connected_meeting: parts.reduce((a, p) => a + (p.contacts_connected_meeting || 0), 0),
+    contacts_connected_closed: parts.reduce((a, p) => a + (p.contacts_connected_closed || 0), 0)
   };
 }
 function sumCallsMetricFrom(dataset, days, view, key) {
@@ -6532,52 +6554,37 @@ function renderAircallConnectChart(days) {
           ];
     });
   } else {
-    // Connect Rate vs Meeting Booked %/Closed %: two bars per group, side by
-    // side — the Connect Rate bar (same 50s+ definition as everywhere else on
-    // this chart), next to a second bar off the LEADS side of the dashboard
-    // (Meetings Booked or Deals Closed ÷ leads in range — the same
-    // definitions the other lead-based charts use), not ÷ connected
-    // contacts. Different denominators on purpose: this isn't "of the people
-    // we reached, how many booked" (that data isn't in the call log — a
-    // contact's phone number->lead match happens only at the B2B/B2C
-    // display-split level, not deal-outcome level), it's "how hard we're
-    // dialing vs. what's actually landing," so a gap between the two bars is
-    // a real signal even though they're not measuring the same population.
-    const leadDataset = localLeadTypeDataset(id);
-    const numField = metric === 'vsMeeting' ? 'meetings' : 'closed';
-    const numLabel = metric === 'vsMeeting' ? 'Meeting Booked %' : 'Closed %';
-    const explainConnect = 'Connected contacts (best call on record 50s+) ÷ contacts dialed, this bucket';
-    const explainNum = metric === 'vsMeeting' ? 'Meetings booked ÷ leads created in range (NOT ÷ connected contacts)' : 'Deals closed ÷ leads created in range (NOT ÷ connected contacts)';
+    // Of Connected: Meeting Booked %, Closed % — the real connected funnel.
+    // Both bars share ONE denominator (contacts connected this bucket), so
+    // they're directly comparable and Closed is always <= Meeting Booked.
+    // Follows each connected contact through to its own matched lead's
+    // outcome (see recomputeCallData's phoneOutcome /
+    // contacts_connected_meeting/_closed) rather than dividing by all leads,
+    // which mixed two different populations.
     datasets = groups.flatMap(g => {
-      const dialed = buckets.map(b => bucketValue(b, g.key, 'contacts'));
       const connected = buckets.map(b => bucketValue(b, g.key, 'contacts_connected'));
-      const connectPct = dialed.map((total, i) => (total == null ? null : total ? parseFloat((connected[i] / total * 100).toFixed(1)) : 0));
-      const leadsArr = buckets.map(b => {
-        const present = b.days.filter(d => leadDataset && leadDataset[d]);
-        return present.length ? sumMetricFrom(leadDataset, present, g.key, 'leads') : null;
-      });
-      const numArr = buckets.map((b, i) => {
-        const present = b.days.filter(d => leadDataset && leadDataset[d]);
-        return present.length ? sumMetricFrom(leadDataset, present, g.key, numField) : null;
-      });
-      const numPct = leadsArr.map((leads, i) => (leads == null ? null : leads ? parseFloat((numArr[i] / leads * 100).toFixed(1)) : 0));
-      const connectDs = {
-        label: `${g.label} — Connect Rate %`, data: connectPct,
-        _explain: explainConnect,
-        _counts: connected.map((c, i) => `${c ?? 0} of ${dialed[i] ?? 0} contacts connected`),
-        backgroundColor: g.color + '4d', borderRadius: 3, borderWidth: 0
+      const mtg = buckets.map(b => bucketValue(b, g.key, 'contacts_connected_meeting'));
+      const cls = buckets.map(b => bucketValue(b, g.key, 'contacts_connected_closed'));
+      const asPct = arr => connected.map((den, i) => (den == null ? null : den ? parseFloat((arr[i] / den * 100).toFixed(1)) : null));
+      const mtgDs = {
+        label: `${g.label} — Meeting Booked %`, data: asPct(mtg),
+        _explain: 'Of contacts connected (best call 50s+), share whose lead booked a meeting',
+        _counts: mtg.map((n, i) => `${n ?? 0} of ${connected[i] ?? 0} connected contacts`),
+        _pctValue: true,
+        backgroundColor: g.color + '66', borderRadius: 3, borderWidth: 0
       };
-      const numDs = {
-        label: `${g.label} — ${numLabel}`, data: numPct,
-        _explain: explainNum,
-        _counts: numArr.map((n, i) => `${n ?? 0} of ${leadsArr[i] ?? 0} leads`),
+      const clsDs = {
+        label: `${g.label} — Closed %`, data: asPct(cls),
+        _explain: 'Of contacts connected (best call 50s+), share whose lead closed',
+        _counts: cls.map((n, i) => `${n ?? 0} of ${connected[i] ?? 0} connected contacts`),
+        _pctValue: true,
         backgroundColor: g.color, borderRadius: 3, borderWidth: 0
       };
       return barMode
-        ? [connectDs, numDs]
+        ? [mtgDs, clsDs]
         : [
-            { ...connectDs, borderColor: g.color, tension: 0, pointRadius: 2, pointHoverRadius: 4, fill: false, borderWidth: 1.5, borderDash: [5, 3], spanGaps: false },
-            { ...numDs, borderColor: g.color, tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false }
+            { ...mtgDs, borderColor: g.color, tension: 0, pointRadius: 2, pointHoverRadius: 4, fill: false, borderWidth: 1.5, borderDash: [5, 3], spanGaps: false },
+            { ...clsDs, borderColor: g.color, tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false, borderWidth: 2, spanGaps: false }
           ];
     });
   }
@@ -6585,27 +6592,39 @@ function renderAircallConnectChart(days) {
   if (charts[id]) charts[id].destroy();
   const ctx = document.getElementById(id).getContext('2d');
   const f = chartFontSizes(id);
+  // Two-bars-per-group views (Raw Counts, Of Connected) put up to 8 bars in a
+  // bucket — an index-mode tooltip there dumps all 8 series into one wall of
+  // text you have to read through to find the bar under the cursor. Those hover
+  // one bar at a time instead. % Connect Rate keeps index mode: one bar per
+  // group, where seeing every group's number side by side IS the comparison.
+  const singleBarHover = metric !== 'pct';
   charts[id] = new Chart(ctx, {
     type: barMode ? 'bar' : 'line',
     data: { labels, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: true,
-      interaction: { mode: 'index', intersect: false },
+      interaction: singleBarHover ? { mode: 'nearest', intersect: true } : { mode: 'index', intersect: false },
+      layout: { padding: { top: metric === 'funnel' ? 18 : 0 } },
       plugins: {
         legend: { display: false },
         tooltip: {
           backgroundColor: '#1a1d27', borderColor: '#2e3248', borderWidth: 1,
           titleColor: '#ffffff', bodyColor: '#cfd2e3',
           titleFont: { size: f.tooltipTitle }, bodyFont: { size: f.tooltipBody },
-          // vsMeeting/vsClosed datasets carry _explain (what this specific
-          // bar measures) and _counts (its raw numerator/denominator for this
-          // bucket) — surfaced as extra tooltip lines so you don't have to
-          // trust the % alone. No-ops for pct/raw datasets, which don't set them.
+          // Funnel datasets carry _explain (what this specific bar measures)
+          // and _counts (its raw numerator/denominator for this bucket) —
+          // surfaced as extra tooltip lines so you don't have to trust the %
+          // alone. No-ops for pct/raw datasets, which don't set them.
           callbacks: {
             label: ctx => {
               const ds = ctx.dataset;
-              const lines = [` ${ds.label}: ${ctx.parsed.y}${pct ? '%' : ''}`];
+              const v = ctx.parsed.y;
+              // A bucket where this group connected with nobody has no
+              // conversion to report (0/0 is undefined, not 0%) — it renders
+              // as a gap, and says so rather than "null%".
+              if (v == null) return ` ${ds.label}: no connected contacts`;
+              const lines = [` ${ds.label}: ${v}${pct ? '%' : ''}`];
               if (ds._explain) lines.push(`   ${ds._explain}`);
               if (ds._counts) lines.push(`   ${ds._counts[ctx.dataIndex]}`);
               return lines;
@@ -6622,6 +6641,11 @@ function renderAircallConnectChart(days) {
       }
     }
   });
+  // Every conversion number readable without hovering — the whole point of
+  // the funnel view is comparing them across SDRs at a glance. Small font
+  // since Per SDR packs 8 bars into a bucket.
+  charts[id].$valueLabels = metric === 'funnel' && barMode;
+  charts[id].$valueLabelSize = 10;
 
   const legendEl = document.getElementById('legend-' + id);
   if (legendEl) {
