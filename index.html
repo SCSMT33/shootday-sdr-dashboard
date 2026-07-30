@@ -1123,6 +1123,12 @@
                   <span class="toggle-track"></span>
                   <span class="toggle-text">Funnel view (BL/Qual/Meeting/Deals)</span>
                 </label>
+                <label class="chart-cumulative-toggle" id="marketVolumeAxisPctWrap" style="margin-right:0; display:none" title="Funnel view only. # (default): bars and the y-axis are raw counts, so a month's volume is what you see. %: every stage is drawn as its share of that month's Business Leads instead — Business Leads sits at 100%, and each later stage at its conversion off it — on a fixed 0-100% axis. Same numbers either way (the labels above each bar don't change); the % axis just makes the rates comparable by bar height across months, so two months that both converted 38% draw two bars of the same height however different their volumes were.">
+                  <span class="toggle-text">#</span>
+                  <input type="checkbox" id="marketVolumeAxisPct" onchange="saveMarketVolumeAxisPct(this.checked)">
+                  <span class="toggle-track"></span>
+                  <span class="toggle-text">%</span>
+                </label>
                 <select class="chart-granularity" id="marketVolumeMetricSelect" onchange="renderMarketCharts()">
                   <option value="nbrBL">Business Leads</option>
                   <option value="qalBL">Qualified</option>
@@ -4189,10 +4195,15 @@ const VALUE_LABELS_PLUGIN = {
       meta.data.forEach((el, j) => {
         const v = ds.data[j];
         if (v == null) return;
-        const denom = denomDs ? denomDs.data[j] : null;
+        // ds._rawCounts: this dataset is plotted as a percentage but its
+        // labels still print the underlying count (the Volume Trend funnel's
+        // # / % axis toggle) — the rate below is derived from the counts, so
+        // both modes label a bar with exactly the same two numbers.
+        const own = ds._rawCounts ? ds._rawCounts[j] : v;
+        const denom = denomDs ? (denomDs._rawCounts || denomDs.data)[j] : null;
         const showRate = denom != null && denom !== 0;
         if (showRate) {
-          const pct = Math.round(v / denom * 100) + '%';
+          const pct = Math.round(own / denom * 100) + '%';
           ctx.font = '800 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
           ctx.fillStyle = '#6c63ff';
           ctx.fillText(pct, el.x, el.y - 18);
@@ -4205,7 +4216,7 @@ const VALUE_LABELS_PLUGIN = {
         // ds._pctValue: this dataset's own value already IS a rate (the
         // per-SDR/team conversion-rate overlay), not a count — labeled with
         // a % sign instead of the bold derived-rate line above.
-        ctx.fillText(ds._pctValue ? Math.round(v) + '%' : v.toLocaleString(), el.x, el.y - 4);
+        ctx.fillText(ds._pctValue ? Math.round(v) + '%' : own.toLocaleString(), el.x, el.y - 4);
       });
     });
     ctx.restore();
@@ -8535,6 +8546,20 @@ function marketVolumeTierKeys() {
   } catch (e) {}
   return MARKET_VOLUME_DEFAULT_TIERS.slice();
 }
+// Volume Trend funnel view's y-axis unit: counts (default) or each stage as a
+// percentage of that month's Business Leads. Percentage mode is what makes
+// rates comparable by bar height across months — in counts, a month with 2x
+// the volume draws taller bars at the same conversion, which is exactly the
+// comparison this toggle exists to remove. Only meaningful in the count-bar
+// funnel view: metric mode has one series of its own choosing, and the
+// SDR-comparison mode is already all percentages.
+function marketVolumeAxisPct() {
+  try { return localStorage.getItem('sdr_market_volume_axis_pct') === '1'; } catch (e) { return false; }
+}
+function saveMarketVolumeAxisPct(checked) {
+  try { localStorage.setItem('sdr_market_volume_axis_pct', checked ? '1' : '0'); } catch (e) {}
+  renderMarketCharts();
+}
 function saveMarketVolumeTierKeys() {
   const keys = MARKET_TIERS.map(t => t.key).filter(k => {
     const el = document.getElementById('marketVolumeTier-' + k);
@@ -8735,6 +8760,15 @@ function renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granulari
     const cb = document.getElementById('marketVolumeSdr-' + g.key);
     if (cb) cb.checked = overlayKeys.includes(g.key);
   });
+  // The # / % axis toggle only applies to the count-bar funnel view — metric
+  // mode plots whichever single metric the dropdown picks, and the SDR
+  // comparison mode below is already percentages on a 0-100% axis — so it's
+  // hidden rather than left visible and inert in those two.
+  const axisPct = funnelStack && !overlayKeys.length && marketVolumeAxisPct();
+  const axisPctWrap = document.getElementById('marketVolumeAxisPctWrap');
+  if (axisPctWrap) axisPctWrap.style.display = (funnelStack && !overlayKeys.length) ? 'flex' : 'none';
+  const axisPctToggle = document.getElementById('marketVolumeAxisPct');
+  if (axisPctToggle) axisPctToggle.checked = marketVolumeAxisPct();
 
   const OVERLAY_FIELDS = [
     { field: 'pctQal', label: '% Qualified', numerField: 'qalBL', numerLabel: 'Qualified' },
@@ -8800,15 +8834,35 @@ function renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granulari
     });
     yTitle = '% Qualified / Meeting Booked % / Meeting Done % / Lead to Deal % — Team vs selected';
   } else if (funnelStack) {
-    datasets = MARKET_FUNNEL_STAGES.map(stage => ({
-      label: stage.label,
-      data: entries.map(e => { const m = marketVolumeEntryMetrics(e, selectedTiers, baselineOn); return m ? m[stage.field] : null; }),
-      backgroundColor: entries.map(e => (e.sdr ? stage.color : marketMuted(stage.color))),
-      categoryPercentage: 0.8,
-      barPercentage: 0.9,
-      _legendColor: stage.color
-    }));
-    yTitle = 'Count (Business Leads / Qualified / Meetings Booked / Meeting Done / Deals Closed)';
+    // The # / % toggle: in % mode each stage is plotted as its share of the
+    // same month's Business Leads (so BL itself is a flat 100% and every
+    // later stage is its conversion off BL — the same rate the bold on-bar
+    // label already shows), instead of the raw count. The counts are kept on
+    // the dataset as _rawCounts so the value labels and tooltips print the
+    // exact same numbers in both modes — only the bar heights and the axis
+    // change. A month with no Business Leads has no denominator, so it plots
+    // as null (a gap) rather than a spurious 0%.
+    const blCounts = entries.map(e => { const m = marketVolumeEntryMetrics(e, selectedTiers, baselineOn); return m ? m.nbrBL : null; });
+    datasets = MARKET_FUNNEL_STAGES.map(stage => {
+      const counts = entries.map(e => { const m = marketVolumeEntryMetrics(e, selectedTiers, baselineOn); return m ? m[stage.field] : null; });
+      return {
+        label: stage.label,
+        data: axisPct
+          ? counts.map((v, i) => (v == null || !blCounts[i]) ? null : v / blCounts[i] * 100)
+          : counts,
+        _rawCounts: axisPct ? counts : null,
+        backgroundColor: entries.map(e => (e.sdr ? stage.color : marketMuted(stage.color))),
+        categoryPercentage: 0.8,
+        barPercentage: 0.9,
+        _legendColor: stage.color
+      };
+    });
+    // Deliberately short next to the count-mode title — the rotated y-axis
+    // label has a fixed width to live in, and the count version already runs
+    // to the edge of it.
+    yTitle = axisPct
+      ? '% of Business Leads'
+      : 'Count (Business Leads / Qualified / Meetings Booked / Meeting Done / Deals Closed)';
   } else {
     const metric = metricSelect ? metricSelect.value : 'nbrBL';
     const splitMode = marketSplitMode();
@@ -8840,6 +8894,14 @@ function renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granulari
   // it (no separate count axis to confuse against, since there are no count
   // bars in this mode at all).
   if (pctMode) {
+    chartOpts.scales.y.max = 100;
+    chartOpts.scales.y.ticks.callback = v => v + '%';
+  }
+  // Funnel view on the % axis: fixed 0-100% (Business Leads is always the
+  // 100% mark), so bar heights mean the same thing in every month — the whole
+  // point of the toggle. Left auto-scaling, a 4%-closed month would stretch
+  // to fill the plot and read like a good one.
+  if (axisPct) {
     chartOpts.scales.y.max = 100;
     chartOpts.scales.y.ticks.callback = v => v + '%';
   }
@@ -8893,14 +8955,21 @@ function renderMarketVolumeChart(entries, labels, baselineOn, tzBasis, granulari
           }
           return lines;
         }
-        const lines = [`${ctx.dataset.label}: ${v.toLocaleString()}`];
+        // On the % axis the plotted value is a share of Business Leads —
+        // the count it came from rides along in _rawCounts, and the tooltip
+        // leads with that count (plus the share in brackets) so hovering
+        // answers "how many" in both modes, not just in count mode.
+        const own = ctx.dataset._rawCounts ? ctx.dataset._rawCounts[ctx.dataIndex] : v;
+        const lines = [ctx.dataset._rawCounts
+          ? `${ctx.dataset.label}: ${own.toLocaleString()} (${v.toFixed(1)}% of BL)`
+          : `${ctx.dataset.label}: ${v.toLocaleString()}`];
         const denomIdx = chart.$stepRates ? chart.$stepRates[ctx.datasetIndex] : null;
         if (denomIdx != null) {
           const denomDs = chart.data.datasets[denomIdx];
-          const denom = denomDs.data[ctx.dataIndex];
+          const denom = (denomDs._rawCounts || denomDs.data)[ctx.dataIndex];
           if (denom != null && denom !== 0) {
-            const pct = Math.round(v / denom * 100);
-            lines.push(`${ctx.dataset.label} ÷ ${denomDs.label} = ${v.toLocaleString()} ÷ ${denom.toLocaleString()} = ${pct}%`);
+            const pct = Math.round(own / denom * 100);
+            lines.push(`${ctx.dataset.label} ÷ ${denomDs.label} = ${own.toLocaleString()} ÷ ${denom.toLocaleString()} = ${pct}%`);
           }
         }
         return lines;
