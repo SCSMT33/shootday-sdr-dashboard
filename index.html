@@ -702,6 +702,17 @@
      read as misaligned. */
   #marketTable th:not(:first-child), #marketTable td:not(:first-child) { text-align: right; }
   #marketTable td:not(:first-child) { padding-right: 16px; }
+  /* "History" toggle: under each total row, the same figures for the previous
+     two months, stacked oldest-last. Each line steps down one font size (14 ->
+     12 -> 11) and lightens, so the selected month stays the row you read
+     first and the two comparison lines are obviously a different period
+     rather than more segments of this one. The total row directly above drops
+     its bottom border so the three months read as one block. */
+  #marketTable tr:has(+ tr.market-hist-row) td { border-bottom: none; }
+  #marketTable tr.market-hist-row td { padding-top: 0; padding-bottom: 8px; font-weight: 500; color: var(--muted); }
+  #marketTable .market-hist-line { line-height: 1.35; white-space: nowrap; }
+  #marketTable .market-hist-1 { font-size: 12px; }
+  #marketTable .market-hist-2 { font-size: 11px; opacity: 0.8; }
   .mandate-kpi-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
   .mandate-kpi-table td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
   .mandate-kpi-name { font-weight: 600; white-space: nowrap; }
@@ -1067,6 +1078,11 @@
             <option value="b2c">B2C</option>
             <option value="both">B2B+B2C</option>
           </select>
+          <label class="chart-cumulative-toggle" title="Adds a two-line history under each total row of this table only (Total SDR, Total AE, Total US/OUS, Total shootday) — the same columns for the previous two calendar months of whichever month is selected, oldest last. Each line is a step smaller than the one above it, so the selected month stays the headline number. Computed exactly the same way as the month you'd get by picking it in the Month dropdown, on the same B2B/B2C selection, so the history can never disagree with the table. A month with no data reads as dashes.">
+            <input type="checkbox" id="marketHistoryToggle" onchange="saveMarketHistory(this.checked)">
+            <span class="toggle-track"></span>
+            <span class="toggle-text">History</span>
+          </label>
         </div>
         <div style="overflow-x:auto"><table class="mandate-kpi-table" id="marketTable"></table></div>
 
@@ -8072,6 +8088,99 @@ function marketRowHtml(label, m, opts) {
     <td${valueStyle}>${marketPctCell(m.leadToDealPct)}</td>
   </tr>`;
 }
+// ─── MARKET SPLIT: TOTAL-ROW HISTORY ───────────────────────────────────────────
+// The "History" toggle next to the Month picker. Off by default — it's a
+// comparison view, not the default reading of the table.
+function marketHistoryOn() {
+  try { return localStorage.getItem('sdr_market_history') === '1'; } catch (e) { return false; }
+}
+function saveMarketHistory(checked) {
+  try { localStorage.setItem('sdr_market_history', checked ? '1' : '0'); } catch (e) {}
+  renderMarketSection();
+}
+// How many prior months the history lines show. Two is what fits under a row
+// before the stack starts competing with the row itself for attention.
+const MARKET_HISTORY_MONTHS = 2;
+function marketMonthKeyOffset(monthKey, monthsBack) {
+  const [y, m] = monthKey.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 - monthsBack, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+// entries: [{ monthKey, m }] newest first, m null when that month has no data
+// at all (then every column dashes out, same as an empty segment elsewhere).
+// Rendered as one row whose cells each hold a stack of lines rather than as
+// one row per month, so a total and its history stay a single visual block.
+function marketHistoryRowHtml(entries) {
+  const lines = fmt => entries.map((e, i) =>
+    `<div class="market-hist-line market-hist-${i + 1}">${e.m ? fmt(e.m) : '—'}</div>`).join('');
+  const count = f => `<td>${lines(m => marketCountCell(m[f], m))}</td>`;
+  const pct = f => `<td>${lines(m => marketPctCell(m[f]))}</td>`;
+  const labels = entries.map((e, i) =>
+    `<div class="market-hist-line market-hist-${i + 1}">${escapeHtml(monthLabelFromKey(e.monthKey))}</div>`).join('');
+  return `<tr class="market-hist-row">
+    <td class="mandate-kpi-name" style="padding-left:24px">${labels}</td>
+    ${count('nbrBL')}${count('qalBL')}${pct('pctQal')}${count('meetingBooked')}${pct('meetingPct')}${count('meetingDone')}${pct('meetingDonePct')}${pct('qalToClosePct')}${pct('meetingDoneToClosePct')}${count('closed')}${pct('leadToDealPct')}
+  </tr>`;
+}
+// AE_AWARE_TIERS: >1k/complex — the two tiers the SDR team never books
+// itself, filled in with AE-current production (data/ae-current.csv,
+// current-era >1k/complex deals) on top of whatever SDR-owned rows land
+// there (normally none). Their numbers — and "Total AE" — render in a
+// distinct dark blue so it's visually obvious which figures an SDR actually
+// brought in vs. an AE.
+const MARKET_AE_AWARE_TIERS = new Set(['gt1k', 'complex']);
+// Everything the table shows for one month, as data rather than HTML — so the
+// History toggle can run it again for the previous two months and be certain
+// those lines match what the table would show if you picked that month in the
+// dropdown (same lead-type selection, same tier rules, same AE merging).
+function marketMonthBreakdown(monthKey, tzBasis, aeByMonth, sdrMonths) {
+  const teams = [];
+  const teamTotals = [];
+  if (sdrMonths.includes(monthKey)) TEAM_GROUPS.forEach(team => {
+    // One scan per team, then split by tier in memory — marketCleanB2BRows
+    // walks every day bucket, and with history on this runs for three months.
+    const sdrRows = marketCleanB2BRows(monthKey, tzBasis, team.members);
+    const aeRows = marketAECurrentRows(monthKey, tzBasis, team.key);
+    const tierMetrics = {};
+    MARKET_TIERS.forEach(t => {
+      let rows = sdrRows.filter(r => marketRequestTier(r) === t.key);
+      if (MARKET_AE_AWARE_TIERS.has(t.key)) rows = rows.concat(aeRows.filter(r => marketRequestTier(r) === t.key));
+      tierMetrics[t.key] = marketMetrics(rows);
+    });
+    const sub1 = marketMergeMetrics([tierMetrics.lt1k, tierMetrics.incomplete]);
+    const sub2 = marketMergeMetrics([tierMetrics.gt1k, tierMetrics.complex]);
+    const total = marketMergeMetrics([sub1, sub2]);
+    teamTotals.push(total);
+    // Routing-lag leak: some SDR-tier (<1k/incomplete) leads went straight to
+    // an AE instead, mostly a May/June handoff artifact (largely gone by
+    // July) — not folded into Total SDR, just flagged when it's nonzero.
+    const leakedToAE = aeRows.filter(r => MARKET_SDR_SCOPE_TIERS.includes(marketRequestTier(r))).length;
+    teams.push({ team, tierMetrics, sub1, sub2, total, leakedToAE });
+  });
+
+  // AE-era block for any month the historical dataset covers — the whole
+  // company as one group. Same untyped-lead rule as the SDR teams above:
+  // an (untyped) row is shown for visibility but never folded into the total,
+  // so it stays apples-to-apples with the SDR side's Total (also a tier-sum
+  // only, never a raw population count).
+  let aeEra = null;
+  const eraRows = (aeByMonth || {})[monthKey] || [];
+  if (eraRows.length) {
+    const tiers = {};
+    MARKET_TIERS.forEach(t => { tiers[t.key] = marketMetrics(eraRows.filter(r => marketRequestTier(r) === t.key)); });
+    aeEra = {
+      tiers,
+      untyped: marketMetrics(eraRows.filter(r => marketRequestTier(r) === null)),
+      total: marketMergeMetrics(MARKET_TIERS.map(t => tiers[t.key]))
+    };
+  }
+
+  const grand = marketMergeMetrics(teamTotals.concat(aeEra ? [aeEra.total] : []));
+  // Any AE-era rows in the total poison Meeting Done to Close (most pre-SDR
+  // closed deals have a blank Meeting Status) — dash it rather than print 250%+.
+  if (aeEra) grand.meetingDoneToClosePct = null;
+  return { monthKey, teams, aeEra, grand };
+}
 function toggleMarketSection() {
   document.getElementById('marketSection').classList.toggle('expanded');
 }
@@ -8106,79 +8215,66 @@ function renderMarketSection() {
   if (note) note.textContent = `${marketLeadTypeLabel()} funnel by team and request-type tier — ${monthLabelFromKey(monthKey)} (Dubai time)`;
 
   let bodyRows = '';
-  const teamTotals = [];
-  const hasSdrData = sdrMonths.includes(monthKey);
-  // AE_AWARE_TIERS: >1k/complex — the two tiers the SDR team never books
-  // itself, now filled in with AE-current production (data/ae-current.csv,
-  // current-era >1k/complex deals) on top of whatever SDR-owned rows land
-  // there (normally none). Their numbers — and "Total AE" below — render in
-  // a distinct dark blue so it's visually obvious which figures an SDR
-  // actually brought in vs. an AE.
-  const AE_AWARE_TIERS = new Set(['gt1k', 'complex']);
-  if (hasSdrData) TEAM_GROUPS.forEach(team => {
-    const tierMetrics = {};
-    MARKET_TIERS.forEach(t => {
-      let rows = marketCleanB2BRows(monthKey, tzBasis, team.members).filter(r => marketRequestTier(r) === t.key);
-      if (AE_AWARE_TIERS.has(t.key)) rows = rows.concat(marketAECurrentRows(monthKey, tzBasis, team.key).filter(r => marketRequestTier(r) === t.key));
-      tierMetrics[t.key] = marketMetrics(rows);
-    });
-    const sub1 = marketMergeMetrics([tierMetrics.lt1k, tierMetrics.incomplete]);
-    const sub2 = marketMergeMetrics([tierMetrics.gt1k, tierMetrics.complex]);
-    const teamTotal = marketMergeMetrics([sub1, sub2]);
-    teamTotals.push(teamTotal);
+  const historyOn = marketHistoryOn();
+  const historyToggle = document.getElementById('marketHistoryToggle');
+  if (historyToggle) historyToggle.checked = historyOn;
+  // The previous two calendar months of whichever month is selected, run
+  // through the same breakdown — so a history line always equals what the
+  // table shows when that month is picked in the dropdown. Months with no
+  // data (before the dataset starts) come back empty and dash out.
+  const historyMonths = historyOn
+    ? Array.from({ length: MARKET_HISTORY_MONTHS }, (_, i) => marketMonthKeyOffset(monthKey, i + 1))
+    : [];
+  const current = marketMonthBreakdown(monthKey, tzBasis, aeByMonth, sdrMonths);
+  const past = historyMonths.map(mk => marketMonthBreakdown(mk, tzBasis, aeByMonth, sdrMonths));
+  // pick: breakdown -> the metrics object this row shows (null if that month
+  // has no such segment at all, e.g. an AE-era month has no US/OUS teams).
+  const histRow = pick => historyOn
+    ? marketHistoryRowHtml(historyMonths.map((mk, i) => ({ monthKey: mk, m: pick(past[i]) })))
+    : '';
+  const teamPick = (teamKey, sel) => b => {
+    const entry = b.teams.find(t => t.team.key === teamKey);
+    return entry ? sel(entry) : null;
+  };
 
-    // Routing-lag leak: some SDR-tier (<1k/incomplete) leads went straight to
-    // an AE instead, mostly a May/June handoff artifact (largely gone by
-    // July) — not folded into Total SDR, just flagged when it's nonzero.
-    const leakedToAE = marketAECurrentRows(monthKey, tzBasis, team.key).filter(r => ['lt1k', 'incomplete'].includes(marketRequestTier(r))).length;
-    const sdrFlag = leakedToAE ? `${leakedToAE} lead${leakedToAE === 1 ? '' : 's'} in these tiers went to an AE instead, not counted here.` : null;
-
+  current.teams.forEach(entry => {
+    const team = entry.team;
+    const sdrFlag = entry.leakedToAE ? `${entry.leakedToAE} lead${entry.leakedToAE === 1 ? '' : 's'} in these tiers went to an AE instead, not counted here.` : null;
     bodyRows += `<tr><td class="mandate-kpi-name" colspan="12" style="padding-top:16px">${escapeHtml(team.label)}</td></tr>`;
     MARKET_TIERS.forEach((t, i) => {
-      bodyRows += marketRowHtml(t.label, tierMetrics[t.key], { indent: true, textColor: AE_AWARE_TIERS.has(t.key) ? COLORS.AECurrent : null });
-      if (i === 1) bodyRows += marketRowHtml('Total SDR', sub1, { indent: true, total: true, tint: { color: team.color, alpha: 0.05 }, flag: sdrFlag });
-      if (i === 3) bodyRows += marketRowHtml('Total AE', sub2, { indent: true, total: true, tint: { color: team.color, alpha: 0.05 }, textColor: COLORS.AECurrent });
+      bodyRows += marketRowHtml(t.label, entry.tierMetrics[t.key], { indent: true, textColor: MARKET_AE_AWARE_TIERS.has(t.key) ? COLORS.AECurrent : null });
+      if (i === 1) {
+        bodyRows += marketRowHtml('Total SDR', entry.sub1, { indent: true, total: true, tint: { color: team.color, alpha: 0.05 }, flag: sdrFlag });
+        bodyRows += histRow(teamPick(team.key, e => e.sub1));
+      }
+      if (i === 3) {
+        bodyRows += marketRowHtml('Total AE', entry.sub2, { indent: true, total: true, tint: { color: team.color, alpha: 0.05 }, textColor: COLORS.AECurrent });
+        bodyRows += histRow(teamPick(team.key, e => e.sub2));
+      }
     });
-    bodyRows += marketRowHtml(`Total ${team.label.replace(' Team', '')}`, teamTotal, { total: true, tint: { color: team.color, alpha: 0.11 } });
+    bodyRows += marketRowHtml(`Total ${team.label.replace(' Team', '')}`, entry.total, { total: true, tint: { color: team.color, alpha: 0.11 } });
+    bodyRows += histRow(teamPick(team.key, e => e.total));
   });
 
   // AE-era block for any month the historical dataset covers — the whole
-  // company as one group. Same untyped-lead rule as the SDR teams above:
-  // an (untyped) row is shown for visibility but never folded into Total AE
-  // era, so it stays apples-to-apples with the SDR side's Total (also a
-  // tier-sum only, never a raw population count).
+  // company as one group.
   // May 2026 is the transition month: it shows the SDR team blocks AND this
   // block (May 1–18 ran under AEs), and Total shootday combines both.
-  let aeTotal = null;
-  const aeRows = aeByMonth[monthKey] || [];
-  if (aeRows.length) {
+  if (current.aeEra) {
     // Meeting Done to Close is dashed out for AE-era rows: most pre-SDR
     // closed deals have a blank Meeting Status, so the computed ratio runs
     // to 250-300%+ — the Definitions glossary documents this exact problem
     // and the AE Baseline section uses a static benchmark instead.
     const noMDC = m => ({ ...m, meetingDoneToClosePct: null });
-    const aeTiers = {};
-    MARKET_TIERS.forEach(t => { aeTiers[t.key] = marketMetrics(aeRows.filter(r => marketRequestTier(r) === t.key)); });
-    const untypedRows = aeRows.filter(r => marketRequestTier(r) === null);
-    // Total AE era = sum of the 4 recognized tiers only, matching how the SDR
-    // team totals above are built (Total US/OUS also excludes blank-tier
-    // leads entirely) — "(untyped)" stays visible as its own informational
-    // row but isn't folded into the total, so an AE month and an SDR month
-    // stay apples-to-apples everywhere this number is used (this table, the
-    // Volume/Rate/Deal trend charts' Pre-SDR baseline).
-    aeTotal = marketMergeMetrics(MARKET_TIERS.map(t => aeTiers[t.key]));
     bodyRows += `<tr><td class="mandate-kpi-name" colspan="12" style="padding-top:16px">AE era (pre-SDR, whole company)</td></tr>`;
-    MARKET_TIERS.forEach(t => { bodyRows += marketRowHtml(t.label, noMDC(aeTiers[t.key]), { indent: true }); });
-    bodyRows += marketRowHtml('(untyped, excluded from Total)', noMDC(marketMetrics(untypedRows)), { indent: true });
-    bodyRows += marketRowHtml('Total AE era', noMDC(aeTotal), { total: true });
+    MARKET_TIERS.forEach(t => { bodyRows += marketRowHtml(t.label, noMDC(current.aeEra.tiers[t.key]), { indent: true }); });
+    bodyRows += marketRowHtml('(untyped, excluded from Total)', noMDC(current.aeEra.untyped), { indent: true });
+    bodyRows += marketRowHtml('Total AE era', noMDC(current.aeEra.total), { total: true });
   }
 
-  const grandTotal = marketMergeMetrics(teamTotals.concat(aeTotal ? [aeTotal] : []));
-  // Any AE-era rows in the total poison Meeting Done to Close the same way
-  // they do in their own block above — dash it rather than print 250%+.
-  if (aeTotal) grandTotal.meetingDoneToClosePct = null;
   bodyRows += `<tr><td colspan="12" style="height:8px;border:none"></td></tr>`;
-  bodyRows += marketRowHtml('Total shootday', grandTotal, { total: true });
+  bodyRows += marketRowHtml('Total shootday', current.grand, { total: true });
+  bodyRows += histRow(b => b.grand);
 
   // "BL" (Business Leads) only reads correctly when the selector is on B2B —
   // relabeled to the generic "Leads" for B2C/B2B+B2C so the column header
