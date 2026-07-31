@@ -4757,20 +4757,13 @@ function renderLayeredActivityChart(chartDays, metrics) {
   }
 }
 
-// All days of the current calendar month (including days not yet reached), so the
-// featured charts span the full month even before it's over.
-function monthDayKeys() {
-  const now = nowInDubai();
-  const y = now.getUTCFullYear(), m = now.getUTCMonth();
-  const dim = daysInCurrentMonth();
-  return Array.from({ length: dim }, (_, i) => `${y}-${String(m + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`);
-}
-
 function renderCharts(days) {
   const d = derivedGoals();
   const rangeVal = document.getElementById('rangeSelect').value;
-  // In month-to-date views, span the whole month so future days show as gaps
-  const chartDays = isCurrentMonthToDate(rangeVal) ? monthDayKeys() : days;
+  // In month-to-date views, span the whole calendar month (including days not
+  // yet reached) so the charts show the rest of the month as gaps rather than
+  // stopping at today.
+  const chartDays = isCurrentMonthToDate(rangeVal) ? monthDayKeys(dubaiTodayKey().slice(0, 7)) : days;
   // AE Baseline is a single frozen historical average (not date-bucketed),
   // computed once here and handed to each chart as spec.aeBaseline — a flat
   // % for rate charts, an avg-per-day count for count charts. The combined
