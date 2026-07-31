@@ -411,30 +411,9 @@
   .ae-row-toggle input:checked + .toggle-track { opacity: 1; }
   tr.ae-row-excluded td { opacity: 0.45; }
 
-  /* GOALS SECTION (the legacy input grid, now nested inside Monthly Targets) */
-  .goals-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
-  .goals-sub { font-size: 11px; color: var(--muted); margin-bottom: 16px; }
-  .goals-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
-  .goal-item { display: flex; flex-direction: column; gap: 5px; }
-  .goal-label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  /* ⓘ tooltip marker, used by every section's labels and table headers. */
   .goal-info { cursor: help; text-transform: none; font-weight: 700; opacity: 0.7; }
   .goal-info:hover { opacity: 1; color: var(--accent); }
-  .goal-input-row { display: flex; align-items: center; gap: 8px; }
-  .goal-input {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 14px;
-    font-weight: 600;
-    width: 90px;
-    transition: border-color 0.15s;
-  }
-  .goal-input:focus { outline: none; border-color: var(--accent); }
-  .goal-unit { font-size: 11px; color: var(--muted); }
-  .goal-derived { font-size: 11px; color: var(--accent); font-weight: 600; min-height: 14px; }
-  .pending-badge { background: var(--surface2); color: var(--muted); font-size: 10px; padding: 2px 7px; border-radius: 10px; display: inline-block; border: 1px solid var(--border); }
 
   /* MONTHLY TARGETS SCOREBOARD */
   .targets-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -496,7 +475,10 @@
     border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
   }
   .targets-reset-btn:hover { color: var(--text); border-color: var(--muted); }
-  .targets-legacy { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--border); }
+  .targets-save-row { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
+  .targets-save-note { font-size: 11px; color: var(--muted); }
+  .targets-save-note.ok { color: var(--green); font-weight: 600; }
+  .targets-save-note.err { color: var(--red); font-weight: 600; }
 
   /* AE BASELINE */
   .ae-baseline-section {
@@ -1355,6 +1337,40 @@
       </div>
     </div>
 
+    <!-- MONTHLY TARGETS -->
+    <div class="mandate-section" id="targetsSection">
+      <div class="mandate-header" onclick="toggleTargetsSection()">
+        <div class="mandate-header-left">
+          <span class="mandate-title">Monthly Targets <span class="goal-info" title="One month, one scoreboard: what the team actually did, what you said it should do, and the gap between them. Actual is computed from the loaded Airtable export using the same definitions as the rest of the dashboard (see Definitions), as a whole-team roll-up across all SDRs — deliberately independent of the Range / Leads / SDR pickers at the top of the page, which only govern the cards and charts. Pick the month and the lead pool with the two dropdowns; the current month adds a Projected column. The goals you enter underneath are the single source of truth for every target line, benchmark and ✓/✗ elsewhere on this dashboard. Brief and Comp Model are frozen reference figures (the founders' strategic briefing and the compensation model), not live numbers.">ⓘ</span></span>
+          <span class="mandate-sub" id="targetsHeaderNote">Actual vs. goal for a single month — the goals set here drive every target on the dashboard</span>
+        </div>
+        <span class="mandate-chevron">&#9654;</span>
+      </div>
+      <div class="mandate-body">
+        <div class="targets-controls">
+          <span class="targets-control-label">Month</span>
+          <select class="chart-granularity" id="targetsMonthSelect" onchange="saveTargetsMonth(this.value)"></select>
+          <select class="chart-granularity" id="targetsLeadTypeSelect" title="Which pool of leads the Actual column is computed from. Goals are set on B2B — the briefing's and the comp model's numbers are all business-lead numbers — so the Goal / Difference / +10-20-30% columns only appear in B2B mode; B2C and B2B+B2C show actuals alone." onchange="saveTargetsLeadType(this.value)">
+            <option value="b2b">B2B</option>
+            <option value="b2c">B2C</option>
+            <option value="all">B2B+B2C</option>
+          </select>
+          <span class="targets-scope-note" id="targetsScopeNote"></span>
+        </div>
+        <div style="overflow-x:auto"><table class="targets-table" id="targetsTable"></table></div>
+
+        <div class="mandate-subheading-row" style="margin-top:26px">
+          <div class="mandate-subheading">Set your targets <span class="goal-info" title="Every number here is the goal for one SDR or the team in one month. Rows in the table above that aren't listed here are derived from these — Leads / team is Leads / SDR × Active SDRs, Qualified leads / SDR is Leads / SDR × % Qualified, Meetings / SDR is Leads / SDR × Meeting booked rate. Saved to this browser as you type; Save Targets forces a write and confirms it landed.">ⓘ</span></div>
+          <button class="targets-reset-btn" onclick="event.stopPropagation(); resetTargets()">Reset to defaults</button>
+        </div>
+        <div class="targets-input-grid" id="targetsInputs"></div>
+        <div class="targets-save-row">
+          <button class="coaching-save-btn" onclick="event.stopPropagation(); saveTargetsNow()">Save Targets</button>
+          <span class="targets-save-note" id="targetsSaveNote"></span>
+        </div>
+      </div>
+    </div>
+
     <!-- SALES FUNNEL -->
     <div class="mandate-section" id="funnelSection">
       <div class="mandate-header" onclick="toggleFunnelSection()">
@@ -1958,95 +1974,6 @@
       </div>
     </div>
 
-    <!-- MONTHLY TARGETS -->
-    <div class="mandate-section" id="targetsSection">
-      <div class="mandate-header" onclick="toggleTargetsSection()">
-        <div class="mandate-header-left">
-          <span class="mandate-title">Monthly Targets <span class="goal-info" title="One month, one scoreboard: what the team actually did, what you said it should do, and the gap between them. Actual is computed from the loaded Airtable export using the same definitions as the rest of the dashboard (see Definitions), as a whole-team roll-up across all SDRs — deliberately independent of the Range / Leads / SDR pickers at the top of the page, which only govern the cards and charts. Pick the month and the lead pool with the two dropdowns; the current month adds a Projected column. The goals you enter underneath are the single source of truth for every target line, benchmark and ✓/✗ elsewhere on this dashboard. Brief and Comp Model are frozen reference figures (the founders' strategic briefing and the compensation model), not live numbers.">ⓘ</span></span>
-          <span class="mandate-sub" id="targetsHeaderNote">Actual vs. goal for a single month — the goals set here drive every target on the dashboard</span>
-        </div>
-        <span class="mandate-chevron">&#9654;</span>
-      </div>
-      <div class="mandate-body">
-        <div class="targets-controls">
-          <span class="targets-control-label">Month</span>
-          <select class="chart-granularity" id="targetsMonthSelect" onchange="saveTargetsMonth(this.value)"></select>
-          <select class="chart-granularity" id="targetsLeadTypeSelect" title="Which pool of leads the Actual column is computed from. Goals are set on B2B — the briefing's and the comp model's numbers are all business-lead numbers — so the Goal / Difference / +10-20-30% columns only appear in B2B mode; B2C and B2B+B2C show actuals alone." onchange="saveTargetsLeadType(this.value)">
-            <option value="b2b">B2B</option>
-            <option value="b2c">B2C</option>
-            <option value="all">B2B+B2C</option>
-          </select>
-          <span class="targets-scope-note" id="targetsScopeNote"></span>
-        </div>
-        <div style="overflow-x:auto"><table class="targets-table" id="targetsTable"></table></div>
-
-        <div class="mandate-subheading-row" style="margin-top:26px">
-          <div class="mandate-subheading">Set your targets <span class="goal-info" title="Every number here is the goal for one SDR or the team in one month. Rows in the table above that aren't listed here are derived from these — Leads / team is Leads / SDR × Active SDRs, Qualified leads / SDR is Leads / SDR × % Qualified, Meetings / SDR is Leads / SDR × Meeting booked rate. Saved to this browser automatically and applied across the whole dashboard immediately.">ⓘ</span></div>
-          <button class="targets-reset-btn" onclick="event.stopPropagation(); resetTargets()">Reset to defaults</button>
-        </div>
-        <div class="targets-input-grid" id="targetsInputs"></div>
-
-        <!-- The original Monthly Targets input grid, kept below the new one
-             during the transition: same six numbers, same store, so editing
-             either side moves both. Slated for removal. -->
-        <div class="targets-legacy">
-          <div class="goals-title">Original goal inputs</div>
-          <div class="goals-sub">Superseded by the grid above — the same six numbers, reading and writing the same saved targets, kept here for now so nothing you're used to disappears mid-flight.</div>
-          <div class="goals-grid">
-            <div class="goal-item">
-              <div class="goal-label">Lead Volume / month <span class="goal-info" title="The team's monthly lead-volume goal — Leads / SDR × Active SDRs. Typing here divides back out across the active SDR count.">ⓘ</span></div>
-              <div class="goal-input-row">
-                <input class="goal-input" type="number" id="goal_leads" placeholder="e.g. 1000" onchange="saveLegacyGoal('goal_leads')">
-                <span class="goal-unit">leads</span>
-              </div>
-              <div class="goal-derived" id="derived_leads"></div>
-            </div>
-            <div class="goal-item">
-              <div class="goal-label">Meeting Booked Rate target <span class="goal-info" title="Meetings Booked goal = this % × Lead Volume goal (team). Each SDR's individual check applies the same % to their own actual lead volume, not an even split.">ⓘ</span></div>
-              <div class="goal-input-row">
-                <input class="goal-input" type="number" id="goal_meeting_rate" placeholder="e.g. 38" onchange="saveLegacyGoal('goal_meeting_rate')">
-                <span class="goal-unit">%</span>
-              </div>
-              <div class="goal-derived" id="derived_meetings"></div>
-            </div>
-            <div class="goal-item">
-              <div class="goal-label">% Qualified target <span class="goal-info" title="Leads Qualified goal = this % × Lead Volume goal (team). Each SDR's individual check applies the same % to their own actual lead volume, not an even split.">ⓘ</span></div>
-              <div class="goal-input-row">
-                <input class="goal-input" type="number" id="goal_pct_qual" placeholder="e.g. 35" onchange="saveLegacyGoal('goal_pct_qual')">
-                <span class="goal-unit">%</span>
-              </div>
-              <div class="goal-derived" id="derived_qualified"></div>
-            </div>
-            <div class="goal-item">
-              <div class="goal-label">Non-Responsive Rate max</div>
-              <div class="goal-input-row">
-                <input class="goal-input" type="number" id="goal_nr_rate" placeholder="e.g. 29" onchange="saveLegacyGoal('goal_nr_rate')">
-                <span class="goal-unit">%</span>
-              </div>
-            </div>
-            <div class="goal-item">
-              <div class="goal-label">No-Show Rate max</div>
-              <div class="goal-input-row">
-                <input class="goal-input" type="number" id="goal_no_show_rate" placeholder="e.g. 10" onchange="saveLegacyGoal('goal_no_show_rate')">
-                <span class="goal-unit">%</span>
-              </div>
-            </div>
-            <div class="goal-item">
-              <div class="goal-label">Speed-to-Lead max <span class="goal-info" title="Target median minutes from lead creation to first outbound call. Requires a Call History CSV to be loaded.">ⓘ</span></div>
-              <div class="goal-input-row">
-                <input class="goal-input" type="number" id="goal_speed_to_lead" placeholder="e.g. 5" onchange="saveLegacyGoal('goal_speed_to_lead')">
-                <span class="goal-unit">min</span>
-              </div>
-            </div>
-            <div class="goal-item">
-              <div class="goal-label">Cadence Adherence</div>
-              <div class="goal-input-row"><span class="pending-badge">Pending (manual score)</span></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- AE BASELINE (pre-SDR historical benchmark) -->
     <div class="ae-baseline-section" id="aeBaselineSection">
       <div class="ae-baseline-header" onclick="toggleAEBaselineSection()">
@@ -2284,8 +2211,8 @@
           <div class="definition-item"><dt>Meeting Not Attended (No-Show)</dt><dd>Meeting Status = Meeting Not Atended or Meeting Rejected, as a share of that period's booked meetings (Scheduled + Done + Not Atended + Rejected, or an Instant Close) — a rejected meeting is still a booked meeting that didn't happen as scheduled, same as a no-show. This uses the general Meeting Booked definition (Instant Close credited); the Meeting Quality Multiplier's own rejection rate uses commission's stricter definition instead (see Meeting Booked), so the two won't always match exactly.</dd></div>
           <div class="definition-item"><dt>Meeting Rejected</dt><dd>The AE declining a booked meeting — a qualification call, not a client no-show. Counts toward Meeting Booked, and toward the No-Show Rate's numerator alongside Meeting Not Attended (a rejected meeting is still a meeting that didn't happen as scheduled) — but tracked separately from AE Disqualified / Handoff Quality, which is a different metric about the AE's own qualification judgment.</dd></div>
           <div class="definition-item"><dt>MTD / WTD</dt><dd>"Month/week to date" — marks whichever column is the still-in-progress current calendar month or week. Its raw counts are naturally lower than a full period's, simply because the period isn't over yet.</dd></div>
-          <div class="definition-item"><dt>Monthly Targets</dt><dd>The goal store for the whole dashboard: every target line, benchmark and ✓/✗ anywhere else on this page reads from the numbers entered in that section, and nothing else keeps a goal of its own. The Mandate Scoreboard's Active Coordinators / Non-responsive max / No-show max / Lead→closed min / Qualified→closed min inputs and the legacy goal grid at the bottom of the Monthly Targets section are second doors onto the same values, not separate settings. Three table rows are derived rather than entered: Leads / team = Leads / SDR × Active SDRs, Qualified leads / SDR = Leads / SDR × % Qualified, Meetings / SDR = Leads / SDR × Meeting booked rate. The +10/+20/+30% columns are the goal scaled by 1.1/1.2/1.3, or by 0.9/0.8/0.7 on the three rows where lower is better (Non-responsive, Speed to lead, No-show). Brief and Comp Model are frozen reference figures from the founders' strategic briefing and the compensation model, never computed. Actual is a whole-team roll-up for the chosen month and lead pool, independent of the Range / Leads / SDR pickers at the top of the page.</dd></div>
-          <div class="definition-item"><dt>Monthly Targets — Projected</dt><dd>Shown only when the selected month is the current one. Counts (Leads, Qualified leads / SDR, Meetings / SDR) scale on the run-rate: value so far ÷ days elapsed × days in the month. Rates project flat — the best available estimate of a month's final rate is the rate it is running at, and multiplying a ratio by remaining days would be meaningless. The three closed-deal rates (Lead→deal, Qualified→deal, Meeting→deal) are marked † because they count by lead creation-date cohort and keep climbing after the month ends as those leads close, so their projection is a floor rather than a forecast. The Difference column compares Projected against Goal on the current month, and Actual against Goal on any finished one.</dd></div>
+          <div class="definition-item"><dt>Monthly Targets</dt><dd>The goal store for the whole dashboard: every target line, benchmark and ✓/✗ anywhere else on this page reads from the numbers entered in that section, and nothing else keeps a goal of its own. The Mandate Scoreboard's Active Coordinators / Non-responsive max / No-show max / Lead→closed min / Qualified→closed min inputs are second doors onto the same values, not separate settings. Targets are written to browser storage on every keystroke, so a value survives a hard refresh even if you never leave the box; Save Targets forces a write of every field and confirms it landed, and a storage failure is reported in red rather than silently dropped. Three table rows are derived rather than entered: Leads / team = Leads / SDR × Active SDRs, Qualified leads / SDR = Leads / SDR × % Qualified, Meetings / SDR = Leads / SDR × Meeting booked rate. The +10/+20/+30% columns are the goal scaled by 1.1/1.2/1.3, or by 0.9/0.8/0.7 on the three rows where lower is better (Non-responsive, Speed to lead, No-show). Brief and Comp Model are frozen reference figures from the founders' strategic briefing and the compensation model, never computed. Actual is a whole-team roll-up for the chosen month and lead pool, independent of the Range / Leads / SDR pickers at the top of the page.</dd></div>
+          <div class="definition-item"><dt>Monthly Targets — Projected</dt><dd>Shown only when the selected month is the current one. Counts (Leads, Qualified leads / SDR, Meetings / SDR) scale on the run-rate: value so far ÷ days elapsed × days in the month. Rates project flat — the best available estimate of a month's final rate is the rate it is running at, and multiplying a ratio by remaining days would be meaningless. Four rows carry a † next to their name because their number is still settling: the three closed-deal rates (Lead→deal, Qualified→deal, Meeting→deal), which count by lead creation-date cohort and keep climbing after the month ends as those leads close, and Non-responsive rate, which only counts leads written off once the follow-up cadence has run out — leads still being chased aren't in it yet. Each † tooltip reports how many of that month's leads are still inside the maturity window (assumed 21 days; the team's real sequence length isn't recorded in the export). The Difference column compares Projected against Goal on the current month, and Actual against Goal on any finished one.</dd></div>
           <div class="definition-item"><dt>Non-Responsive Rate</dt><dd>Leads permanently disqualified as unreachable — Disqualified reason = "Not responsive" — divided by lead volume. The transient "Non respondant" Sales status is deliberately not counted: per the Lead Flow doc that's a lead still being worked mid-cadence, not one given up on. One definition everywhere as of 2026-07-31 (Summary Card, Non-Responsive Rate % chart, Mandate Scoreboard, Monthly Targets), matching the strategic briefing's 29% company baseline. The Summary Card previously used a broader version that also counted the mid-cadence status and so read a few points higher than the chart directly beneath it while both were judged against the same goal.</dd></div>
           <div class="definition-item"><dt>On-Hours / Off-Hours</dt><dd>Whether a lead arrived during an SDR's own working shift (their solo shift plus the team's overlap window), computed against the timezone their shift schedule is anchored to — EST for MJ and Gospel, CET for Mark and Levi — not Dubai time. This isn't always the same as the SDR's own personal timezone: Gospel's shift is scheduled against EST even though she's personally based in Pacific (times shown to you elsewhere, e.g. Speed-to-Lead drilldowns, use her actual Pacific time instead). Weekends are always off-hours for everyone, regardless of clock time.</dd></div>
           <div class="definition-item"><dt>Pay ÷ Revenue</dt><dd>Sales Funnel row (Month over Month view, individual SDR tables only — behind the "Show pay ÷ revenue" toggle in the Per-SDR Breakdown, off by default so it's never accidentally visible while screen-sharing). That SDR's total pay for the calendar month ÷ USD-equivalent closed revenue from leads created that month — same creation-date cohort and Instant Close exclusion as commission's own revenue figure. Pay is entered by hand (click a value to set/edit it); lower is better, so the delta color is inverted from every other funnel row. No AE Baseline column — pay data doesn't exist for the pre-SDR era.</dd></div>
@@ -2605,7 +2532,7 @@ function parseCSV(text, filename) {
   document.getElementById('dashboard').style.display = 'block';
 
   saveLoadedData(filename);
-  loadGoals();
+  migrateLegacyTargets();
   loadLeadTypeFilter();
   loadLeadRulesFilter();
   loadRangeFilter();
@@ -5542,7 +5469,7 @@ function saveMandateStlGoal(val) {
 // Booked Rate, % Qualified) — lets the Mandate Scoreboard write straight into
 // the same targets the rest of the dashboard reads from.
 function saveMandateGoal(fieldId, val) {
-  const key = LEGACY_GOAL_FIELDS[fieldId];
+  const key = MANDATE_GOAL_FIELDS[fieldId];
   if (key) saveTargetNum(key, val);
 }
 function renderMandateSection() {
@@ -7572,21 +7499,83 @@ function targets() {
   try { return { ...TARGET_DEFAULTS, ...JSON.parse(localStorage.getItem('sdr_targets') || '{}') }; }
   catch (e) { return { ...TARGET_DEFAULTS }; }
 }
-// Any write re-renders the WHOLE dashboard, not just this section: that's the
-// point of one store — a target typed here has to move the cards, the charts
-// and the Mandate Scoreboard in the same paint.
-function saveTargets(patch) {
+// Persisting and re-rendering are deliberately separate. writeTargets() puts
+// the number in localStorage IMMEDIATELY and on its own, so a value is safe the
+// instant it's typed — no waiting for a blur, a debounce or a repaint, and a
+// hard refresh mid-edit can't lose it. Re-rendering (which is the expensive
+// part on a big export) is what gets deferred while typing.
+//
+// A failed write is surfaced rather than swallowed: localStorage also holds the
+// whole loaded CSV, so on a large enough export a quota error is a real
+// possibility, and silently dropping a target on the floor is the one failure
+// mode that would be impossible to diagnose from the screen.
+function writeTargets(patch) {
   const merged = { ...targets(), ...patch };
-  try { localStorage.setItem('sdr_targets', JSON.stringify(merged)); } catch (e) {}
-  if (allData) renderDashboard(); else { renderTargetsSection(); syncLegacyGoalInputs(); }
+  try {
+    localStorage.setItem('sdr_targets', JSON.stringify(merged));
+    setTargetsSaveNote('ok');
+    return true;
+  } catch (e) {
+    setTargetsSaveNote('err', e);
+    return false;
+  }
 }
-function saveTargetNum(key, val) {
+function setTargetsSaveNote(state, err) {
+  const el = document.getElementById('targetsSaveNote');
+  if (!el) return;
+  if (state === 'err') {
+    el.className = 'targets-save-note err';
+    el.textContent = 'Could not save — this browser\'s storage is full or blocked' +
+      (err && err.name ? ` (${err.name})` : '') + '. Your targets will not survive a refresh until this is cleared.';
+    return;
+  }
+  const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  el.className = 'targets-save-note ok';
+  el.textContent = `Saved ${now} — kept in this browser, survives a hard refresh.`;
+  clearTimeout(setTargetsSaveNote._t);
+  setTargetsSaveNote._t = setTimeout(() => {
+    if (el.classList.contains('ok')) { el.className = 'targets-save-note'; el.textContent = 'Saved automatically as you type.'; }
+  }, 6000);
+}
+function targetsRerender() {
+  if (allData) renderDashboard(); else renderTargetsSection();
+}
+// Write now, repaint shortly after — so holding a key down doesn't rebuild the
+// whole dashboard on every keystroke.
+let targetsRenderTimer = null;
+function saveTargets(patch, defer) {
+  const ok = writeTargets(patch);
+  clearTimeout(targetsRenderTimer);
+  if (defer) targetsRenderTimer = setTimeout(targetsRerender, 700);
+  else targetsRerender();
+  return ok;
+}
+function saveTargetNum(key, val, defer) {
   const n = parseFloat(val);
-  saveTargets({ [key]: (isNaN(n) || n < 0) ? TARGET_DEFAULTS[key] : n });
+  if (defer && (val === '' || isNaN(n))) return; // mid-edit (empty box, "1." etc.) — wait for a real number
+  saveTargets({ [key]: (isNaN(n) || n < 0) ? TARGET_DEFAULTS[key] : n }, defer);
+}
+// Explicit Save: re-reads every box straight from the DOM, so even a value the
+// browser hasn't fired a change event for yet is committed, then repaints.
+function saveTargetsNow() {
+  const patch = {};
+  TARGET_INPUTS.forEach(f => {
+    const el = document.getElementById('target_' + f.key);
+    if (!el) return;
+    const n = parseFloat(el.value);
+    patch[f.key] = (isNaN(n) || n < 0) ? TARGET_DEFAULTS[f.key] : n;
+  });
+  clearTimeout(targetsRenderTimer);
+  if (writeTargets(patch)) targetsRerender();
 }
 function resetTargets() {
-  try { localStorage.removeItem('sdr_targets'); } catch (e) {}
-  if (allData) renderDashboard(); else { renderTargetsSection(); syncLegacyGoalInputs(); }
+  let ok = true;
+  try { localStorage.removeItem('sdr_targets'); } catch (e) { ok = false; }
+  const grid = document.getElementById('targetsInputs');
+  if (grid) delete grid.dataset.built; // force a rebuild so the boxes show the defaults
+  const note = document.getElementById('targetsSaveNote');
+  if (note && ok) { note.className = 'targets-save-note'; note.textContent = 'Reset to defaults — saved automatically as you type.'; }
+  targetsRerender();
 }
 // One-time migration off the two older stores (sdr_goals + the goal-ish keys
 // inside sdr_mandate). Only keys with a genuine equivalent are carried over —
@@ -7646,49 +7635,15 @@ function derivedGoals() {
     goalQualified: (goalLeads && goalPctQual) ? goalLeads * goalPctQual / 100 : null
   };
 }
-function renderDerivedGoalPreviews() {
-  const d = derivedGoals();
-  const fmt = v => v == null ? '' : `→ ${Math.round(v)} goal`;
-  const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
-  set('derived_leads', d.goalLeadsPerSdr ? `${Math.round(d.goalLeadsPerSdr)} / SDR × ${d.goalActiveSdrs || 0}` : '');
-  set('derived_meetings', fmt(d.goalMeetings));
-  set('derived_qualified', fmt(d.goalQualified));
-}
-// The legacy grid at the bottom of the section is plain static HTML, so its
-// values are pushed in from the store on every render rather than being the
-// store itself (which is what they used to be).
-const LEGACY_GOAL_FIELDS = {
+// The Mandate Scoreboard's inputs are a second door onto five of these
+// targets; this maps its field ids onto the store's own keys.
+const MANDATE_GOAL_FIELDS = {
   goal_meeting_rate: 'meeting_rate',
   goal_pct_qual: 'pct_qual',
   goal_nr_rate: 'nr_rate',
   goal_no_show_rate: 'no_show_rate',
   goal_speed_to_lead: 'speed_to_lead'
 };
-function syncLegacyGoalInputs() {
-  const t = targets();
-  const set = (id, v) => { const el = document.getElementById(id); if (el && document.activeElement !== el) el.value = v; };
-  set('goal_leads', Math.round(t.leads_per_sdr * t.active_sdrs));
-  Object.keys(LEGACY_GOAL_FIELDS).forEach(id => set(id, t[LEGACY_GOAL_FIELDS[id]]));
-  renderDerivedGoalPreviews();
-}
-function saveLegacyGoal(fieldId) {
-  const el = document.getElementById(fieldId);
-  if (!el) return;
-  if (fieldId === 'goal_leads') {
-    // Typed as a team number; stored as the per-SDR figure everything else is
-    // built from, divided back out across the active-SDR count.
-    const n = parseFloat(el.value);
-    const sdrs = targets().active_sdrs || 1;
-    saveTargets({ leads_per_sdr: (isNaN(n) || n < 0) ? TARGET_DEFAULTS.leads_per_sdr : n / sdrs });
-    return;
-  }
-  saveTargetNum(LEGACY_GOAL_FIELDS[fieldId], el.value);
-}
-// Kept for the init path (restoreLoadedData calls it before the first render).
-function loadGoals() {
-  migrateLegacyTargets();
-  syncLegacyGoalInputs();
-}
 
 // ─── MONTHLY TARGETS: THE SCOREBOARD ──────────────────────────────────────────
 function toggleTargetsSection() {
@@ -7729,6 +7684,15 @@ function saveTargetsMonth(v) {
   renderTargetsSection();
 }
 
+// How long a lead is still "in flight" — being worked through the follow-up
+// cadence — before the statuses that depend on giving up on it (terminal
+// Not responsive above all) can be trusted. The team's actual sequence length
+// isn't recorded anywhere in the export or the founders' docs, so this is a
+// working assumption in line with the dashboard's other 21-day rules (the
+// hygiene law on stale "Meeting Scheduled", the briefing's "86% of wins close
+// within 21 days"). Change this one number if the real cadence differs.
+const SEQUENCE_MATURITY_DAYS = 21;
+
 // Raw counts for one month straight off rawByDay, using the same predicates as
 // every other section — isQualifiedLead, isMeetingBooked, isMeetingNotAttended,
 // the Meeting-Done/instant-close "held" rule, closed-by-creation-date-cohort —
@@ -7746,7 +7710,7 @@ function targetsMonthStats(monthKey, leadType) {
     .filter(d => d <= today);
   const st = {
     leads: 0, qualified: 0, meetings: 0, meetingsHeld: 0, closed: 0, nr: 0, noShow: 0,
-    stlValues: [], stlEligible: 0, sdrsWithLeads: new Set(),
+    stlValues: [], stlEligible: 0, sdrsWithLeads: new Set(), youngLeads: 0,
     monthKey, daysInMonth, elapsedDays: dayKeys.length,
     isCurrent: monthKey === today.slice(0, 7), hasData: false
   };
@@ -7754,10 +7718,12 @@ function targetsMonthStats(monthKey, leadType) {
   dayKeys.forEach(dk => {
     const day = rawByDay[dk];
     if (!day) return;
+    const young = dayKeyAgeDays(dk, today) < SEQUENCE_MATURITY_DAYS;
     SDRS.forEach(s => (day[s.key] || []).forEach(r => {
       if (!pred(r) || isLeadExcluded(r)) return;
       st.hasData = true;
       st.leads++;
+      if (young) st.youngLeads++;
       st.sdrsWithLeads.add(s.key);
       if (isQualifiedLead(r)) st.qualified++;
       if (isMeetingBooked(r)) st.meetings++;
@@ -7793,6 +7759,16 @@ function targetsRows(monthKey, leadType) {
     : null;
   const goalTeamLeads = t.leads_per_sdr * t.active_sdrs;
   const cohortNote = ' Closed deals are counted by lead creation date (cohort), so a month still reads low until its leads have had time to close.';
+  // Rows whose number is still filling in get a † next to the label. The three
+  // closed-deal rates rise as a month's leads close; the non-responsive rate
+  // rises as leads currently still being chased run out of cadence and get
+  // written off. Both understate a recent month, and the note says how much of
+  // the month is still inside that window.
+  const youngNote = st.youngLeads
+    ? ` ${st.youngLeads.toLocaleString()} of this month's ${st.leads.toLocaleString()} leads (${Math.round(st.youngLeads / st.leads * 100)}%) are under ${SEQUENCE_MATURITY_DAYS} days old, so this figure is still moving.`
+    : '';
+  const closedLag = 'Still settling. Closed deals count by lead creation date, so this month keeps climbing for weeks after it ends as its leads close — read it as a floor, not a final number.' + youngNote;
+  const nrLag = `Still settling. This counts leads permanently written off as unreachable, which only happens once the follow-up cadence has run its course (assumed ${SEQUENCE_MATURITY_DAYS} days — the team's real sequence length isn't recorded in the data). Leads still being chased aren't counted yet, so a recent month reads low and climbs over the following weeks.` + youngNote;
   const rows = [
     { group: 'Volume' },
     { key: 'leads_per_sdr', label: 'Leads / SDR / month', unit: 'count', scale: true,
@@ -7817,21 +7793,21 @@ function targetsRows(monthKey, leadType) {
       info: 'Meetings booked ÷ the SDRs who carried leads that month. Goal = Leads / SDR × Meeting rate.' },
     { key: 'meetings_pct_qual', label: 'Meetings % of qualified', unit: 'pct', noStretch: true,
       actual: rate(st.meetings, st.qualified), goal: t.meetings_pct_qual,
-      info: 'Meetings booked ÷ qualified leads — can exceed 100%, since a meeting can be booked on a lead that never lands in a qualified Sales status. No stretch columns: the goal is already "every qualified lead gets a meeting."' },
+      info: 'Meetings booked ÷ qualified leads. It runs over 100% because the two counts come from different fields: a meeting is booked off Meeting Status, qualification off Sales status, and plenty of leads get a meeting on the calendar and then end up Disqualified or Non respondant — in the numerator, out of the denominator. The Comp Model\'s 45% is not the same measure: that is the AE-era company funnel (585 meetings against 1,299 qualified), where nearly every meeting sat on a lead that had already been qualified first. Treat this row as "are we booking meetings off the back of qualification, or ahead of it", not as a percentage that should land under 100. No stretch columns: the goal is already "every qualified lead gets a meeting."' },
     { group: 'Conversion to deals' },
-    { key: 'lead_to_deal', label: 'Lead → deal %', unit: 'pct', lag: true,
+    { key: 'lead_to_deal', label: 'Lead → deal %', unit: 'pct', lag: true, lagNote: closedLag,
       actual: rate(st.closed, st.leads), goal: t.lead_to_deal,
       info: 'Closed (won) deals ÷ leads.' + cohortNote },
-    { key: 'qual_to_deal', label: 'Qualified → deal %', unit: 'pct', lag: true,
+    { key: 'qual_to_deal', label: 'Qualified → deal %', unit: 'pct', lag: true, lagNote: closedLag,
       actual: rate(st.closed, st.qualified), goal: t.qual_to_deal,
       info: 'Closed (won) deals ÷ qualified leads.' + cohortNote },
-    { key: 'meeting_to_deal', label: 'Meeting → deal %', unit: 'pct', lag: true,
+    { key: 'meeting_to_deal', label: 'Meeting → deal %', unit: 'pct', lag: true, lagNote: closedLag,
       actual: rate(st.closed, st.meetingsHeld), goal: t.meeting_to_deal,
       info: 'Closed (won) deals ÷ meetings that actually happened (Meeting Status = Meeting Done, or an instant close) — not meetings merely booked, which is why this can read higher than you expect.' + cohortNote },
     { group: 'Speed & follow-through' },
-    { key: 'nr_rate', label: 'Non-responsive rate', unit: 'pct', lower: true,
+    { key: 'nr_rate', label: 'Non-responsive rate', unit: 'pct', lower: true, lag: true, lagNote: nrLag,
       actual: rate(st.nr, st.leads), goal: t.nr_rate,
-      info: 'Leads permanently disqualified as unreachable (Disqualified reason = Not responsive) ÷ leads. The briefing calls this the funnel\'s single biggest leak at 29% company-wide. Same definition as the Non-Responsive Rate card, its chart and the Mandate Scoreboard. Like the closed-deal rates above, this one matures: a lead that arrived a few days ago is still being chased, not yet given up on, so a month in progress reads flatteringly low.' },
+      info: 'Leads permanently disqualified as unreachable (Disqualified reason = Not responsive) ÷ leads. The briefing calls this the funnel\'s single biggest leak at 29% company-wide. Same definition as the Non-Responsive Rate card, its chart and the Mandate Scoreboard. See the † for why a recent month reads low.' },
     { key: 'speed_to_lead', label: 'Speed to lead, median', unit: 'min', lower: true,
       actual: stlMedian, goal: t.speed_to_lead,
       info: 'Median minutes from a lead arriving to the first outbound call, on-hours and off-hours together. Needs a Call History CSV loaded; leads created before that export\'s earliest call, and matches over 48h, are excluded as unmeasurable.' },
@@ -7909,7 +7885,6 @@ function renderTargetsSection() {
       `<option value="${mk}"${mk === monthKey ? ' selected' : ''}>${monthLabelFromKey(mk)}${mk === current ? ' (this month)' : ''}</option>`).join('');
   }
   renderTargetInputs();
-  syncLegacyGoalInputs();
 
   if (!rawByDay || !Object.keys(rawByDay).length) {
     table.innerHTML = '<tbody><tr><td class="mandate-kpi-note">Upload a leads CSV to see actuals against these targets.</td></tr></tbody>';
@@ -7932,7 +7907,7 @@ function renderTargetsSection() {
   const head = `<thead><tr>
     <th>KPI (${TARGETS_LEAD_LABEL[leadType]})</th>
     <th>Actual</th>
-    ${showProjected ? '<th>Projected <span class="goal-info" title="Where this month lands if it carries on exactly as it has so far. Counts scale on the run-rate (what we have ÷ days elapsed × days in the month); rates project flat, since the best estimate of a month\'s final rate is the rate it\'s running at. Rows marked † are closed-deal rates on a creation-date cohort — those keep climbing after the month ends as its leads close, so treat the projection as a floor.">ⓘ</span></th>' : ''}
+    ${showProjected ? '<th>Projected <span class="goal-info" title="Where this month lands if it carries on exactly as it has so far. Counts scale on the run-rate (what we have ÷ days elapsed × days in the month); rates project flat, since the best estimate of a month\'s final rate is the rate it\'s running at. Rows marked † next to their name are still settling — their number keeps climbing for weeks after the month ends, so treat the projection as a floor.">ⓘ</span></th>' : ''}
     ${showGoals ? `<th>Goal</th><th>Difference <span class="goal-info" title="${showProjected ? 'Projected' : 'Actual'} minus Goal. Green means the target is met or beaten, red means it isn\'t — for Non-responsive, Speed to lead and No-show, where lower is better, that reading is flipped.">ⓘ</span></th>${stretchHead}
     <th class="targets-ref targets-ref-first">Brief <span class="goal-info" title="The founders' strategic briefing (May 2026, YTD Jan–May): 275 leads per Coordinator, ~1,700 business leads a month, 41% qualify, 14.2% lead→deal, 35% qualified→closed, 29% not responsive. Meeting→deal 50% is the playbook's benchmark and 3 min the research-backed speed-to-lead standard. A dash means the briefing states no figure for that row.">ⓘ</span></th>
     <th class="targets-ref">Comp Model <span class="goal-info" title="The compensation model spreadsheet (Jan 1 – Apr 30). Frozen reference, never recomputed from the loaded data.">ⓘ</span></th>` : ''}
@@ -7941,7 +7916,7 @@ function renderTargetsSection() {
   const body = rows.map(row => {
     if (row.group) return `<tr class="targets-group"><td colspan="${dataCols}">${escapeHtml(row.group)}</td></tr>`;
     const projCell = showProjected
-      ? `<td class="targets-proj${row.scale ? '' : ' flat'}">${targetsFmtValue(row.projected, row.unit)}${row.lag ? ' <span class="targets-lag" title="Closed-deal rates count by lead creation date, so this month keeps rising as its leads close — read the projection as a floor, not a forecast.">†</span>' : ''}</td>`
+      ? `<td class="targets-proj${row.scale ? '' : ' flat'}">${targetsFmtValue(row.projected, row.unit)}</td>`
       : '';
     const goalCells = showGoals ? [
       `<td class="targets-goal">${targetsFmtValue(row.goal, row.unit)}</td>`,
@@ -7951,7 +7926,7 @@ function renderTargetsSection() {
       `<td class="targets-ref">${targetsFmtValue(row.comp, row.unit)}</td>`
     ].join('') : '';
     return `<tr>
-      <td class="targets-kpi">${escapeHtml(row.label)} <span class="goal-info" title="${escapeHtml(row.info)}">ⓘ</span></td>
+      <td class="targets-kpi">${escapeHtml(row.label)}${row.lagNote ? ` <span class="targets-lag" title="${escapeHtml(row.lagNote)}">†</span>` : ''} <span class="goal-info" title="${escapeHtml(row.info)}">ⓘ</span></td>
       <td class="targets-actual">${targetsFmtValue(row.actual, row.unit)}</td>
       ${projCell}${goalCells}
     </tr>`;
@@ -8008,26 +7983,42 @@ const TARGET_INPUTS = [
   { key: 'no_show_rate', label: 'Meeting no-show', unit: '% max', step: 1, lower: true,
     info: 'Ceiling for booked meetings that end up Not Atended or Rejected. Drives the No-Show Rate card and the Mandate Scoreboard row.' }
 ];
+function targetsDerivedNote(t, key) {
+  if (key === 'leads_per_sdr') return `\u2192 ${Math.round(t.leads_per_sdr * t.active_sdrs).toLocaleString()} leads / team`;
+  if (key === 'pct_qual') return `\u2192 ${Math.round(t.leads_per_sdr * t.pct_qual / 100).toLocaleString()} qualified / SDR`;
+  if (key === 'meeting_rate') return `\u2192 ${Math.round(t.leads_per_sdr * t.meeting_rate / 100).toLocaleString()} meetings / SDR`;
+  return '';
+}
+// Built once, then updated in place. Replacing innerHTML on every render (which
+// is what this used to do) tore the box you were typing in out of the document
+// the moment anything else on the page repainted — the surest way to lose a
+// half-entered target.
 function renderTargetInputs() {
   const el = document.getElementById('targetsInputs');
   if (!el) return;
-  // A re-render triggered by something else on the page (a range change, a new
-  // CSV) must not yank a half-typed number out from under the cursor.
-  if (el.contains(document.activeElement)) return;
   const t = targets();
-  const derived = {
-    leads_per_sdr: `→ ${Math.round(t.leads_per_sdr * t.active_sdrs).toLocaleString()} leads / team`,
-    pct_qual: `→ ${Math.round(t.leads_per_sdr * t.pct_qual / 100).toLocaleString()} qualified / SDR`,
-    meeting_rate: `→ ${Math.round(t.leads_per_sdr * t.meeting_rate / 100).toLocaleString()} meetings / SDR`
-  };
-  el.innerHTML = TARGET_INPUTS.map(f => `<div class="targets-input-item">
-    <div class="targets-input-label">${escapeHtml(f.label)} <span class="goal-info" title="${escapeHtml(f.info)}">ⓘ</span></div>
-    <div class="targets-input-row">
-      <input class="targets-input" type="number" min="0" step="${f.step}" value="${t[f.key]}" onchange="saveTargetNum('${f.key}', this.value)">
-      <span class="targets-input-unit">${escapeHtml(f.unit)}</span>
-    </div>
-    <div class="targets-input-derived">${derived[f.key] || ''}</div>
-  </div>`).join('');
+  if (!el.dataset.built) {
+    el.innerHTML = TARGET_INPUTS.map(f => `<div class="targets-input-item">
+      <div class="targets-input-label">${escapeHtml(f.label)} <span class="goal-info" title="${escapeHtml(f.info)}">\u24d8</span></div>
+      <div class="targets-input-row">
+        <input class="targets-input" type="number" min="0" step="${f.step}" id="target_${f.key}"
+               value="${t[f.key]}"
+               oninput="saveTargetNum('${f.key}', this.value, true)"
+               onchange="saveTargetNum('${f.key}', this.value)">
+        <span class="targets-input-unit">${escapeHtml(f.unit)}</span>
+      </div>
+      <div class="targets-input-derived" id="targetderived_${f.key}"></div>
+    </div>`).join('');
+    el.dataset.built = '1';
+    const note = document.getElementById('targetsSaveNote');
+    if (note && !note.textContent) note.textContent = 'Saved automatically as you type.';
+  }
+  TARGET_INPUTS.forEach(f => {
+    const input = document.getElementById('target_' + f.key);
+    if (input && document.activeElement !== input) input.value = t[f.key];
+    const d = document.getElementById('targetderived_' + f.key);
+    if (d) d.textContent = targetsDerivedNote(t, f.key);
+  });
 }
 
 // ─── COMMISSION CALCULATOR ─────────────────────────────────────────────────────
@@ -11474,7 +11465,7 @@ function saveInitiativesPlan(showNote) {
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 renderViewTabs();
-loadGoals();
+migrateLegacyTargets();
 renderTargetsSection();
 loadChartStyle();
 loadAEBaselineToggle();
