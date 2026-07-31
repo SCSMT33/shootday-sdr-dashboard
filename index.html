@@ -927,6 +927,20 @@
 
   /* Market Split column headers carry a one-line definition on hover — the
      dotted underline is the affordance that says "there's something here". */
+  /* Inline "this number is impossible" marker — see rateWarn(). Amber, not
+     red: the cell isn't broken, the source data is incomplete. */
+  .rate-warn {
+    cursor: help;
+    color: #b8860b;
+    font-weight: 800;
+    font-size: 0.75em;
+    margin-left: 2px;
+    padding: 0 2px;
+    border-radius: 3px;
+    background: rgba(184, 134, 11, 0.13);
+  }
+  .rate-warn:hover { background: rgba(184, 134, 11, 0.28); }
+
   th.market-th { cursor: help; text-decoration: underline dotted currentColor; text-underline-offset: 4px; text-decoration-thickness: 1px; }
   th.market-th:hover { color: var(--text); }
 
@@ -2219,6 +2233,7 @@
           <div class="definition-item"><dt>Data Hygiene Score (under construction — not finalized)</dt><dd>Per SDR, per week: 100 − (that week's total violation weight ÷ leads handled that week) × 100, floored at 0. Checks every lead — all SDRs, B2B and B2C, regardless of any filter — against the 7 marking laws above.</dd></div>
           <div class="definition-item"><dt>Dubai Day-Key</dt><dd>The fixed UTC+4, no-DST timezone every date on this dashboard is bucketed into — "today," month/week boundaries, and each lead's creation day are all computed in Dubai time, regardless of where you're actually viewing from. Unrelated to each SDR's On-Hours/Off-Hours, which use their own personal timezone instead.</dd></div>
           <div class="definition-item"><dt>Hiring Milestones (Mandate Gates)</dt><dd>Active Coordinator headcount vs. each month's cumulative team-size target — editable, defaults to 4 by June, 5 by July, 6 by August (the onboarding doc's gates, dated June 30 / July 31 / August 31, 2026). There's no historical headcount data, so every month compares against today's live count.</dd></div>
+          <div class="definition-item"><dt>Impossible Rate (the amber <strong>?</strong>)</dt><dd>Every conversion rate here divides a count by a count it is a subset of — closed deals are a subset of qualified leads, qualified leads a subset of leads — so a rate above 100% cannot be real. When one appears, an amber <strong>?</strong> is shown beside it explaining which field is missing. It is almost always Meeting Status: AE-run rows routinely go straight to Closed without the meeting ever being marked "Meeting Done," which shrinks the denominator while Closed Deals keeps counting, so Meeting Done to Deal % overshoots. The number is left as-is rather than hidden or capped — it is a real signal, just about marking discipline rather than conversion.</dd></div>
           <div class="definition-item"><dt>Lead</dt><dd>Any Bookings CSV row with a recognized SDR Owner and a non-blank Creation Date. Rows that don't match either are dropped before anything else on the dashboard is computed.</dd></div>
           <div class="definition-item"><dt>Lead → Deal Rate</dt><dd>Closed deals ÷ all leads from the same creation-date cohort. "Deal" and "closed" are the same thing everywhere on this dashboard — a Sales status of Closed — so this is the same numerator as Qualified → Deal Rate and Meeting Done → Deal Rate, just over a wider denominator. Recent periods always read low — a lead created this week hasn't had time to close yet — this is a running tally that rises as those leads close later, not a same-period conversion rate.</dd></div>
           <div class="definition-item"><dt>Lead Rules</dt><dd>How everything on this dashboard counts, after the Strict/Loose toggle and the Instant Close rule were both retired on 2026-07-31: Duplicate-record and Wrong-info leads are dropped from every count (including Lead Volume itself), and a Meeting Booked means a genuine Meeting Status. One number per metric, on every Leads: filter (B2B only, B2C only, All leads, Commission View) and in every section — cards, charts, Mandate Scoreboard, Market Split, Capacity &amp; Cost and both Commission Calculators.</dd></div>
@@ -5770,10 +5785,10 @@ function funnelRows(context) {
     { label: 'Leads', isPct: false, get: s => s.leads, info: 'Leads created in the period, after the lead-type filter above.' + context },
     { label: 'Qualified leads', isPct: false, get: s => s.qualified, info: 'Sales status is Hot, Warm, Closed, Lost, Qualified SDR, or any refund status, excluding Duplicate record and Wrong info leads — same definition as the % Qualified card and the Mandate Scoreboard.' + context },
     { label: 'Meetings done', isPct: false, get: s => s.meetingsDone, info: 'Meeting Status = Meeting Done — same as Meetings Held on the cards, excludes still-upcoming Scheduled meetings.' + context },
-    { label: 'Qualified → deal rate', isPct: true, get: s => rate(s.closed, s.qualified), info: 'Closed (won) deals ÷ qualified leads from the same period. ' + FUNNEL_COHORT_NOTE + context },
-    { label: 'Meeting done → deal rate', isPct: true, get: s => rate(s.closed, s.meetingsDone), info: 'Closed (won) deals ÷ meetings done from the same period. ' + FUNNEL_COHORT_NOTE + context,
+    { label: 'Qualified → deal rate', isPct: true, warnKind: 'qalToDeal', get: s => rate(s.closed, s.qualified), info: 'Closed (won) deals ÷ qualified leads from the same period. ' + FUNNEL_COHORT_NOTE + context },
+    { label: 'Meeting done → deal rate', isPct: true, warnKind: 'meetingDoneToDeal', get: s => rate(s.closed, s.meetingsDone), info: 'Closed (won) deals ÷ meetings done from the same period. ' + FUNNEL_COHORT_NOTE + context,
       aeStatic: '~50%', aeStaticValue: 50, aeStaticTitle: 'Playbook benchmark ("Online meetings convert at approximately 50%") — not computed from the AE Baseline export. 66% of its closed deals have a blank Meeting Status, so a computed ratio here is unreliable (comes out to either ~93-96% or 266%+ depending on how blank rows are treated).' },
-    { label: 'Lead → deal rate', isPct: true, get: s => rate(s.closed, s.leads), info: 'Closed (won) deals ÷ all leads from the same period. ' + FUNNEL_COHORT_NOTE + context }
+    { label: 'Lead → deal rate', isPct: true, warnKind: 'leadToDeal', get: s => rate(s.closed, s.leads), info: 'Closed (won) deals ÷ all leads from the same period. ' + FUNNEL_COHORT_NOTE + context }
   ];
 }
 // ─── SALES FUNNEL: PAY ÷ REVENUE (manually entered, MoM per-SDR only) ─────────
@@ -5833,7 +5848,8 @@ function buildFunnelTableHTML(cols, aeStats, opts) {
     if (!aeStats) return '<td class="funnel-ae-cell"><span class="mandate-status na">no data</span></td>';
     const v = row.get(aeStats);
     const text = v == null ? '—' : row.isPct ? v.toFixed(1) + '%' : Math.round(v).toLocaleString();
-    return `<td class="funnel-ae-cell"><span class="funnel-cell-value">${text}</span></td>`;
+    const warn = row.isPct && row.warnKind ? rateWarn(v, row.warnKind) : '';
+    return `<td class="funnel-ae-cell"><span class="funnel-cell-value">${text}${warn}</span></td>`;
   };
   const prevFor = (row, i) => {
     if (compareMode === 'baseline') {
@@ -5851,7 +5867,8 @@ function buildFunnelTableHTML(cols, aeStats, opts) {
         if (!c.hasData) return '<td><span class="mandate-status na">no data</span></td>';
         const v = row.get(c.stats);
         const text = v == null ? '—' : row.isPct ? v.toFixed(1) + '%' : String(v);
-        return `<td><span class="funnel-cell-value">${text}</span>${funnelDelta(v, prevFor(row, i), row.isPct)}</td>`;
+        const warn = row.isPct && row.warnKind ? rateWarn(v, row.warnKind) : '';
+        return `<td><span class="funnel-cell-value">${text}${warn}</span>${funnelDelta(v, prevFor(row, i), row.isPct)}</td>`;
       }).join('')}
       ${aeCell(row)}
     </tr>`).join('');
@@ -8176,7 +8193,29 @@ function marketMergeMetrics(list) {
     leadToDealPct: nbrBL ? closed / nbrBL * 100 : null
   };
 }
-function marketPctCell(v) { return v == null ? '—' : v.toFixed(1) + '%'; }
+// ─── IMPOSSIBLE-RATE FLAG ──────────────────────────────────────────────────────
+// Every conversion rate on this dashboard divides a count by a count it is
+// definitionally a subset of — closed deals are a subset of qualified leads,
+// qualified leads a subset of leads, and so on. So a rate over 100% is never a
+// real conversion rate: it means the DENOMINATOR's field wasn't filled in, not
+// that more deals closed than existed. The usual culprit is Meeting Status —
+// AE-run rows routinely go straight to Closed without anyone marking the
+// meeting as done, which shrinks "Meeting Done" while "Closed Deals" keeps
+// counting, and the ratio overshoots.
+//
+// Rather than hide the number, cap it, or silently show nonsense, it gets a "?"
+// in place that says which field is missing and how to read the cell.
+const RATE_WARN_NOTES = {
+  meetingDoneToDeal: 'Over 100% — more closed deals than completed meetings on record. These deals were closed without Meeting Status ever being set to "Meeting Done" (common on AE-run rows), so the denominator is undercounted, not the deals overcounted. Read this as a marking gap, not a conversion rate.',
+  qalToDeal: 'Over 100% — more closed deals than qualified leads. A Closed deal is qualified by definition, so this means some closed leads are missing a qualifying Sales status.',
+  leadToDeal: 'Over 100% — more closed deals than leads in this segment. Every deal comes from a lead, so some closed rows are missing from the lead count (usually a blank or unrecognised Request Type).',
+  ofLeads: 'Over 100% — this count exceeds the leads it is measured against, which is impossible. Some rows are being counted in the numerator but not in the lead total.'
+};
+function rateWarn(pct, kind) {
+  if (pct == null || pct <= 100) return '';
+  return `<sup class="rate-warn" title="${escapeHtml(RATE_WARN_NOTES[kind] || RATE_WARN_NOTES.ofLeads)}">?</sup>`;
+}
+function marketPctCell(v, kind) { return v == null ? '—' : v.toFixed(1) + '%' + (kind ? rateWarn(v, kind) : ''); }
 // A segment with zero leads shows a dash in every column, not a row of
 // zeros — 0 reads as "we checked, there's nothing here," which is what an
 // empty >1k/complex row (or any other empty segment/month) actually means,
@@ -8211,15 +8250,15 @@ function marketRowHtml(label, m, opts) {
     <td class="mandate-kpi-name"${opts.indent ? ' style="padding-left:24px"' : ''}>${escapeHtml(label)}${flag}</td>
     <td${valueStyle}>${marketCountCell(m.nbrBL, m)}</td>
     <td${valueStyle}>${marketCountCell(m.qalBL, m)}</td>
-    <td${valueStyle}>${marketPctCell(m.pctQal)}</td>
+    <td${valueStyle}>${marketPctCell(m.pctQal, 'ofLeads')}</td>
     <td${valueStyle}>${marketCountCell(m.meetingBooked, m)}</td>
-    <td${valueStyle}>${marketPctCell(m.meetingPct)}</td>
+    <td${valueStyle}>${marketPctCell(m.meetingPct, 'ofLeads')}</td>
     <td${valueStyle}>${marketCountCell(m.meetingDone, m)}</td>
-    <td${valueStyle}>${marketPctCell(m.meetingDonePct)}</td>
-    <td${valueStyle}>${marketPctCell(m.qalToClosePct)}</td>
-    <td${valueStyle}>${marketPctCell(m.meetingDoneToClosePct)}</td>
+    <td${valueStyle}>${marketPctCell(m.meetingDonePct, 'ofLeads')}</td>
+    <td${valueStyle}>${marketPctCell(m.qalToClosePct, 'qalToDeal')}</td>
+    <td${valueStyle}>${marketPctCell(m.meetingDoneToClosePct, 'meetingDoneToDeal')}</td>
     <td${valueStyle}>${marketCountCell(m.closed, m)}</td>
-    <td${valueStyle}>${marketPctCell(m.leadToDealPct)}</td>
+    <td${valueStyle}>${marketPctCell(m.leadToDealPct, 'leadToDeal')}</td>
   </tr>`;
 }
 // ─── MARKET SPLIT: TOTAL-ROW HISTORY ───────────────────────────────────────────
@@ -8248,12 +8287,12 @@ function marketHistoryRowHtml(entries) {
   const lines = fmt => entries.map((e, i) =>
     `<div class="market-hist-line market-hist-${i + 1}">${e.m ? fmt(e.m) : '—'}</div>`).join('');
   const count = f => `<td>${lines(m => marketCountCell(m[f], m))}</td>`;
-  const pct = f => `<td>${lines(m => marketPctCell(m[f]))}</td>`;
+  const pct = (f, kind) => `<td>${lines(m => marketPctCell(m[f], kind))}</td>`;
   const labels = entries.map((e, i) =>
     `<div class="market-hist-line market-hist-${i + 1}">${escapeHtml(monthLabelFromKey(e.monthKey))}</div>`).join('');
   return `<tr class="market-hist-row">
     <td class="mandate-kpi-name" style="padding-left:24px">${labels}</td>
-    ${count('nbrBL')}${count('qalBL')}${pct('pctQal')}${count('meetingBooked')}${pct('meetingPct')}${count('meetingDone')}${pct('meetingDonePct')}${pct('qalToClosePct')}${pct('meetingDoneToClosePct')}${count('closed')}${pct('leadToDealPct')}
+    ${count('nbrBL')}${count('qalBL')}${pct('pctQal', 'ofLeads')}${count('meetingBooked')}${pct('meetingPct', 'ofLeads')}${count('meetingDone')}${pct('meetingDonePct', 'ofLeads')}${pct('qalToClosePct', 'qalToDeal')}${pct('meetingDoneToClosePct', 'meetingDoneToDeal')}${count('closed')}${pct('leadToDealPct', 'leadToDeal')}
   </tr>`;
 }
 // AE_AWARE_TIERS: >1k/complex — the two tiers the SDR team never books
