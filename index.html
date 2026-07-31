@@ -3923,6 +3923,7 @@ function renderSummaryCards(days) {
       leadToDealRate: leadVol ? (closed / leadVol * 100) : 0,
       pctQual: leadVol ? (qualified / leadVol * 100) : 0,
       nrRate: leadVol ? (nr / leadVol * 100) : 0,
+      nrMaturedPct: maturedTerminalNR(numData, days, [s.key]).pct,
       meetingRate: leadVol ? (meetings / leadVol * 100) : 0,
       meetingsGoal: d.goalMeetingRate ? (d.goalMeetingRate / 100 * leadsProjected) : null,
       qualifiedGoal: d.goalPctQual ? (d.goalPctQual / 100 * leadsProjected) : null,
@@ -3947,9 +3948,7 @@ function renderSummaryCards(days) {
   const infoPctQualified = isCommission
     ? `Leads Qualified (B2B+B2C combined) ÷ B2B-only Lead Volume.${rulesNote}`
     : `Leads Qualified ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Qualified = Hot/Warm/Closed/Lost/Qualified SDR/refund status.${rulesNote}`;
-  const infoNR = isCommission
-    ? `Non-Responsive leads (B2B+B2C) ÷ B2B-only Lead Volume. Non-responsive = Disqualified reason "Not responsive" or Sales status "Non respondant" (includes leads still mid-cadence). Lower is better. The Mandate Scoreboard's version is narrower — terminal Not-responsive only, matching the strategic briefing's baseline.${rulesNote}`
-    : `Sales status = Non respondant or Disqualified reason = Not responsive (includes leads still mid-cadence) ÷ Lead Volume, filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Lower is better. The Mandate Scoreboard's version is narrower — terminal Not-responsive only, matching the strategic briefing's baseline.${rulesNote}`;
+  const infoNR = `${NR_MATURED_NOTE} The "Live" row underneath is the broad reading — Disqualified reason "Not responsive" OR Sales status "Non respondant", over every lead in range regardless of age. It moves immediately and is the right thing to watch mid-month, but it over-reads on young leads (47.8% on leads 0-4 days old vs 33.0% at 45+ days) because "Non respondant" gets set the moment a lead goes quiet, long before anyone gives up on it. Lower is better on both. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${rulesNote}`;
   const infoLeadToDeal = `Closed deals ÷ Lead Volume, by creation-date cohort — of the leads created in the selected range, how many have a Sales status of Closed as of right now. Recent ranges always read low until their leads have had time to close (deals typically take weeks). Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}).${rulesNote} No target is set for this metric, so its Goal and Diff rows read "—".`;
   const infoNoShow = `Meeting Not Atended or Rejected ÷ booked meetings (Scheduled + Done + Not Atended + Rejected) in range. Scheduled is in the denominator so a lead whose deal resolved without Meeting Status being updated off Scheduled doesn't vanish from the math (this also means brand-new upcoming meetings count here, so the rate reads higher in the most recent week or two before they resolve). Lower is better. Filtered by the Leads: dropdown above (currently: ${leadTypeLabel}). Full breakdown in the "No-Show Rate by SDR" chart below.`;
   const infoSpeedToLead = `Median minutes from a lead's creation to that SDR's first outbound call, matched by phone number from the Aircall export (median, not mean, so a few stale matches can't skew it). The headline number is ON-HOURS ONLY — the window the team is actually accountable for; the combined On+Off hours median sits in the row below it, and Diff measures the on-hours headline against the target. Leads before your Call History export's own earliest call are excluded — no reliable way to know when they were first called — as are matches over 48h (almost certainly a missed early call, not a real gap). On/Off-hours split per the SDR Lead Routing Logic doc, using each SDR's own local time (EST for MJ/Gospel, CET for Mark/Levi) — on-hours is that SDR's solo shift plus overlap window, Monday–Friday only; off-hours is everything else, including the overnight round-robin and all weekend (weekend leads are always off-hours, regardless of clock time).`;
@@ -3957,6 +3956,9 @@ function renderSummaryCards(days) {
   // Month-end projection for the count metrics, used only when the range is
   // the current month-to-date — comparing a half-finished month against a
   // full-month goal would read as a miss by construction.
+  // Non-response headline: matured terminal (see NR_MATURITY_DAYS). The broad
+  // rate computed above stays on the card as the live/leading row.
+  const nrMatured = maturedTerminalNR(numData, days, v);
   const projLeadVol = showProjection && elapsed ? Math.round(leadVolTotal / elapsed * daysInMo) : null;
   const leadVolPerSDR = perSDR.length ? leadVolTotal / perSDR.length : null;
   // Lead Volume / month auto-fills from this very card unless someone ticks
@@ -4007,11 +4009,17 @@ function renderSummaryCards(days) {
     })}
     ${summaryCard('Non-Responsive Rate', {
       info: infoNR,
-      value: nrRate.toFixed(1) + '%',
-      sub: `${totalNR} leads`,
+      value: nrMatured.pct != null ? nrMatured.pct.toFixed(1) + '%' : '—',
+      sub: nrMatured.pct != null
+        ? `${nrMatured.nr} of ${nrMatured.leads} matured leads · terminal${nrMatured.immatureDays ? ` · ${nrMatured.immatureDays} day${nrMatured.immatureDays === 1 ? '' : 's'} too new to count` : ''}`
+        : `no leads in range are ${NR_MATURITY_DAYS} days old yet`,
       delta: deltas.nrRate,
-      rows: goalDiffRows(nrRate, d.goalNRRate, { unit: 'pct', lowerIsBetter: true }),
-      split: splitRow(perSDR.map(s => ({ ...s, value: s.nrRate })), { unit: 'pct' })
+      rows: goalDiffRows(nrMatured.pct, d.goalNRRate, {
+        unit: 'pct',
+        lowerIsBetter: true,
+        between: cardRow('Live (incl. mid-cadence)', nrRate.toFixed(1) + '%')
+      }),
+      split: splitRow(perSDR.map(s => ({ ...s, value: s.nrMaturedPct })), { unit: 'pct' })
     })}
     ${rawCalls ? summaryCard('Speed-to-Lead', {
       info: infoSpeedToLead,
@@ -5097,6 +5105,53 @@ const HYGIENE_LAWS = [
 function dayKeyAgeDays(dayKey, todayKey) {
   return Math.round((Date.parse(todayKey) - Date.parse(dayKey)) / 86400000);
 }
+
+// ─── MATURED TERMINAL NON-RESPONSE ─────────────────────────────────────────────
+// Non-response has two readings and they measure different things:
+//
+//   BROAD    Disqualified reason "Not responsive" OR Sales status "Non
+//            respondant". Includes leads still mid-cadence that nobody has
+//            given up on. Available immediately, so it's the live/leading
+//            indicator — but it over-reads on young leads (47.8% on leads
+//            0-4 days old vs 33.0% at 45+ days) because "Non respondant" is
+//            set the moment a lead goes quiet, long before it's abandoned.
+//
+//   TERMINAL Disqualified reason "Not responsive" alone — the lead was
+//            permanently given up on as unreachable. This is what the
+//            strategic briefing's 29% company baseline measures, and what
+//            the Team Lead's non-response bracket pays against.
+//
+// Terminal can't be read off a fresh cohort. The longest cadence runs ~15
+// days, but the MARKING lags it: measured on real data, terminal NR is 3.0%
+// on leads 0-4 days old, 12.8% at 10-14 days, 22.7% at 20-29 days, and only
+// settles at 25.7-28.0% from 30 days on. So a calendar month read on day 5
+// isn't low because the team did well — it's low because nobody has written
+// the answer down yet.
+//
+// The fix is a maturity gate, not a projection: count only the leads that
+// have had NR_MATURITY_DAYS to resolve, on BOTH sides of the ratio. Nothing
+// is estimated, and the number is directly comparable to the briefing's 29%
+// (leads 45+ days old read 28.0%, 50+ read 29.5%). The cost is lag — early in
+// a month you're reading the tail of the previous one — which is why the
+// broad rate stays on screen beside it as the live signal.
+//
+// Because rawByDay is keyed by creation date, maturity is a filter on DAYS,
+// not on leads: every lead in a given day-bucket is exactly as old as the
+// bucket. That keeps this cheap and lets it reuse the existing caches.
+const NR_MATURITY_DAYS = 30;
+function maturedDayKeys(days) {
+  const today = dubaiTodayKey();
+  return days.filter(d => dayKeyAgeDays(d, today) >= NR_MATURITY_DAYS);
+}
+// Returns { pct, nr, leads, days, immatureDays } — pct is null when no day in
+// range is old enough yet, which callers render as "—" rather than as 0%.
+function maturedTerminalNR(data, days, view) {
+  const md = maturedDayKeys(days);
+  const leads = sumMetricFrom(data, md, view, 'leads');
+  const nr = sumMetricFrom(data, md, view, 'non_responsive_terminal');
+  return { pct: leads ? (nr / leads * 100) : null, nr, leads, days: md.length, immatureDays: days.length - md.length };
+}
+const NR_MATURED_NOTE = `Terminal non-response: Disqualified reason = "Not responsive" — leads permanently given up on as unreachable — over leads that have had ${NR_MATURITY_DAYS} days to resolve, both sides of the ratio. Younger leads are excluded entirely rather than counted as responsive, because a lead nobody has finished working yet hasn't produced an answer either way; including them would report a falsely low rate early in every month. This is the reading that matches the strategic briefing's 29% company baseline and the one the Team Lead's non-response bracket pays against.`;
 // Scans ALL raw leads for the given days — deliberately ignores the B2B/B2C
 // Leads: filter, since marking quality applies to every lead an SDR touches.
 function collectHygieneViolations(days) {
@@ -5432,14 +5487,17 @@ function renderMandateSection() {
     const mResolved = mandateSum(days, 'meetings_no_show_denom');
     const mNoShow = mandateSum(days, 'meetings_no_show');
     const mAeDq = mandateSum(days, 'ae_dq');
-    const mNr = mandateSum(days, 'non_responsive_terminal');
+    // Same matured-terminal reading the Summary Card and the Team Lead
+    // bracket use, so this row is comparable to the 29% baseline it's scored
+    // against. The current month reads on its matured slice only.
+    const mNrStats = maturedTerminalNR(allDataB2B, days, MANDATE_ALL_SDRS());
     const mClosed = mandateClosedCount(days);
     const mStl = rawCalls ? mandateStlMedian(days, hoursFilter) : null;
     const mCov = mandateCoverage(days);
     const mQualPct = mLeads ? mQualified / mLeads * 100 : null;
     const mNoShowPct = mResolved ? mNoShow / mResolved * 100 : null;
     const mAeDqPct = mQualified ? mAeDq / mQualified * 100 : null;
-    const mNrPct = mLeads ? mNr / mLeads * 100 : null;
+    const mNrPct = mNrStats.pct;
     const mLeadToDealPct = mLeads ? mClosed / mLeads * 100 : null;
     const mQualToClosePct = mQualified ? mClosed / mQualified * 100 : null;
     const mMeetingsTarget = d.goalMeetingRate ? d.goalMeetingRate / 100 * mLeads : null;
@@ -5509,7 +5567,7 @@ function renderMandateSection() {
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.noShowPct != null ? r.noShowPct.toFixed(1) + '%' : null, r.noShowOk))
     },
     {
-      label: 'Non-responsive rate', info: 'Leads permanently disqualified as unreachable ÷ that month\'s B2B leads — excludes the transient "Non respondant" status (lead still being worked; the top card\'s broader version includes those too). The briefing flags this as the funnel\'s biggest leak. Baseline: 29% (Jan–May YTD, all business leads) — your team works the low-value tier, so expect to run above it; founders track direction, not the raw number. Target editable below.',
+      label: 'Non-responsive rate (matured)', info: 'Matured terminal non-response: leads permanently disqualified as unreachable ÷ that month\'s B2B leads, counting only leads that have had ' + NR_MATURITY_DAYS + ' days to resolve (both sides of the ratio). Excludes the transient "Non respondant" status, which marks a lead that has gone quiet but is still being worked. The in-progress month therefore reads on its matured slice only, not the whole month — measured on real data, terminal non-response sits at 3.0% on leads 0-4 days old and only settles from 30 days on, so an ungated current month would read falsely low. Same measurement the Summary Card headline and the Team Lead\'s non-response bracket use. The briefing flags this as the funnel\'s biggest leak; its 29% baseline (Jan–May YTD, all business leads) was itself measured on fully matured leads, so this is a like-for-like comparison. Target editable below.',
       target: `< ${s.nrMax}%`,
       cells: monthlyRows.map(r => mandateMonthCell(r.hasData && r.nrPct != null ? r.nrPct.toFixed(1) + '%' : null, r.nrOk))
     },
@@ -7697,8 +7755,12 @@ const NP_LEAD = {
     { min: 17, max: Infinity, amount: 2000 }
   ],
   // Non-response is the briefing's single biggest leak (29% of all company
-  // leads). The team runs 34.7-42.7% — 5 to 14 points worse than company
-  // average — and it tracks inverse to held rate without exception.
+  // leads). Paid on MATURED TERMINAL non-response as of 2026-07-31 — the same
+  // way the briefing measured its 29%. The old broad reading (34.7-42.7%)
+  // counted leads still mid-cadence and so scored the team against a baseline
+  // measured a different way; like-for-like the team runs 26.3% (June) and
+  // 31.8% (May), i.e. around the company average rather than 5-14 points
+  // worse. These tiers are unchanged; only the number fed into them is.
   nrTiers: [
     { min: 0,  max: 25,       amount: 1000 },
     { min: 25, max: 28,       amount: 750 },
@@ -7715,10 +7777,20 @@ function npBand(rate, tiers) {
   const i = tiers.findIndex(t => rate >= t.min && rate < t.max);
   return i === -1 ? 0 : i;
 }
+// BROAD non-response — includes the transient "Non respondant" Sales status
+// and leads still mid-cadence. The live/leading indicator, not a payout metric.
 function isNonResponsiveLead(r) {
   const s = normalizeSalesStatus(r['Sales status']);
   const d = (r['Disqualified reason'] || '').trim().toLowerCase();
   return s === 'non respondant' || d === 'not responsive' || d === 'stopped responding';
+}
+// TERMINAL non-response — the lead was permanently given up on as
+// unreachable. Matches computeMetrics' non_responsive_terminal exactly, and
+// deliberately excludes "Stopped responding" (27 leads across May-July): the
+// briefing's 29% baseline was measured on "Not responsive" alone, and this
+// number is compared against it, so it has to be counted the same way.
+function isTerminalNonResponse(r) {
+  return (r['Disqualified reason'] || '').trim().toLowerCase() === 'not responsive';
 }
 // Team-wide rollup for the Team Lead card: every selected SDR's B2B leads for
 // the chosen month, regardless of the Leads: filter (same rawByDay source the
@@ -7741,6 +7813,30 @@ function newPlanTeamMetrics(days, keys) {
   // in July, so counting their bases against June would overstate cost by
   // $2,400 and push the ratio from 5.9% to 9.0%.
   const activeKeys = keys.filter(k => days.some(d => rawByDay[d] && rawByDay[d][k] && rawByDay[d][k].length));
+  // The non-response bracket pays on MATURED TERMINAL non-response (see
+  // NR_MATURITY_DAYS): Disqualified reason "Not responsive", over B2B leads
+  // that have had 30 days to resolve. It used to pay on the broad reading
+  // (which also counted the transient "Non respondant" status and every lead
+  // still mid-cadence) while citing the briefing's 29% baseline in its own
+  // tier table — but that 29% is a matured terminal figure, so the bracket
+  // was scoring the team against a number measured a different way and
+  // reading 5-14 points worse than the company for it. Same measurement on
+  // both sides now. Running a completed month after month-end, the gate
+  // excludes nothing; it only bites on a mid-month preview, where it reports
+  // the matured slice instead of a falsely low whole-month rate.
+  const maturedB2B = [];
+  maturedDayKeys(days).forEach(d => keys.forEach(k => {
+    const dayRows = rawByDay[d] && rawByDay[d][k];
+    if (dayRows) maturedB2B.push(...dayRows.filter(r => !isLeadExcluded(r) && isBusinessLead(r)));
+  }));
+  const nrTerminal = maturedB2B.filter(isTerminalNonResponse).length;
+  // A month's matured reading isn't FINAL until every one of its leads has had
+  // the full window — i.e. NR_MATURITY_DAYS after the month's last day. Run on
+  // the 1st of the pay month, only the first day or two of the performance
+  // month has matured, and a 10-lead sample can land a top tier on noise.
+  // nrFinalOn is that date, so the card can say so instead of quietly paying.
+  const lastDay = days.length ? days[days.length - 1] : null;
+  const nrFinalOn = lastDay ? dayKeyOffsetFrom(lastDay, NR_MATURITY_DAYS) : null;
   return {
     sdrCount: activeKeys.length,
     activeKeys,
@@ -7750,11 +7846,35 @@ function newPlanTeamMetrics(days, keys) {
     closedB2B: closedB2B.length,
     closedAll: closedAll.length,
     leadToDealRate: b2b.length ? (closedB2B.length / b2b.length * 100) : 0,
-    nonResponsive: b2b.filter(isNonResponsiveLead).length,
-    nonResponsiveRate: b2b.length ? (b2b.filter(isNonResponsiveLead).length / b2b.length * 100) : 0,
+    nonResponsive: nrTerminal,
+    nonResponsiveMaturedLeads: maturedB2B.length,
+    nonResponsiveImmatureLeads: b2b.length - maturedB2B.length,
+    // No matured cohort yet (a brand-new month) => 0, which lands in the
+    // top tier. Deliberate: the bracket is only ever run on a completed
+    // month, and a preview with nothing matured shows "—" in the UI instead.
+    nonResponsiveRate: maturedB2B.length ? (nrTerminal / maturedB2B.length * 100) : 0,
+    nonResponsiveMeasurable: maturedB2B.length > 0,
+    nonResponsiveFinal: maturedB2B.length === b2b.length,
+    nonResponsiveFinalOn: nrFinalOn,
+    // The broad reading, kept alongside as the live/leading indicator — not
+    // paid on, but shown so a mid-month trend is still visible.
+    nonResponsiveBroadRate: b2b.length ? (b2b.filter(isNonResponsiveLead).length / b2b.length * 100) : 0,
     heldRate: b2b.length ? (b2b.filter(isMeetingHeld).length / b2b.length * 100) : 0,
     revenue
   };
+}
+// Amber "?" on the non-response figure until the performance month has fully
+// matured. Without it, running commission on the 1st of the pay month would
+// quietly score the Team Lead on whatever handful of leads happen to be 30
+// days old — in July's case 10 leads out of 540, enough to hit the top tier
+// on noise. The bracket should be run once nrFinalOn has passed.
+function nrMaturityFlag(t) {
+  if (t.nonResponsiveFinal) return '';
+  const when = t.nonResponsiveFinalOn ? ` This month's figure is final on ${t.nonResponsiveFinalOn}.` : '';
+  const note = t.nonResponsiveMeasurable
+    ? `Not final yet — only ${t.nonResponsiveMaturedLeads} of ${t.b2bLeads} B2B leads have had the full ${NR_MATURITY_DAYS} days to resolve, so this rate is measured on a partial cohort and can swing a whole tier.${when} Run the non-response bracket after that date.`
+    : `Not measurable yet — none of this month's ${t.b2bLeads} B2B leads have had the full ${NR_MATURITY_DAYS} days to resolve.${when}`;
+  return ` <sup class="rate-warn" title="${escapeHtml(note)}">?</sup>`;
 }
 function newPlanLeadPayout(t, sdrCountOverride) {
   const n = sdrCountOverride != null ? sdrCountOverride : t.sdrCount;
@@ -10010,10 +10130,10 @@ function renderNpLead(days, monthKey, selected) {
         <input type="text" value="${pct(t.leadToDealRate)}" readonly>
         <div class="np-auto">${t.closedB2B} closed ÷ ${t.b2bLeads} B2B leads</div>
       </div>
-      <div class="np-lead-input-cell">
-        <label>Team non-response</label>
-        <input type="text" value="${pct(t.nonResponsiveRate)}" readonly>
-        <div class="np-auto">${t.nonResponsive} of ${t.b2bLeads} · company baseline 29%</div>
+      <div class="np-lead-input-cell" title="${escapeHtml(NR_MATURED_NOTE)}">
+        <label>Team non-response${nrMaturityFlag(t)}</label>
+        <input type="text" value="${t.nonResponsiveMeasurable ? pct(t.nonResponsiveRate) : '—'}" readonly>
+        <div class="np-auto">${t.nonResponsiveMeasurable ? `${t.nonResponsive} of ${t.nonResponsiveMaturedLeads} matured` : 'no leads matured yet'} · baseline 29%${t.nonResponsiveImmatureLeads ? ` · ${t.nonResponsiveImmatureLeads} still too new` : ''}</div>
       </div>
       <div class="np-lead-input-cell">
         <label>Team revenue</label>
@@ -10044,7 +10164,7 @@ function renderNpLead(days, monthKey, selected) {
 
     <div class="np-line"><span>Base</span><strong>${money(base)}</strong></div>
     <div class="np-line"><span>Lead → deal tier (${pct(t.leadToDealRate)})</span><strong>${money(p.l2d)}</strong></div>
-    <div class="np-line"><span>Non-response tier (${pct(t.nonResponsiveRate)})</span><strong>${money(p.nr)}</strong></div>
+    <div class="np-line"><span>Non-response tier (${t.nonResponsiveMeasurable ? pct(t.nonResponsiveRate) : '—'}, matured terminal)${nrMaturityFlag(t)}</span><strong>${money(p.nr)}</strong></div>
     <div class="np-line"><span>Revenue override</span><strong>${money(p.override)}</strong></div>
     <div class="np-line np-sum"><span>Total Compensation</span><strong>${money(total)}</strong></div>
     <div class="np-sub">Variable is ${pct(base ? p.variable / base * 100 : 0, 0)} of base.</div>
@@ -10111,7 +10231,8 @@ function renderNpFounder() {
         <tr><td>Meetings held</td><td class="num">${t.heldB2B}</td><td>${pct(t.heldRate)} of B2B leads</td></tr>
         <tr><td>Closed deals (B2B)</td><td class="num">${t.closedB2B}</td><td>Sales status = Closed, by creation-date cohort</td></tr>
         <tr class="${t.leadToDealRate >= 14.2 ? 'np-highlight' : ''}"><td>Lead → deal rate</td><td class="num">${pct(t.leadToDealRate)}</td><td>14.2% company-wide (brief)</td></tr>
-        <tr><td>Non-response rate</td><td class="num">${pct(t.nonResponsiveRate)}</td><td>29% company-wide — the brief's largest single leak</td></tr>
+        <tr><td>Non-response rate (matured terminal)${nrMaturityFlag(t)}</td><td class="num">${t.nonResponsiveMeasurable ? pct(t.nonResponsiveRate) : '—'}</td><td>29% company-wide — the brief's largest single leak. Measured the same way the brief measured it: see the ⓘ above.</td></tr>
+        <tr><td>Non-response rate (broad, live)</td><td class="num">${pct(t.nonResponsiveBroadRate)}</td><td>includes leads still mid-cadence — the leading indicator, not what the bracket pays on</td></tr>
         <tr><td>Revenue sourced</td><td class="num">${money(t.revenue)}</td><td>AOV ${money(t.closedAll ? t.revenue / t.closedAll : 0)} across ${t.closedAll} deals vs $1,466 company (SDRs work the sub-$1k tier)</td></tr>
       </tbody>
     </table>
