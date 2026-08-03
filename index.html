@@ -522,6 +522,7 @@
     border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
   }
   .targets-reset-btn:hover { color: var(--text); border-color: var(--muted); }
+  .ae-bench-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .targets-save-row { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
   .targets-save-note { font-size: 11px; color: var(--muted); }
   .targets-save-note.ok { color: var(--green); font-weight: 600; }
@@ -2933,14 +2934,35 @@ function loadTrendLinesToggle() {
 // so holding them to the SDR-era rule would just manufacture a fake gap. Not
 // date-bucketed like the SDR charts — this is a single frozen historical
 // average, not a trend.
-function computeAEBaselineMetrics() {
+// The AE Baseline SECTION's own B2B/B2C/All picker, default B2B. Deliberately
+// separate from the global Leads: filter: the chart overlays and Summary Card
+// reference rows still follow that filter (comparing like with like against
+// whatever the page is showing), but the benchmark tables in the section are
+// pinned to business leads unless you say otherwise — every figure they are
+// read against, in the briefing and the comp model, is a business-lead figure.
+const AE_BENCH_LEAD_TYPES = { b2b: 'B2B', b2c: 'B2C', all: 'B2B+B2C' };
+function aeBenchLeadType() {
+  try { const v = localStorage.getItem('sdr_ae_bench_lead_type'); if (v && AE_BENCH_LEAD_TYPES[v]) return v; } catch (e) {}
+  return 'b2b';
+}
+function saveAeBenchLeadType(v) {
+  try { localStorage.setItem('sdr_ae_bench_lead_type', v); } catch (e) {}
+  renderAEBaselineSection();
+}
+function benchLeadFilter(rows, leadType) {
+  if (leadType === 'b2b') return rows.filter(isBusinessLead);
+  if (leadType === 'b2c') return rows.filter(isB2CLead);
+  if (leadType === 'all') return rows;
+  return applyLeadTypeFilter(rows); // undefined = follow the global Leads: filter
+}
+function computeAEBaselineMetrics(leadTypeOverride) {
   if (!rawAEBaseline || !rawAEBaseline.length) return null;
   // Duplicate-record/Wrong-info rows aren't real leads in the AE-era export
   // any more than they are in the live SDR data — dropped here the same way
   // every other calculation on this dashboard drops them, so the AE Baseline
   // reference never overstates historical volume with records that were
   // never real leads to begin with.
-  const filtered = applyLeadTypeFilter(rawAEBaseline).filter(r => !isLeadExcluded(r));
+  const filtered = benchLeadFilter(rawAEBaseline, leadTypeOverride).filter(r => !isLeadExcluded(r));
   const includedForOverall = filtered.filter(r => !excludedAEBaselineOwners.has(r['Owner']));
   const overall = computeMetrics(includedForOverall, { closedImpliesMeeting: true });
   const dayKeys = Array.from(new Set(rawAEBaseline.map(r => toDubaiDayKey(r['Creation Date'])).filter(Boolean))).sort();
@@ -3381,12 +3403,19 @@ function isQualifiedLead(r) {
 // Meeting Status, so this flag is never needed (or used) for SDR numbers.
 function computeMetrics(leads, opts) {
   opts = opts || {};
-  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, non_responsive_terminal: 0, nr_rate_terminal: 0, ae_dq: 0, sdr_dq: 0, closed: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, meetings_no_show_denom: 0, meetings_held: 0, meetings_no_show: 0, speed_to_lead_matched: 0, speed_to_lead_eligible: 0, speed_to_lead_mismatch: 0,
+  if (!leads || !leads.length) return { leads: 0, meetings: 0, meeting_rate: 0, qualified: 0, pct_qualified: 0, non_responsive: 0, nr_rate: 0, non_responsive_terminal: 0, nr_rate_terminal: 0, ae_dq: 0, sdr_dq: 0, closed: 0, active_pipeline: 0, meetings_not_attended: 0, meetings_resolved: 0, meetings_no_show_denom: 0, meetings_held: 0, meetings_no_show: 0, meetings_booked_status: 0, meetings_done_strict: 0, speed_to_lead_matched: 0, speed_to_lead_eligible: 0, speed_to_lead_mismatch: 0,
     speed_to_lead_on_matched: 0, speed_to_lead_on_eligible: 0,
     speed_to_lead_off_matched: 0, speed_to_lead_off_eligible: 0,
     call_covered: 0, call_eligible: 0 };
   const isAEImpliedMeeting = r => opts.closedImpliesMeeting && r['Sales status'] === 'Closed' && !(r['Meeting Status'] || '').trim();
   const meetings = leads.filter(r => isMeetingBooked(r) || isAEImpliedMeeting(r)).length;
+  // Recorded-only counterparts: a real Meeting Status entry, and a real
+  // "Meeting Done" specifically. Never credited by closedImpliesMeeting, so the
+  // AE Baseline tables can show what was actually logged next to what the
+  // assumption adds — without which an owner whose rows are all Closed deals
+  // with a blank Meeting Status reads as a 100% meeting rate.
+  const meetings_booked_status = leads.filter(isMeetingBooked).length;
+  const meetings_done_strict = leads.filter(r => r['Meeting Status'] === 'Meeting Done').length;
   const meetings_not_attended = leads.filter(isMeetingNotAttended).length;
   const meetings_resolved = leads.filter(r => isMeetingResolved(r) || isAEImpliedMeeting(r)).length;
   // No-Show Rate's denominator: every booked meeting (Scheduled/Done/
@@ -3466,6 +3495,8 @@ function computeMetrics(leads, opts) {
     sdr_dq,
     closed,
     active_pipeline,
+    meetings_booked_status,
+    meetings_done_strict,
     meetings_not_attended,
     meetings_resolved,
     meetings_no_show_denom,
@@ -10832,13 +10863,17 @@ function renderNpFounder() {
 // against the per-AE table below, over the entire loaded Bookings dataset
 // rather than whatever the top Range: filter currently has selected, so the
 // two tables stay a stable, same-shape benchmark side by side.
-function computeSDRAllTimeMetrics() {
+function computeSDRAllTimeMetrics(leadTypeOverride) {
   if (!rawByDay) return null;
   const allDays = Object.keys(rawByDay).sort();
   const perSDR = SDRS.map(s => {
     const rows = [];
     allDays.forEach(d => { const r = rawByDay[d][s.key]; if (r) rows.push(...r); });
-    return { sdr: s, metrics: computeMetrics(applyLeadTypeFilter(rows)) };
+    // Duplicate-record/Wrong-info rows dropped, same as the AE table beside it
+    // and every other count on the dashboard — this table was the last place
+    // still counting them in its lead volume.
+    const pool = benchLeadFilter(rows, leadTypeOverride).filter(r => !isLeadExcluded(r));
+    return { sdr: s, metrics: computeMetrics(pool) };
   });
   return { perSDR, firstDay: allDays[0], lastDay: allDays[allDays.length - 1] };
 }
@@ -10856,20 +10891,43 @@ function aeBaselineFactTile(label, value, sub) {
 function benchmarkRow(label, m, opts) {
   const excluded = opts && opts.excluded;
   const toggleCell = opts && opts.owner != null ? `<td><label class="ae-row-toggle" title="Include/exclude ${escapeHtml(label)} from the AE Averages totals above"><input type="checkbox" ${excluded ? '' : 'checked'} onchange="toggleAEBaselineOwnerExcluded('${escapeHtml(opts.owner).replace(/'/g, "\\'")}')"><span class="toggle-track"></span></label></td>` : '';
+  // How much of the Meetings figure is the AE-era assumption rather than a
+  // recorded Meeting Status. Flagged in place, because a row built almost
+  // entirely out of the assumption is not a 100% meeting rate — it is an owner
+  // whose leads all arrived already Closed.
+  const implied = m.meetings - m.meetings_booked_status;
+  const impliedFlag = implied > 0 && implied >= m.meetings_booked_status
+    ? ` <span class="targets-note" title="${implied} of these ${m.meetings} come from the AE-era rule that a Closed deal with a blank Meeting Status still counts as a meeting, not from a recorded one — only ${m.meetings_booked_status} has an actual Meeting Status. Read the Held column instead: it never uses that assumption.">?</span>`
+    : '';
+  const heldRate = m.leads ? (m.meetings_done_strict / m.leads * 100) : 0;
+  // Booked but almost never held is a marking convention, not performance —
+  // most often a desk that files "Meeting Rejected" where others leave blank.
+  const hollowFlag = m.meetings_booked_status >= 20 && m.meetings_done_strict < m.meetings_booked_status * 0.25
+    ? ` <span class="targets-note" title="Of ${m.meetings_booked_status} recorded meeting statuses only ${m.meetings_done_strict} are Meeting Done — the rest are Rejected, Not Atended or still Scheduled. A high Booked Rate here reflects how meetings are marked, not meetings that happened.">?</span>`
+    : '';
   return `<tr${excluded ? ' class="ae-row-excluded"' : ''}>
     <td>${escapeHtml(label)}</td>
     <td>${m.leads}</td>
-    <td>${m.meetings}</td>
+    <td>${m.meetings}${impliedFlag}</td>
     <td>${m.meeting_rate.toFixed(1)}%</td>
+    <td>${m.meetings_done_strict}${hollowFlag}</td>
+    <td>${heldRate.toFixed(1)}%</td>
     <td>${m.qualified}</td>
     <td>${m.pct_qualified.toFixed(1)}%</td>
-    <td>${m.nr_rate.toFixed(1)}%</td>
+    <td>${m.nr_rate_terminal.toFixed(1)}%</td>
     <td>${m.leads ? (m.sdr_dq / m.leads * 100).toFixed(1) : '0.0'}%</td>
     ${toggleCell}
   </tr>`;
 }
 function benchmarkTableHeader(firstColLabel, withToggle) {
-  return `<thead><tr><th>${firstColLabel}</th><th>Leads</th><th>Meetings</th><th>Meeting Rate</th><th>Qualified</th><th>% Qualified</th><th>NR Rate</th><th>Disqualified Rate</th>${withToggle ? '<th></th>' : ''}</tr></thead>`;
+  return `<thead><tr><th>${firstColLabel}</th><th>Leads</th>` +
+    `<th>Meetings Booked <span class="goal-info" title="A recorded Meeting Status of Scheduled, Done, Rejected or Not Atended. On the AE table this also includes the AE-era assumption that a Closed deal with a blank Meeting Status implies a meeting happened — a ? marks any row where that assumption supplies most of the number.">ⓘ</span></th>` +
+    `<th>Booked Rate</th>` +
+    `<th>Held <span class="goal-info" title="Meeting Status = Meeting Done only. Never inflated by the Closed-implies-a-meeting assumption, so this is the like-for-like column between the AE era and the SDR team.">ⓘ</span></th>` +
+    `<th>Held Rate</th>` +
+    `<th>Qualified</th><th>% Qualified</th>` +
+    `<th>NR Rate <span class="goal-info" title="Terminal non-response only — Disqualified reason = Not responsive. Matches the Non-Responsive Rate card, its chart, the Mandate Scoreboard and Monthly Targets; the transient &quot;Non respondant&quot; status is not counted.">ⓘ</span></th>` +
+    `<th>Disqualified Rate</th>${withToggle ? '<th></th>' : ''}</tr></thead>`;
 }
 function renderAEBaselineSection() {
   const uploadRow = document.getElementById('aeBaselineUploadRow');
@@ -10879,46 +10937,59 @@ function renderAEBaselineSection() {
   const headerNote = document.getElementById('aeBaselineHeaderNote');
   if (!uploadRow || !contentEl) return;
 
-  const sdrAllTime = computeSDRAllTimeMetrics();
+  const lt = aeBenchLeadType();
+  const ltLabel = AE_BENCH_LEAD_TYPES[lt];
+  const leadTypeRow = `<div class="ae-bench-controls">
+    <span class="targets-control-label">Leads</span>
+    <select class="chart-granularity" id="aeBenchLeadType" title="Applies to both tables in this section and the totals above them. Defaults to B2B — every figure these are read against (the strategic briefing, the compensation model) is a business-lead figure. Independent of the Leads: filter at the top of the page, which still governs the chart overlays and the Summary Card reference rows." onchange="saveAeBenchLeadType(this.value)">
+      ${Object.keys(AE_BENCH_LEAD_TYPES).map(k => `<option value="${k}"${k === lt ? ' selected' : ''}>${AE_BENCH_LEAD_TYPES[k]}</option>`).join('')}
+    </select>
+    <span class="targets-scope-note">Both tables below · duplicate-record and wrong-info rows excluded · not affected by the Range or Leads pickers at the top of the page</span>
+  </div>`;
+
+  const sdrAllTime = computeSDRAllTimeMetrics(lt);
   const sdrTableHtml = sdrAllTime ? `
-    <div class="ae-baseline-subheading">SDR Averages <span class="goal-info" title="Full loaded Bookings history (${sdrAllTime.firstDay} – ${sdrAllTime.lastDay}) for each SDR — not affected by the Range: filter, so it's a stable benchmark next to the AE table (same B2B/B2C/All Leads: filter, computed the same way).">ⓘ</span></div>
-    <table class="report-table">
+    <div class="ae-baseline-subheading">SDR Averages <span class="goal-info" title="Every ${escapeHtml(ltLabel)} lead in the full loaded Bookings history (${sdrAllTime.firstDay} – ${sdrAllTime.lastDay}) for each SDR — not affected by the Range: filter, so it stays a stable benchmark next to the AE table and is computed the same way, column for column. The one deliberate difference: the AE table's Meetings Booked also credits the AE-era Closed-with-blank-Meeting-Status assumption, which never applies to SDR rows because SDR-era data fills Meeting Status in reliably. The Held column is assumption-free on both sides.">ⓘ</span></div>
+    <div style="overflow-x:auto"><table class="report-table">
       ${benchmarkTableHeader('SDR')}
       <tbody>${sdrAllTime.perSDR.map(({ sdr, metrics: m }) => benchmarkRow(sdr.name, m)).join('')}</tbody>
-    </table>` : '';
+    </table></div>` : '';
 
   if (!rawAEBaseline || !rawAEBaseline.length) {
     loadedNote.textContent = '';
     clearBtn.style.display = 'none';
     headerNote.textContent = 'Click to expand — compare SDR performance to the pre-SDR AE era';
-    contentEl.innerHTML = `<div class="ae-baseline-empty">No AE Baseline CSV loaded yet (auto-load of the default dataset may have failed — try loading one manually below).</div>` + sdrTableHtml;
+    contentEl.innerHTML = `<div class="ae-baseline-empty">No AE Baseline CSV loaded yet (auto-load of the default dataset may have failed — try loading one manually below).</div>` + leadTypeRow + sdrTableHtml;
     return;
   }
 
-  const ae = computeAEBaselineMetrics();
+  const ae = computeAEBaselineMetrics(lt);
   loadedNote.textContent = `${aeBaselineFilename} · ${ae.firstDay} – ${ae.lastDay} (${ae.spanDays} days) · ${rawAEBaseline.length} rows`;
   clearBtn.style.display = '';
   headerNote.textContent = `${ae.firstDay} – ${ae.lastDay} · ${ae.perAE.length} AEs · toggle "AE Baseline: On" above to overlay it on the charts`;
 
   const o = ae.overall;
+  const impliedTotal = o.meetings - o.meetings_booked_status;
   const factsHtml = `<div class="ae-baseline-facts-grid">
-    ${aeBaselineFactTile('Lead Volume', o.leads, `${ae.leadsPerDay.toFixed(1)}/day avg`)}
-    ${aeBaselineFactTile('Meetings Booked', o.meetings, `${ae.meetingsPerDay.toFixed(1)}/day avg`)}
-    ${aeBaselineFactTile('Meeting Booked Rate', o.meeting_rate.toFixed(1) + '%')}
+    ${aeBaselineFactTile('Lead Volume', o.leads, `${ae.leadsPerDay.toFixed(1)}/day avg · ${escapeHtml(ltLabel)}`)}
+    ${aeBaselineFactTile('Meetings Booked', o.meetings, impliedTotal > 0
+      ? `${o.meetings_booked_status} recorded + ${impliedTotal} implied by Closed`
+      : `${ae.meetingsPerDay.toFixed(1)}/day avg`)}
+    ${aeBaselineFactTile('Meeting Booked Rate', o.meeting_rate.toFixed(1) + '%', impliedTotal > 0 ? `${(o.meetings_booked_status / o.leads * 100).toFixed(1)}% on recorded statuses alone` : '')}
+    ${aeBaselineFactTile('Meetings Held', o.meetings_done_strict, `${(o.meetings_done_strict / o.leads * 100).toFixed(1)}% of leads · Meeting Done only`)}
     ${aeBaselineFactTile('Leads Qualified', o.qualified, `${o.pct_qualified.toFixed(1)}% of leads`)}
-    ${aeBaselineFactTile('% Leads Qualified', o.pct_qualified.toFixed(1) + '%')}
-    ${aeBaselineFactTile('Non-Responsive Rate', o.nr_rate.toFixed(1) + '%')}
+    ${aeBaselineFactTile('Non-Responsive Rate', o.nr_rate_terminal.toFixed(1) + '%', 'terminal Not responsive')}
     ${aeBaselineFactTile('Disqualified Rate', ae.sdrDqRate.toFixed(1) + '%', 'AE\'s own disqualifications ÷ leads')}
   </div>`;
 
   const aeTableHtml = `
-    <div class="ae-baseline-subheading">AE Averages <span class="goal-info" title="${escapeHtml(ae.firstDay)} – ${escapeHtml(ae.lastDay)} (${ae.spanDays} days), the entire loaded AE Baseline export.">ⓘ</span></div>
-    <table class="report-table">
+    <div class="ae-baseline-subheading">AE Averages <span class="goal-info" title="${escapeHtml(ae.firstDay)} – ${escapeHtml(ae.lastDay)} (${ae.spanDays} days), every ${escapeHtml(ltLabel)} row of the loaded AE Baseline export, grouped by the Owner field. Owners are not all Account Executives working a lead funnel: some appear only as the owner of bookings that arrived already Closed, which is what the ? markers call out. Use the toggle at the end of a row to drop it from the totals above.">ⓘ</span></div>
+    <div style="overflow-x:auto"><table class="report-table">
       ${benchmarkTableHeader('AE', true)}
       <tbody>${ae.perAE.map(({ owner, metrics: m, excluded }) => benchmarkRow(owner, m, { owner, excluded })).join('')}</tbody>
-    </table>`;
+    </table></div>`;
 
-  contentEl.innerHTML = factsHtml + aeTableHtml + sdrTableHtml;
+  contentEl.innerHTML = leadTypeRow + factsHtml + aeTableHtml + sdrTableHtml;
 }
 
 // ─── QUALIFIED LEADS REPORT (print / export as PDF) ────────────────────────────
