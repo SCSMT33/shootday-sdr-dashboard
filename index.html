@@ -2203,7 +2203,7 @@
         <!-- TEAM LEAD -->
         <div class="commission-explainer" id="npLeadSection" style="margin-top:16px">
           <div class="commission-explainer-header" onclick="toggleNpLeadSection()">
-            <span>Team Lead compensation (Chase)</span>
+            <span>Team Lead compensation (Chase) — on pause</span>
             <span class="commission-chevron">&#9654;</span>
           </div>
           <div class="commission-explainer-body" id="npLeadBody"></div>
@@ -8176,12 +8176,13 @@ function commissionPayout(key, qGross, mGross, nsGross) {
 //      no new Airtable state to maintain.
 //   4. No no-show multiplier. Paying on held already prices a no-show at the
 //      full meeting; a second penalty double-counts the same event.
-//   5. No lead-volume factor (removed 2026-08-11). Used to scale the tier down
-//      for a short book (min(1.00, B2B leads ÷ 160)) — removed because SDRs
-//      don't control how many leads routing sends them, so a below-reference
-//      month shouldn't shrink their tier for a volume decision that isn't
-//      theirs. The credit RATE is already leads-normalized (credits ÷ leads),
-//      so pay still tracks quality regardless of book size.
+//   5. Volume factor protects against small-book gaming. min(1.00, B2B leads ÷
+//      160), applied to the tier only. At or above 160 leads it does nothing;
+//      below that it prorates the tier — a high rate on a short book isn't the
+//      same achievement as a high rate on a full one. Kept on 2026-08-12 as a
+//      guardrail (a materially short book could otherwise post an inflated
+//      rate on very little real output) even though SDRs don't control the
+//      leads they're routed — a normal month is never touched by it.
 //   6. No AE-disqualified gate (removed 2026-08-11). Used to multiply the tier
 //      down (×0.90 at 10-15% bounced, ×0.75 at 15%+) when an AE bounced a lead
 //      back as wrongly qualified. Removed because policy changed: a bounced
@@ -8191,6 +8192,10 @@ function commissionPayout(key, qGross, mGross, nsGross) {
 //      isn't in the qualified set), so nothing else needs to reduce for it.
 const NP = {
   noMeetingWeight: 0.5,
+  // Just below the delivered lead range (June 224-225, July 166-178) so a
+  // normally-loaded SDR is untouched at 1.00 and only a materially short book
+  // pro-rates.
+  volumeRef: 160,
   b2cHeldRate: 12,
   // 0.25%, matching the old New Sales Incentive. Deliberately small: at 1% it
   // would be ~40% of variable, arriving weeks late from a deal an AE closed —
@@ -8281,6 +8286,7 @@ function newPlanMetricsForSDR(days, sdrKey) {
     b2cLeads: b2c.length,
     heldB2B, heldB2C, noMeeting, noMeetingB2C, creditsB2C, credits, creditRate,
     noShow,
+    volumeFactor: Math.min(1, b2b.length / NP.volumeRef),
     closedDeals: closedRows.length,
     closedRevenueUSD: revenue
   };
@@ -8293,7 +8299,7 @@ function newPlanPayout(m) {
   const overageCredits = m.creditRate >= NP.overageFromPct
     ? Math.max(0, m.credits - (NP.overageFromPct / 100) * m.b2bLeads) : 0;
   const overage = overageCredits * NP.overageRate;
-  const tierGross = tierBase + overage;
+  const tierGross = tierBase * m.volumeFactor + overage;
   const tierPaid = Math.round(tierGross);
   const b2cPaid = Math.round(m.creditsB2C * NP.b2cHeldRate);
   const revPaid = Math.round(m.closedRevenueUSD * NP.revenuePct);
@@ -10370,16 +10376,7 @@ function renderCommissionCalculator(days) {
 function toggleNewCommissionSection() { document.getElementById('newCommissionSection').classList.toggle('expanded'); }
 function toggleNpExplainer() { document.getElementById('npExplainer').classList.toggle('expanded'); }
 function toggleNpFounderSection() { document.getElementById('npFounderSection').classList.toggle('expanded'); }
-function toggleNpLeadSection() {
-  const el = document.getElementById('npLeadSection');
-  el.classList.toggle('expanded');
-  // Collapsing must always drop the Team Lead's own pay back out of every
-  // team-cost figure — the 7% ceiling is defined over the Coordinators only.
-  if (!el.classList.contains('expanded')) {
-    npIncludeLeadInCost = false;
-    renderNpFounder();
-  }
-}
+function toggleNpLeadSection() { document.getElementById('npLeadSection').classList.toggle('expanded'); }
 function money(n) { return '$' + Math.round(n).toLocaleString(); }
 function pct(n, d) { return n.toFixed(d == null ? 1 : d) + '%'; }
 
@@ -10427,33 +10424,51 @@ function newCommissionCard(sdr, days, monthKey) {
       <span class="commission-card-name">${sdr.name}</span>
     </div>
 
+    <div class="commission-bracket-label">B2B — sets your credit rate and tier</div>
     <div class="commission-stats">
-      ${npStat('New Business Leads (B2B)', m.b2bLeads, `${ml} — the denominator`,
+      ${npStat('B2B Leads', m.b2bLeads, `${ml} — the denominator`,
         `B2B leads assigned to ${sdr.name} in ${ml}. This is the only denominator in the plan. Duplicate-record and Wrong-info leads are removed from both sides, so they can never hurt the rate.`)}
-      ${npStat('B2C Leads', m.b2cLeads, 'not in the rate — paid per meeting',
-        `Consumer leads in ${ml}. They never enter the credit rate: B2C is worth about $9 per lead against B2B's $78, so it earns a flat $${NP.b2cHeldRate} per credit on its own line instead of distorting the main number. B2C credits are counted exactly like B2B credits — 1 per held meeting, ${NP.noMeetingWeight} per qualified lead handed over with no meeting.`)}
-      ${npStat('Meetings Held (B2B)', m.heldB2B, `1 credit each · ${pct(m.b2bLeads ? m.heldB2B / m.b2bLeads * 100 : 0)} of B2B leads`,
+      ${npStat('B2B Meetings Held', m.heldB2B, `1 credit each · ${pct(m.b2bLeads ? m.heldB2B / m.b2bLeads * 100 : 0)} of B2B leads`,
         `Meeting Status = Meeting Done, B2B only, from leads created in ${ml}. A no-show or rejected meeting is not a held meeting and earns nothing — that is why there is no separate no-show penalty in this plan.`)}
-      ${npStat('Qualified, No Meeting', m.noMeeting, `${NP.noMeetingWeight} credit each = ${(m.noMeeting * NP.noMeetingWeight).toFixed(1)} credits`,
+      ${npStat('B2B Qualified, No Meeting', m.noMeeting, `${NP.noMeetingWeight} credit each = ${(m.noMeeting * NP.noMeetingWeight).toFixed(1)} credits`,
         `B2B leads qualified (Hot, Warm, Closed, Lost, Qualified_SDR or a refund status) with no Meeting Status at all — the "just email me" handoffs. Worth $278 per lead against $547 for a held meeting, i.e. 51%, so they count as half a credit.`)}
       ${npStat('Credits', m.credits.toFixed(1), `${m.heldB2B} held + ${NP.noMeetingWeight} × ${m.noMeeting}`,
         `Held B2B meetings plus half a credit per qualified no-meeting handoff. This is the numerator.`)}
       ${npStat('Credit Rate', `<span style="color:#1a9e6a">${pct(m.creditRate)}</span>`,
         creditsToNext != null && nextTier ? `${creditsToNext} more credits → ${money(nextTier.amount)} band` : 'top band — every credit pays',
         `Credits ÷ B2B leads. This sets your tier. ${creditsToNext != null && nextTier ? `At ${m.b2bLeads} leads you need ${creditsToNext} more credits to reach ${nextTier.min}%.` : 'Above ' + NP.overageFromPct + '% every extra credit pays $' + NP.overageRate + ' — there is no cap.'}`)}
-      <div class="commission-stat" style="grid-column: 1 / -1;">
-        <div class="commission-stat-label">Closed Revenue (${ml}) <span class="goal-info" title="Deals from leads created in ${ml} that are Closed as of now, B2B and B2C, USD-equivalent. Paid at ${(NP.revenuePct * 100).toFixed(2)}%.">ⓘ</span></div>
-        <div class="commission-stat-value">${money(m.closedRevenueUSD)}</div>
-        <div class="commission-stat-sub">${m.closedDeals} closed deals · × ${(NP.revenuePct * 100).toFixed(2)}% = ${money(p.revPaid)}</div>
+      ${npStat('Volume Factor', `×${m.volumeFactor.toFixed(2)}`,
+        m.volumeFactor < 1 ? `${m.b2bLeads} of ${NP.volumeRef} reference leads` : `at or above ${NP.volumeRef} leads — no reduction`,
+        `min(1.00, B2B leads ÷ ${NP.volumeRef}). Applies to the tier only. A high rate on a small book is not the same achievement as a high rate on a full one; above ${NP.volumeRef} leads it never reduces pay.`)}
+    </div>
+
+    <div class="commission-bracket-label">B2C — paid flat, never enters your B2B rate</div>
+    <div class="commission-stats">
+      ${npStat('B2C Leads', m.b2cLeads, 'not in the rate — paid per meeting',
+        `Consumer leads in ${ml}. They never enter the credit rate: B2C is worth about $9 per lead against B2B's $78, so it earns a flat $${NP.b2cHeldRate} per credit on its own line instead of distorting the main number.`)}
+      ${npStat('B2C Meetings Held', m.heldB2C, `1 credit each · $${NP.b2cHeldRate} per credit`,
+        `Meeting Status = Meeting Done, B2C only, from leads created in ${ml}.`)}
+      ${npStat('B2C Qualified, No Meeting', m.noMeetingB2C, `${NP.noMeetingWeight} credit each = $${(NP.noMeetingWeight * NP.b2cHeldRate).toFixed(0)}`,
+        `B2C leads qualified with no Meeting Status at all — same "just email me" case as B2B, counted the same way, just on the B2C side.`)}
+      <div class="commission-stat">
+        <div class="commission-stat-label">B2C Credits</div>
+        <div class="commission-stat-value">${m.creditsB2C.toFixed(1)}</div>
+        <div class="commission-stat-sub">${m.heldB2C} held + ${NP.noMeetingWeight} × ${m.noMeetingB2C}</div>
       </div>
     </div>
 
-    <div class="commission-bracket-label">Tier — credit rate ${pct(m.creditRate)}</div>
+    <div class="commission-stat" style="grid-column: 1 / -1; margin-top:10px">
+      <div class="commission-stat-label">Closed Revenue (${ml}) <span class="goal-info" title="Deals from leads created in ${ml} that are Closed as of now, B2B and B2C, USD-equivalent. Paid at ${(NP.revenuePct * 100).toFixed(2)}%.">ⓘ</span></div>
+      <div class="commission-stat-value">${money(m.closedRevenueUSD)}</div>
+      <div class="commission-stat-sub">${m.closedDeals} closed deals · × ${(NP.revenuePct * 100).toFixed(2)}% = ${money(p.revPaid)}</div>
+    </div>
+
+    <div class="commission-bracket-label">Tier — credit rate ${pct(m.creditRate)}${m.volumeFactor < 1 ? `, then × ${m.volumeFactor.toFixed(2)} volume factor` : ''}</div>
     ${npTierTable(p.tIdx)}
     ${p.overageCredits > 0 ? `<div class="commission-flat-calc"><span>${p.overageCredits.toFixed(1)} credits above ${NP.overageFromPct}% × $${NP.overageRate}</span><span>${money(p.overage)}</span></div>` : ''}
 
     <div class="commission-bracket-label">Your variable, component by component</div>
-    <div class="np-line"><span>Tier ${money(p.tierBase)}${p.overage ? ` + ${money(p.overage)} overage` : ''}</span><strong id="npTier-${sdr.key}" data-amount="${p.tierPaid}">${money(p.tierPaid)}</strong></div>
+    <div class="np-line"><span>Tier ${money(p.tierBase)}${m.volumeFactor < 1 ? ` × ${m.volumeFactor.toFixed(2)}` : ''}${p.overage ? ` + ${money(p.overage)} overage` : ''}</span><strong id="npTier-${sdr.key}" data-amount="${p.tierPaid}">${money(p.tierPaid)}</strong></div>
     <div class="np-line"><span>B2C kicker — ${m.creditsB2C.toFixed(1)} credits (${m.heldB2C} held + ${NP.noMeetingWeight} × ${m.noMeetingB2C}) × $${NP.b2cHeldRate}</span><strong id="npB2C-${sdr.key}" data-amount="${p.b2cPaid}">${money(p.b2cPaid)}</strong></div>
     <div class="np-line"><span>Revenue share — ${money(m.closedRevenueUSD)} × ${(NP.revenuePct * 100).toFixed(2)}%</span><strong id="npRev-${sdr.key}" data-amount="${p.revPaid}">${money(p.revPaid)}</strong></div>
     <div class="np-line np-sum"><span>Variable</span><strong>${money(p.variable)}</strong></div>
@@ -10569,7 +10584,7 @@ function renderNewCommissionCalculator() {
       ? `${monthLabelFromKey(monthKey)} — last calendar month`
       : `${monthLabelFromKey(monthKey)} — modelled, not the live payout month`;
   }
-  renderNpExplainer(days, monthKey);
+  renderNpExplainer();
   const selected = npSelectedSDRs();
   if (!selected.length) {
     if (tabsEl) tabsEl.innerHTML = '';
@@ -10590,63 +10605,30 @@ function renderNewCommissionCalculator() {
   renderNpFounder();
 }
 
-// ─── HOW IT WORKS (short version + a real worked example, same section) ────────
-// Deliberately just the mechanics — the "why" behind each number (floor
-// derivation, gaming risk, etc.) lives in docs/sdr-compensation-plan-v3.md,
-// not in the dashboard. The example is driven by whichever SDR actually had
-// the top credit rate that month, not a made-up scenario, so it always
-// reconciles to real data.
-function renderNpExplainer(days, monthKey) {
+// ─── HOW IT WORKS (SDR-facing, stupid-simple) ───────────────────────────────────
+// Just the mechanics, nothing else — the "why" behind each number (floor
+// derivation, gaming risk, etc.) lives in docs/sdr-compensation-plan-v3.md, not
+// in the dashboard. No worked example here on purpose — the calculator cards
+// right below this are the real, live worked example.
+function renderNpExplainer() {
   const el = document.getElementById('npExplainerBody');
   if (!el) return;
-  const cands = SDRS.map(s => ({ s, m: newPlanMetricsForSDR(days, s.key) })).filter(x => x.m.b2bLeads > 0);
-  let exampleHtml = `<p class="np-sub">No lead data for ${monthLabelFromKey(monthKey)} yet.</p>`;
-  if (cands.length) {
-    cands.sort((a, b) => b.m.creditRate - a.m.creditRate);
-    const { s, m } = cands[0];
-    const p = newPlanPayout(m);
-    const next = NP.tiers[p.tIdx + 1];
-    const toNext = next ? Math.max(0, Math.ceil((next.min / 100 * m.b2bLeads - m.credits) * 10) / 10) : null;
-    exampleHtml = `
-      <div class="np-worked">
-        <div class="np-worked-name">${escapeHtml(s.name)} — ${monthLabelFromKey(monthKey)}</div>
-        <div class="np-formula">${m.b2bLeads} B2B leads
-${m.heldB2B} meetings held            → ${m.heldB2B} credits
-${m.noMeeting} qualified, no meeting   → ${(m.noMeeting * NP.noMeetingWeight).toFixed(1)} credits
-                          <em>${m.credits.toFixed(1)} credits total</em>
-
-${m.credits.toFixed(1)} ÷ ${m.b2bLeads} leads         = <em>${pct(m.creditRate)}</em> credit rate  → tier ${money(p.tierBase)}
-${p.overage ? `+ ${p.overageCredits.toFixed(1)} credits over ${NP.overageFromPct}% × $${NP.overageRate} = ${money(p.tierPaid)}\n` : ''}${m.creditsB2C.toFixed(1)} B2C credits (${m.heldB2C} held + ${NP.noMeetingWeight} × ${m.noMeetingB2C} qualified/no meeting) × $${NP.b2cHeldRate}   = ${money(p.b2cPaid)}
-${money(m.closedRevenueUSD)} revenue × ${(NP.revenuePct * 100).toFixed(2)}% = ${money(p.revPaid)}
-
-                   VARIABLE = <em>${money(p.variable)}</em></div>
-        ${toNext != null && next ? `<div class="np-callout"><strong>Next step:</strong> ${toNext} more credits (${next.min}% rate) moves the tier from ${money(p.tierBase)} to ${money(next.amount)} — <strong>+${money(next.amount - p.tierBase)}</strong>.</div>` : ''}
-      </div>
-      <p class="np-sub">Real numbers for ${monthLabelFromKey(monthKey)} — change the month picker above and this updates.</p>`;
-  }
   el.innerHTML = `
     <div class="np-simple">
       <ul>
         <li><strong>1 credit</strong> — a B2B meeting that actually happens</li>
         <li><strong>½ credit</strong> — a qualified B2B lead handed off with no meeting needed</li>
-        <li><strong>Your rate</strong> = credits ÷ your B2B leads — that rate sets your pay tier</li>
-        <li>Plus <strong>$${NP.b2cHeldRate}</strong> per B2C meeting held, and <strong>${(NP.revenuePct * 100).toFixed(2)}%</strong> of revenue that closes on your leads</li>
+        <li><strong>Your rate</strong> = credits ÷ your B2B leads — that sets your pay tier</li>
+        <li>Under <strong>${NP.volumeRef} B2B leads</strong> in a month? Your tier scales down with your book — a full book always pays the full tier</li>
+        <li>Plus <strong>$${NP.b2cHeldRate}</strong> per B2C meeting held (half that for a B2C qualified handoff), and <strong>${(NP.revenuePct * 100).toFixed(2)}%</strong> of revenue that closes on your leads</li>
         <li><strong>No cap</strong> — the more you hold, the more you make</li>
       </ul>
     </div>
-    ${exampleHtml}
   `;
 }
 
 // ─── TEAM LEAD ────────────────────────────────────────────────────────────────
-// Off by default and forced back off whenever the section is collapsed: the 7%
-// ceiling is defined over the Coordinators only, so the Team Lead's own pay
-// must never silently sit inside a team-cost figure.
-let npIncludeLeadInCost = false;
-function toggleNpLeadInCost() {
-  npIncludeLeadInCost = document.getElementById('npLeadInCost').checked;
-  renderNpFounder();
-}
+// On pause (see renderNpLead) — inputs/math below are unused while it's off.
 function loadNpLeadInputs() {
   try { return JSON.parse(localStorage.getItem('sdr_np_lead') || '{}'); } catch (e) { return {}; }
 }
@@ -10663,80 +10645,17 @@ function npLeadTierTable(tiers, activeIdx, unit) {
     }).join('')}
     </tbody></table>`;
 }
+// On pause as of 2026-08-12 — not part of the live plan. The math (NP_LEAD,
+// newPlanLeadPayout, npLeadTierTable above) is left intact and unused so it's
+// ready to bring back, but nothing renders here until this is picked back up.
 function renderNpLead(days, monthKey, selected) {
   const el = document.getElementById('npLeadBody');
   if (!el) return;
-  const keys = selected.map(s => s.key);
-  const t = newPlanTeamMetrics(days, keys);
-  const saved = loadNpLeadInputs();
-  const base = saved.base != null && saved.base !== '' ? parseFloat(saved.base) : NP_LEAD.base;
-  const p = newPlanLeadPayout(t);
-  const total = base + p.variable;
-  el.innerHTML = `
-    <p class="np-sub">Paid on what the meetings <strong>become</strong>, where the Coordinators are paid on producing them — so neither side can win by pushing volume that doesn't close. Both tiers pay <strong>$0</strong> at June's actuals: nothing is paid for holding the status quo.</p>
-    <div class="np-callout"><strong>The ask:</strong> fold the expiring $1,000 guarantee into base at <strong>$4,500</strong> — the company pays exactly what it pays today — and add variable that only moves when the business does. Cost-neutral at status quo.</div>
-
-    <div class="np-lead-inputs">
-      <div class="np-lead-input-cell">
-        <label>Base $</label>
-        <input type="number" id="npLeadBase" value="${base}" onchange="saveNpLeadInputs({base: this.value}); renderNewCommissionCalculator()">
-        <div class="np-auto">$3,500 + $1,000 guarantee today</div>
-      </div>
-      <div class="np-lead-input-cell">
-        <label>Team lead → deal</label>
-        <input type="text" value="${pct(t.leadToDealRate)}" readonly>
-        <div class="np-auto">${t.closedB2B} closed ÷ ${t.b2bLeads} B2B leads</div>
-      </div>
-      <div class="np-lead-input-cell" title="${escapeHtml(NR_MATURED_NOTE)}">
-        <label>Team non-response${nrMaturityFlag(t)}</label>
-        <input type="text" value="${t.nonResponsiveMeasurable ? pct(t.nonResponsiveRate) : '—'}" readonly>
-        <div class="np-auto">${t.nonResponsiveMeasurable ? `${t.nonResponsive} of ${t.nonResponsiveMaturedLeads} matured` : 'no leads matured yet'} · baseline 29%${t.nonResponsiveImmatureLeads ? ` · ${t.nonResponsiveImmatureLeads} still too new` : ''}</div>
-      </div>
-      <div class="np-lead-input-cell">
-        <label>Team revenue</label>
-        <input type="text" value="${money(t.revenue)}" readonly>
-        <div class="np-auto">threshold ${money(p.threshold)} (${t.sdrCount} × $40k)</div>
-      </div>
-    </div>
-
-    <div class="commission-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr))">
-      <div>
-        <div class="commission-bracket-label">1 · Team B2B lead → deal rate</div>
-        ${npLeadTierTable(NP_LEAD.l2dTiers, p.lIdx, 'Lead → deal')}
-        <div class="np-sub">June 10.7% · May 19.7% · company benchmark 14.2%</div>
-      </div>
-      <div>
-        <div class="commission-bracket-label">2 · Team non-response rate</div>
-        ${npLeadTierTable(NP_LEAD.nrTiers, p.nIdx, 'Non-response')}
-        <div class="np-sub">June 34.7% · July 42.7% · company baseline 29%</div>
-      </div>
-    </div>
-
-    <div class="commission-bracket-label">3 · Revenue override</div>
-    <div class="commission-flat-calc"${p.override ? '' : ' style="background:rgba(148,163,184,0.20); color:var(--muted)"'}>
-      <span>${(NP_LEAD.revenuePct * 100).toFixed(2)}% of ${money(t.revenue)} above ${money(p.threshold)} ($40k × ${t.sdrCount} active Coordinator${t.sdrCount === 1 ? '' : 's'})</span>
-      <span>${money(p.override)}</span>
-    </div>
-    <div class="np-sub">The threshold scales with headcount on purpose: this pays for revenue <strong>per head</strong>, never for hiring. $40k sits just above June's actual $39,299 per SDR.</div>
-
-    <div class="np-line"><span>Base</span><strong>${money(base)}</strong></div>
-    <div class="np-line"><span>Lead → deal tier (${pct(t.leadToDealRate)})</span><strong>${money(p.l2d)}</strong></div>
-    <div class="np-line"><span>Non-response tier (${t.nonResponsiveMeasurable ? pct(t.nonResponsiveRate) : '—'}, matured terminal)${nrMaturityFlag(t)}</span><strong>${money(p.nr)}</strong></div>
-    <div class="np-line"><span>Revenue override</span><strong>${money(p.override)}</strong></div>
-    <div class="np-line np-sum"><span>Total Compensation</span><strong>${money(total)}</strong></div>
-    <div class="np-sub">Variable is ${pct(base ? p.variable / base * 100 : 0, 0)} of base.</div>
-
-    <div class="commission-override-row" style="margin-top:12px">
-      <label class="commission-override-label">
-        <input type="checkbox" id="npLeadInCost" ${npIncludeLeadInCost ? 'checked' : ''} onchange="toggleNpLeadInCost()">
-        Include Team Lead pay in the founder cost figures below (off by default — the 7% ceiling covers Coordinators only; always resets when this section is collapsed)
-      </label>
-    </div>
-  `;
+  el.innerHTML = `<p class="np-sub">Under construction.</p>`;
 }
 
 // ─── TOP SUMMARY (the one-line case) ───────────────────────────────────────────
-// Always visible, nothing to expand — the whole pitch in about 15 seconds.
+// Always visible, nothing to expand — the whole pitch in about 5 seconds.
 // Full derivations (why 7%, why $547, why the plan gets cheaper as it works)
 // live in docs/sdr-compensation-plan-v3.md, not here.
 function renderNpHero(t, totalComp, ml) {
@@ -10745,7 +10664,7 @@ function renderNpHero(t, totalComp, ml) {
   const ratio = t.revenue ? totalComp / t.revenue * 100 : null;
   const costPerMeeting = t.heldB2B ? totalComp / t.heldB2B : null;
   el.innerHTML = `
-    <div class="np-hero-line">A held B2B meeting is worth <strong>$547</strong> — 42.5% of them close, at a <strong>$1,287</strong> average deal.</div>
+    <div class="np-hero-line">A held B2B meeting is worth <strong>$547</strong>.</div>
     <div class="np-hero-grid">
       <div class="np-hero-stat">
         <div class="np-hero-stat-label">Meetings held</div>
@@ -10772,67 +10691,71 @@ function renderNpHero(t, totalComp, ml) {
 }
 
 // ─── FOUNDER VIEW ─────────────────────────────────────────────────────────────
-// Kept to two small value grids on purpose — the numbers, not the reasoning.
-// The per-SDR comparison against the old plan and the derivation of every
-// constant (why 18%, why $12, why 0.5%...) live in the plan doc instead.
+// This body is a static, illustrative example on purpose — not live data. The
+// live team totals are already in the always-visible banner above; this
+// section exists purely to teach the unit economics with one clean, worked
+// example instead of a wall of team-rollup tables.
 function renderNpFounder() {
-  const el = document.getElementById('npFounderBody');
-  if (!el || !rawByDay) return;
+  const founderEl = document.getElementById('npFounderBody');
+  if (!rawByDay) return;
   const monthKey = npMonth();
   const days = monthDayKeys(monthKey);
   const selected = npSelectedSDRs();
-  if (!selected.length) { el.innerHTML = `<p>No SDR selected.</p>`; return; }
-  const t = newPlanTeamMetrics(days, selected.map(s => s.key));
-  const npIn = loadNpInputs();
-  let baseSum = 0, varSum = 0;
-  // Cost is rolled up over the SDRs who actually worked the month, not whoever
-  // happens to be selected — see newPlanTeamMetrics().
-  const active = selected.filter(s => t.activeKeys.includes(s.key));
-  let missingBase = false;
-  active.forEach(s => {
-    const p = newPlanPayout(newPlanMetricsForSDR(days, s.key));
-    const saved = npIn[s.key] || {};
-    const base = parseFloat(saved.base) || 0;
-    const bonus = parseFloat(saved.bonus) || 0;
-    if (!base) missingBase = true;
-    baseSum += base + bonus;
-    varSum += saved.override ? 0 : p.variable;
-  });
-  const leadPay = npIncludeLeadInCost
-    ? (() => { const sv = loadNpLeadInputs();
-        const b = sv.base != null && sv.base !== '' ? parseFloat(sv.base) : NP_LEAD.base;
-        return b + newPlanLeadPayout(t).variable; })() : 0;
-  const totalComp = baseSum + varSum + leadPay;
-  const ratio = t.revenue ? totalComp / t.revenue * 100 : 0;
   const ml = monthLabelFromKey(monthKey);
+  if (selected.length) {
+    // Hero stays live — real team totals for whatever month is picked.
+    const t = newPlanTeamMetrics(days, selected.map(s => s.key));
+    const npIn = loadNpInputs();
+    let baseSum = 0, varSum = 0;
+    const active = selected.filter(s => t.activeKeys.includes(s.key));
+    active.forEach(s => {
+      const p = newPlanPayout(newPlanMetricsForSDR(days, s.key));
+      const saved = npIn[s.key] || {};
+      const base = parseFloat(saved.base) || 0;
+      const bonus = parseFloat(saved.bonus) || 0;
+      baseSum += base + bonus;
+      varSum += saved.override ? 0 : p.variable;
+    });
+    renderNpHero(t, baseSum + varSum, ml);
+  }
+  if (!founderEl) return;
 
-  renderNpHero(t, totalComp, ml);
+  // Illustrative inputs only — rounded to the nearest 5/10, not read from
+  // loaded data. Shaped like a real June month (the team's strongest) so the
+  // math lands somewhere real without exposing anyone's actual numbers.
+  const ex = { b2bLeads: 225, heldB2B: 60, noMeetingB2B: 10, heldB2C: 10, noMeetingB2C: 5, revenue: 8000, base: 1200 };
+  const credits = ex.heldB2B + NP.noMeetingWeight * ex.noMeetingB2B;
+  const creditRate = credits / ex.b2bLeads * 100;
+  const creditsB2C = ex.heldB2C + NP.noMeetingWeight * ex.noMeetingB2C;
+  const p = newPlanPayout({
+    creditRate, credits, b2bLeads: ex.b2bLeads, creditsB2C,
+    closedRevenueUSD: ex.revenue, volumeFactor: Math.min(1, ex.b2bLeads / NP.volumeRef)
+  });
+  const total = ex.base + p.variable;
 
-  el.innerHTML = `
-    ${missingBase ? `<p class="np-sub">Enter each Coordinator's Base on their card above for these figures to be complete.</p>` : ''}
+  founderEl.innerHTML = `
+    <p class="np-sub">Illustrative example below — rounded numbers shaped like a real June month, not live data.</p>
 
-    <div class="commission-bracket-label">What each thing is worth &mdash; ${escapeHtml(ml)}</div>
+    <div class="commission-bracket-label">What each thing is worth</div>
     <div class="np-hero-grid">
-      <div class="np-hero-stat"><div class="np-hero-stat-label">B2B leads worked</div><div class="np-hero-stat-value">${t.b2bLeads.toLocaleString()}</div></div>
-      <div class="np-hero-stat"><div class="np-hero-stat-label">Meetings held</div><div class="np-hero-stat-value">${t.heldB2B}</div><div class="np-hero-stat-sub">$547 each, when it closes</div></div>
-      <div class="np-hero-stat"><div class="np-hero-stat-label">Closed deals</div><div class="np-hero-stat-value">${t.closedB2B}</div></div>
-      <div class="np-hero-stat"><div class="np-hero-stat-label">Revenue sourced</div><div class="np-hero-stat-value">${money(t.revenue)}</div></div>
+      <div class="np-hero-stat"><div class="np-hero-stat-label">B2B meeting held</div><div class="np-hero-stat-value">$547</div><div class="np-hero-stat-sub">revenue · 1 credit</div></div>
+      <div class="np-hero-stat"><div class="np-hero-stat-label">B2B qualified, no meeting</div><div class="np-hero-stat-value">$278</div><div class="np-hero-stat-sub">revenue · 0.5 credit</div></div>
+      <div class="np-hero-stat"><div class="np-hero-stat-label">B2C meeting held</div><div class="np-hero-stat-value">$${NP.b2cHeldRate}</div><div class="np-hero-stat-sub">paid · 1 credit</div></div>
+      <div class="np-hero-stat"><div class="np-hero-stat-label">B2C qualified, no meeting</div><div class="np-hero-stat-value">$${(NP.b2cHeldRate * NP.noMeetingWeight).toFixed(0)}</div><div class="np-hero-stat-sub">paid · 0.5 credit</div></div>
     </div>
 
-    <div class="commission-bracket-label">What it costs</div>
+    <div class="commission-bracket-label">One Coordinator, June-shaped month</div>
     <div class="np-hero-grid">
-      <div class="np-hero-stat"><div class="np-hero-stat-label">Base + bonus</div><div class="np-hero-stat-value">${money(baseSum)}</div></div>
-      <div class="np-hero-stat"><div class="np-hero-stat-label">Variable</div><div class="np-hero-stat-value">${money(varSum)}</div></div>
-      ${leadPay ? `<div class="np-hero-stat"><div class="np-hero-stat-label">Team Lead</div><div class="np-hero-stat-value">${money(leadPay)}</div></div>` : ''}
-      <div class="np-hero-stat"><div class="np-hero-stat-label">Total pay</div><div class="np-hero-stat-value">${money(totalComp)}</div><div class="np-hero-stat-sub">${t.revenue ? pct(ratio) + ' of revenue' : '—'}</div></div>
+      <div class="np-hero-stat"><div class="np-hero-stat-label">B2B leads</div><div class="np-hero-stat-value">${ex.b2bLeads}</div></div>
+      <div class="np-hero-stat"><div class="np-hero-stat-label">B2B held</div><div class="np-hero-stat-value">${ex.heldB2B}</div></div>
+      <div class="np-hero-stat"><div class="np-hero-stat-label">B2B qual., no meeting</div><div class="np-hero-stat-value">${ex.noMeetingB2B}</div></div>
+      <div class="np-hero-stat"><div class="np-hero-stat-label">Credit rate</div><div class="np-hero-stat-value">${pct(creditRate)}</div></div>
     </div>
-
-    <div class="commission-override-row" style="margin-top:12px">
-      <label class="commission-override-label">
-        <input type="checkbox" id="npLeadInCost" ${npIncludeLeadInCost ? 'checked' : ''} onchange="toggleNpLeadInCost()">
-        Include Team Lead pay above (the 7% ceiling covers Coordinators only)
-      </label>
-    </div>
+    <div class="np-line"><span>Tier (${pct(creditRate)} credit rate)</span><strong>${money(p.tierPaid)}</strong></div>
+    <div class="np-line"><span>B2C kicker (${ex.heldB2C} held + ${NP.noMeetingWeight} × ${ex.noMeetingB2C})</span><strong>${money(p.b2cPaid)}</strong></div>
+    <div class="np-line"><span>Revenue share (${money(ex.revenue)} × ${(NP.revenuePct * 100).toFixed(2)}%)</span><strong>${money(p.revPaid)}</strong></div>
+    <div class="np-line"><span>Base</span><strong>${money(ex.base)}</strong></div>
+    <div class="np-line np-sum"><span>Total pay</span><strong>${money(total)}</strong></div>
   `;
 }
 
@@ -11192,6 +11115,7 @@ function npReportSummaryHtml(sdr, monthKey, days) {
       <div class="report-summary-sub">
         B2B leads: ${m.b2bLeads} &middot; Meetings held: ${m.heldB2B} &middot; Qualified with no meeting: ${m.noMeeting} (&times;${NP.noMeetingWeight}) &middot;
         <strong>Credits: ${m.credits.toFixed(1)} = ${pct(m.creditRate)} of B2B leads</strong> &middot;
+        Volume factor: &times;${m.volumeFactor.toFixed(2)} (${m.b2bLeads} of ${NP.volumeRef}) &middot;
         B2C credits: ${m.creditsB2C.toFixed(1)} (${m.heldB2C} held + ${NP.noMeetingWeight} &times; ${m.noMeetingB2C} qualified/no meeting) &middot;
         Closed revenue: ${money(m.closedRevenueUSD)} from ${m.closedDeals} deals
         ${base ? ` &middot; Variable is ${pct(p.variable / base * 100, 0)} of base` : ''}
@@ -11231,7 +11155,7 @@ function buildNewPlanReportHtml(selected) {
       ${reportTable(noMeetingB2C)}
     `;
   }).join('');
-  renderNpExplainer(days, monthKey);
+  renderNpExplainer();
   const body = document.querySelector('#npExplainerBody');
   return `
     <div class="report-title">New Plan — Compensation Review</div>
