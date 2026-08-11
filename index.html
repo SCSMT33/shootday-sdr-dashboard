@@ -2165,7 +2165,7 @@
     <div class="commission-section" id="newCommissionSection">
       <div class="commission-title-row" onclick="toggleNewCommissionSection()">
         <div>
-          <div class="commission-title">New Commission Calculator <span class="goal-info" title="The v3 plan: credits (held meetings + half-credit qualified handoffs) as a % of B2B leads, times a volume factor, plus a B2C kicker and 0.25% of closed revenue. Replaces the old Qualified/Meeting brackets and the no-show multiplier. Effective for August performance, paid in September.">ⓘ</span></div>
+          <div class="commission-title">New Commission Calculator <span class="goal-info" title="The v3 plan: credits (held meetings + half-credit qualified handoffs) as a % of B2B leads, plus a B2C kicker and 0.25% of closed revenue. Replaces the old Qualified/Meeting brackets, the no-show multiplier, the lead-volume factor and the AE-disqualified gate. Effective for August performance, paid in September.">ⓘ</span></div>
           <div class="commission-sub">Effective <strong>August performance, paid September</strong>. July is still paid on the calculator above. Pick any month below to model what someone would have earned under the new plan.</div>
         </div>
         <div class="commission-report-btn-group">
@@ -8160,8 +8160,8 @@ function commissionPayout(key, qGross, mGross, nsGross) {
 // Capacity & Cost's SDR Cost Efficiency table, which needs the number
 // without depending on the Commission section being open. Reads the exact
 // ─── NEW PLAN (v3) ─────────────────────────────────────────────────────────────
-// Replaces the old Qualified/Meeting brackets entirely. Four differences that
-// drive everything else:
+// Replaces the old Qualified/Meeting brackets entirely. Differences that drive
+// everything else:
 //   1. HELD meetings, not booked. Leads first touched >4h late still get booked
 //      into meetings at 23.3% but close at 5.8% vs 13.1% — booking is nearly
 //      speed-independent, value isn't, so the old basis couldn't tell good work
@@ -8175,21 +8175,31 @@ function commissionPayout(key, qGross, mGross, nsGross) {
 //      51%, so the data set the weight. Uses the existing qualified definition;
 //      no new Airtable state to maintain.
 //   4. No no-show multiplier. Paying on held already prices a no-show at the
-//      full meeting; a second penalty double-counts the same event. The AE-DQ
-//      gate below replaces it as the quality guard.
+//      full meeting; a second penalty double-counts the same event.
+//   5. No lead-volume factor (removed 2026-08-11). Used to scale the tier down
+//      for a short book (min(1.00, B2B leads ÷ 160)) — removed because SDRs
+//      don't control how many leads routing sends them, so a below-reference
+//      month shouldn't shrink their tier for a volume decision that isn't
+//      theirs. The credit RATE is already leads-normalized (credits ÷ leads),
+//      so pay still tracks quality regardless of book size.
+//   6. No AE-disqualified gate (removed 2026-08-11). Used to multiply the tier
+//      down (×0.90 at 10-15% bounced, ×0.75 at 15%+) when an AE bounced a lead
+//      back as wrongly qualified. Removed because policy changed: a bounced
+//      lead is now reassigned back to the SDR instead of being a dead end, so
+//      it no longer makes sense to also penalize the SDR's pay for it. The
+//      lead already loses its credit outright when it happens (a bounced lead
+//      isn't in the qualified set), so nothing else needs to reduce for it.
 const NP = {
   noMeetingWeight: 0.5,
-  // Just below the delivered lead range (June 224-225, July 166-178) so a
-  // normally-loaded SDR is untouched at 1.00 and only a materially short book
-  // pro-rates. The onboarding doc's 275/Coordinator would zero out everyone's
-  // tier for a routing decision they don't control.
-  volumeRef: 160,
   b2cHeldRate: 12,
   // 0.25%, matching the old New Sales Incentive. Deliberately small: at 1% it
   // would be ~40% of variable, arriving weeks late from a deal an AE closed —
   // money you can coast on. The tier motivates; this steers toward bigger deals.
   revenuePct: 0.0025,
-  overageFromPct: 39,
+  // Raised from 39% to 60% on 2026-08-11 so the explicit tier ladder keeps
+  // paying out further before falling back to the flat per-credit rate —
+  // same $45-per-1.5-point step the bands below it already use.
+  overageFromPct: 60,
   overageRate: 55,
   // Floor derived, not picked: at $547 revenue per held meeting and a 7% cost
   // target, a $1,200-base SDR needs ~31 held meetings to cover their own base,
@@ -8212,30 +8222,28 @@ const NP = {
     { min: 34.5, max: 36,       amount: 890 },
     { min: 36,   max: 37.5,     amount: 935 },
     { min: 37.5, max: 39,       amount: 980 },
-    { min: 39,   max: Infinity, amount: 1025 }
-  ],
-  // Replaces the no-show multiplier. Lighter on purpose — a bounced lead
-  // already loses its credit outright, because "Disqualified AE" isn't in the
-  // qualified status set, so this is a second thinner layer on the same
-  // behaviour rather than a new penalty.
-  dqGates: [
-    { min: 0,  max: 10,       mult: 1.00, label: 'Full payout' },
-    { min: 10, max: 15,       mult: 0.90, label: 'Reduced' },
-    { min: 15, max: Infinity, mult: 0.75, label: 'Significantly reduced' }
+    { min: 39,   max: 40.5,     amount: 1025 },
+    { min: 40.5, max: 42,       amount: 1070 },
+    { min: 42,   max: 43.5,     amount: 1115 },
+    { min: 43.5, max: 45,       amount: 1160 },
+    { min: 45,   max: 46.5,     amount: 1205 },
+    { min: 46.5, max: 48,       amount: 1250 },
+    { min: 48,   max: 49.5,     amount: 1295 },
+    { min: 49.5, max: 51,       amount: 1340 },
+    { min: 51,   max: 52.5,     amount: 1385 },
+    { min: 52.5, max: 54,       amount: 1430 },
+    { min: 54,   max: 55.5,     amount: 1475 },
+    { min: 55.5, max: 57,       amount: 1520 },
+    { min: 57,   max: 58.5,     amount: 1565 },
+    { min: 58.5, max: 60,       amount: 1610 },
+    { min: 60,   max: Infinity, amount: 1655 }
   ]
 };
 function npTierIndex(rate) {
   const i = NP.tiers.findIndex(t => rate >= t.min && rate < t.max);
   return i === -1 ? 0 : i;
 }
-function npGateIndex(rate) {
-  const i = NP.dqGates.findIndex(t => rate >= t.min && rate < t.max);
-  return i === -1 ? 0 : i;
-}
 function isMeetingHeld(r) { return r['Meeting Status'] === 'Meeting Done'; }
-function isAEDisqualified(r) {
-  return normalizeSalesStatus(r['Sales status']).startsWith('disqualified ae');
-}
 // Every Closed deal in the cohort, no exceptions — the same rule the old
 // plan's New Sales Incentive now uses too, since the Instant Close carve-out
 // was removed dashboard-wide on 2026-07-31.
@@ -8264,8 +8272,6 @@ function newPlanMetricsForSDR(days, sdrKey) {
   const creditsB2C = heldB2C + NP.noMeetingWeight * noMeetingB2C;
   const credits = heldB2B + NP.noMeetingWeight * noMeeting;
   const creditRate = b2b.length ? (credits / b2b.length * 100) : 0;
-  const qualified = b2b.filter(isQualifiedLead).length;
-  const aeDq = b2b.filter(isAEDisqualified).length;
   const closedRows = npClosedRows(rows);
   const revenue = closedRows.reduce((s, r) => s + dealValueUSD(r), 0);
   const noShow = b2b.filter(isMeetingNotAttended).length;
@@ -8274,32 +8280,25 @@ function newPlanMetricsForSDR(days, sdrKey) {
     b2bLeads: b2b.length,
     b2cLeads: b2c.length,
     heldB2B, heldB2C, noMeeting, noMeetingB2C, creditsB2C, credits, creditRate,
-    qualified, aeDq,
-    // Denominator is everything handed over — qualified plus the ones the AE
-    // pushed back — so the rate reads as "share of my handoffs that bounced."
-    aeDqRate: (qualified + aeDq) ? (aeDq / (qualified + aeDq) * 100) : 0,
     noShow,
-    volumeFactor: Math.min(1, b2b.length / NP.volumeRef),
     closedDeals: closedRows.length,
     closedRevenueUSD: revenue
   };
 }
 function newPlanPayout(m) {
   const tIdx = npTierIndex(m.creditRate);
-  const gIdx = npGateIndex(m.aeDqRate);
-  const gate = NP.dqGates[gIdx];
   const tierBase = NP.tiers[tIdx].amount;
   // Above the top band the tier converts to a per-credit rate so there is
   // always a reason to book one more.
   const overageCredits = m.creditRate >= NP.overageFromPct
     ? Math.max(0, m.credits - (NP.overageFromPct / 100) * m.b2bLeads) : 0;
   const overage = overageCredits * NP.overageRate;
-  const tierGross = tierBase * m.volumeFactor + overage;
-  const tierPaid = Math.round(tierGross * gate.mult);
+  const tierGross = tierBase + overage;
+  const tierPaid = Math.round(tierGross);
   const b2cPaid = Math.round(m.creditsB2C * NP.b2cHeldRate);
   const revPaid = Math.round(m.closedRevenueUSD * NP.revenuePct);
   return {
-    tIdx, gIdx, gate, tierBase, overageCredits, overage,
+    tIdx, tierBase, overageCredits, overage,
     tierGross: Math.round(tierGross), tierPaid, b2cPaid, revPaid,
     variable: tierPaid + b2cPaid + revPaid
   };
@@ -10393,7 +10392,7 @@ function npStat(label, value, sub, tip) {
 }
 // Green marks the band actually earned; the band above it is tinted blue and
 // annotated with what reaching it is worth, so the next step is always visible.
-function npTierTable(activeIdx, volumeFactor) {
+function npTierTable(activeIdx) {
   const rows = NP.tiers.map((t, i) => {
     const cls = i === activeIdx ? (t.amount === 0 ? 'np-active-zero' : 'np-active')
       : (i === activeIdx + 1 ? 'np-next' : (t.amount === 0 ? 'np-zero' : ''));
@@ -10401,12 +10400,11 @@ function npTierTable(activeIdx, volumeFactor) {
     const amt = t.max === Infinity
       ? `${money(t.amount)} + $${NP.overageRate}/credit`
       : money(t.amount);
-    const net = volumeFactor < 1 ? `<td class="num">${money(t.amount * volumeFactor)}</td>` : '';
     const gap = i === activeIdx + 1 ? `+${money(t.amount - NP.tiers[activeIdx].amount)}` : '';
-    return `<tr class="${cls}"><td>${range}</td><td>${amt}</td>${net}<td>${gap}</td></tr>`;
+    return `<tr class="${cls}"><td>${range}</td><td>${amt}</td><td>${gap}</td></tr>`;
   }).join('');
   return `<div class="np-tier-scroll"><table class="commission-bracket-table np-tier-table">
-    <thead><tr><th>Credit rate</th><th>Tier</th>${volumeFactor < 1 ? '<th>After volume factor</th>' : ''}<th>Next step</th></tr></thead>
+    <thead><tr><th>Credit rate</th><th>Tier</th><th>Next step</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
 }
@@ -10442,12 +10440,7 @@ function newCommissionCard(sdr, days, monthKey) {
         `Held B2B meetings plus half a credit per qualified no-meeting handoff. This is the numerator.`)}
       ${npStat('Credit Rate', `<span style="color:#1a9e6a">${pct(m.creditRate)}</span>`,
         creditsToNext != null && nextTier ? `${creditsToNext} more credits → ${money(nextTier.amount)} band` : 'top band — every credit pays',
-        `Credits ÷ B2B leads. This sets your tier. ${creditsToNext != null && nextTier ? `At ${m.b2bLeads} leads you need ${creditsToNext} more credits to reach ${nextTier.min}%.` : 'Above 39% every extra credit pays $' + NP.overageRate + ' — there is no cap.'}`)}
-      ${npStat('Volume Factor', `×${m.volumeFactor.toFixed(2)}`,
-        m.volumeFactor < 1 ? `${m.b2bLeads} of ${NP.volumeRef} reference leads` : `at or above ${NP.volumeRef} leads — no reduction`,
-        `min(1.00, B2B leads ÷ ${NP.volumeRef}). Applies to the tier only. A high rate on a small book is not the same achievement as a high rate on a full one; above ${NP.volumeRef} leads it never reduces pay.`)}
-      ${npStat('AE-Disqualified', pct(m.aeDqRate), `${m.aeDq} of ${m.qualified + m.aeDq} handoffs → ×${p.gate.mult.toFixed(2)}`,
-        `Leads an AE pushed back as wrongly qualified, as a share of everything handed over. Under 10% is full payout, 10-15% ×0.90, over 15% ×0.75. Note a bounced lead already loses its credit outright, since "Disqualified AE" isn't a qualified status — this gate is a second, lighter layer.`)}
+        `Credits ÷ B2B leads. This sets your tier. ${creditsToNext != null && nextTier ? `At ${m.b2bLeads} leads you need ${creditsToNext} more credits to reach ${nextTier.min}%.` : 'Above ' + NP.overageFromPct + '% every extra credit pays $' + NP.overageRate + ' — there is no cap.'}`)}
       <div class="commission-stat" style="grid-column: 1 / -1;">
         <div class="commission-stat-label">Closed Revenue (${ml}) <span class="goal-info" title="Deals from leads created in ${ml} that are Closed as of now, B2B and B2C, USD-equivalent. Paid at ${(NP.revenuePct * 100).toFixed(2)}%.">ⓘ</span></div>
         <div class="commission-stat-value">${money(m.closedRevenueUSD)}</div>
@@ -10455,12 +10448,12 @@ function newCommissionCard(sdr, days, monthKey) {
       </div>
     </div>
 
-    <div class="commission-bracket-label">Tier — credit rate ${pct(m.creditRate)}${m.volumeFactor < 1 ? `, then × ${m.volumeFactor.toFixed(2)} volume factor` : ''}</div>
-    ${npTierTable(p.tIdx, m.volumeFactor)}
+    <div class="commission-bracket-label">Tier — credit rate ${pct(m.creditRate)}</div>
+    ${npTierTable(p.tIdx)}
     ${p.overageCredits > 0 ? `<div class="commission-flat-calc"><span>${p.overageCredits.toFixed(1)} credits above ${NP.overageFromPct}% × $${NP.overageRate}</span><span>${money(p.overage)}</span></div>` : ''}
 
     <div class="commission-bracket-label">Your variable, component by component</div>
-    <div class="np-line"><span>Tier ${money(p.tierBase)}${m.volumeFactor < 1 ? ` × ${m.volumeFactor.toFixed(2)}` : ''}${p.overage ? ` + ${money(p.overage)} overage` : ''}${p.gate.mult < 1 ? ` × ${p.gate.mult.toFixed(2)} AE-DQ gate` : ''}</span><strong id="npTier-${sdr.key}" data-amount="${p.tierPaid}">${money(p.tierPaid)}</strong></div>
+    <div class="np-line"><span>Tier ${money(p.tierBase)}${p.overage ? ` + ${money(p.overage)} overage` : ''}</span><strong id="npTier-${sdr.key}" data-amount="${p.tierPaid}">${money(p.tierPaid)}</strong></div>
     <div class="np-line"><span>B2C kicker — ${m.creditsB2C.toFixed(1)} credits (${m.heldB2C} held + ${NP.noMeetingWeight} × ${m.noMeetingB2C}) × $${NP.b2cHeldRate}</span><strong id="npB2C-${sdr.key}" data-amount="${p.b2cPaid}">${money(p.b2cPaid)}</strong></div>
     <div class="np-line"><span>Revenue share — ${money(m.closedRevenueUSD)} × ${(NP.revenuePct * 100).toFixed(2)}%</span><strong id="npRev-${sdr.key}" data-amount="${p.revPaid}">${money(p.revPaid)}</strong></div>
     <div class="np-line np-sum"><span>Variable</span><strong>${money(p.variable)}</strong></div>
@@ -10623,8 +10616,7 @@ ${m.noMeeting} qualified, no meeting   → ${(m.noMeeting * NP.noMeetingWeight).
                           <em>${m.credits.toFixed(1)} credits total</em>
 
 ${m.credits.toFixed(1)} ÷ ${m.b2bLeads} leads         = <em>${pct(m.creditRate)}</em> credit rate  → tier ${money(p.tierBase)}
-${m.volumeFactor < 1 ? `× ${m.volumeFactor.toFixed(2)} volume factor (${m.b2bLeads}÷${NP.volumeRef}) = ${money(p.tierBase * m.volumeFactor)}\n` : ''}${p.overage ? `+ ${p.overageCredits.toFixed(1)} credits over ${NP.overageFromPct}% × $${NP.overageRate} = ${money(p.overage)}\n` : ''}${p.gate.mult < 1 ? `× ${p.gate.mult.toFixed(2)} AE-DQ gate (${pct(m.aeDqRate)}) = ${money(p.tierPaid)}\n` : ''}
-${m.creditsB2C.toFixed(1)} B2C credits (${m.heldB2C} held + ${NP.noMeetingWeight} × ${m.noMeetingB2C} qualified/no meeting) × $${NP.b2cHeldRate}   = ${money(p.b2cPaid)}
+${p.overage ? `+ ${p.overageCredits.toFixed(1)} credits over ${NP.overageFromPct}% × $${NP.overageRate} = ${money(p.tierPaid)}\n` : ''}${m.creditsB2C.toFixed(1)} B2C credits (${m.heldB2C} held + ${NP.noMeetingWeight} × ${m.noMeetingB2C} qualified/no meeting) × $${NP.b2cHeldRate}   = ${money(p.b2cPaid)}
 ${money(m.closedRevenueUSD)} revenue × ${(NP.revenuePct * 100).toFixed(2)}% = ${money(p.revPaid)}
 
                    VARIABLE = <em>${money(p.variable)}</em></div>
@@ -11200,8 +11192,6 @@ function npReportSummaryHtml(sdr, monthKey, days) {
       <div class="report-summary-sub">
         B2B leads: ${m.b2bLeads} &middot; Meetings held: ${m.heldB2B} &middot; Qualified with no meeting: ${m.noMeeting} (&times;${NP.noMeetingWeight}) &middot;
         <strong>Credits: ${m.credits.toFixed(1)} = ${pct(m.creditRate)} of B2B leads</strong> &middot;
-        Volume factor: &times;${m.volumeFactor.toFixed(2)} (${m.b2bLeads} of ${NP.volumeRef}) &middot;
-        AE-disqualified: ${pct(m.aeDqRate)} (&times;${p.gate.mult.toFixed(2)}) &middot;
         B2C credits: ${m.creditsB2C.toFixed(1)} (${m.heldB2C} held + ${NP.noMeetingWeight} &times; ${m.noMeetingB2C} qualified/no meeting) &middot;
         Closed revenue: ${money(m.closedRevenueUSD)} from ${m.closedDeals} deals
         ${base ? ` &middot; Variable is ${pct(p.variable / base * 100, 0)} of base` : ''}

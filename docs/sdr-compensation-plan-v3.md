@@ -12,6 +12,34 @@ B (SDR plan, team-facing, ready to send), C (your plan, ready to take to Serge).
 
 ---
 
+## Addendum — 11 August 2026: AE-DQ gate and Volume Factor removed from the live plan
+
+Two policy changes to the SDR credit/tier math described in Part 3 below. The dashboard's
+live commission code is the source of truth; this note keeps the doc in sync with it.
+
+**AE-Disqualified gate — removed.** Policy changed: a lead an AE bounces back as wrongly
+qualified is now reassigned to the SDR instead of being a dead end, so it no longer makes
+sense to also dock the SDR's pay for it. (The lead already lost its credit outright when it
+was bounced — "Disqualified AE" was never in the qualified status set — so nothing else needs
+to reduce for it.) The ×0.90 / ×0.75 tier multiplier at 10–15% / 15%+ AE-DQ rate is gone.
+
+**Volume Factor — removed.** `min(1.00, B2B leads ÷ 160)`, which used to scale the tier down
+for a below-reference book, is gone. Reasoning: SDRs don't control how many leads routing
+sends them, so a slow-routing month shouldn't shrink their tier for a volume decision that
+isn't theirs. The credit *rate* (credits ÷ leads) is already leads-normalized, so pay still
+tracks quality regardless of book size — there's no longer a second, separate volume penalty
+on top of that. If lead volume ever drops far enough to threaten the unit economics in Part 0
+(the $547-per-held-meeting / $30-per-meeting-cost relationship), that's a routing and revenue
+problem to solve directly, not something to patch by quietly reducing SDR pay.
+
+**Tier ladder extended, top raised from 39% to 60%.** The explicit tier table used to top out
+at "39%+ → $1,025," beyond which every additional credit paid a flat, uncapped $55. The ladder
+now continues in the same $45-per-1.5-point steps through "60%+ → $1,655," and only past 60%
+does it fall back to the flat $55/credit rate. Same math, just a longer explicit ladder before
+the uncapped tail kicks in.
+
+---
+
 ## Part 0 — The numbers everything rests on
 
 | | Value | Basis |
