@@ -2128,7 +2128,7 @@
             <p><strong>2. The one-month lag.</strong> Your base salary is paid on the normal schedule for the current month. The three incentives above, however, are always calculated from <strong>last calendar month's</strong> performance — so July's paycheck reflects June's numbers. Why: a deal booked late in a month often hasn't had time to close yet, so judging that same month's payout on its own numbers would unfairly penalize deals that just needed a few more days to land. The one-month lag gives every deal a full month (or more) to actually close before it counts.</p>
             <p><strong>3. How the Qualified Leads and Meeting incentives are earned.</strong> Qualified Leads and Meetings are counted from all your leads (B2B + B2C), but both are judged as a percentage of your B2B leads only. A lead counts as Qualified if its Sales status is Hot, Warm, Closed, Lost, Qualified SDR, or any refund status — a Duplicate record or Wrong info lead never counts, regardless of status. Your percentage falls into a bracket; each bracket has a fixed dollar amount — the tables are shown on your card.</p>
             <p><strong>4. How the New Sales Incentive is earned.</strong> This one is a flat rate, not a bracket: every deal that closed (Sales status = Closed) among the leads <strong>created</strong> last calendar month, converted to a common currency and summed up, &times; 0.25%. No minimum, no cap. A deal counts toward the month its lead was <strong>created</strong> in — if it hasn't closed by the time that month's commission is calculated, it doesn't count, even if it closes later. Every closed deal in the cohort counts, however fast it closed. This one is NOT affected by the Meeting Quality Multiplier below.</p>
-            <p><strong>5. The Meeting Quality Multiplier.</strong> Booked meetings only create business value if they happen. Individual no-shows are not your fault and one bad week will not hurt you — the multiplier is based on a rolling 30-day window of your B2B rejection/no-show rate, so it only reacts to a sustained pattern, not a single rough patch. That window ends 1 week ago rather than today: meetings usually aren't scheduled more than a week out, so ending the window a week back means every lead counted has had a real chance to resolve (Done, Not Attended, or Rejected) instead of still sitting at "Scheduled." The rate = meetings rejected or not attended &divide; all B2B meetings you booked, in that window. The multiplier scales the Qualified Leads and Meeting incentives only (not New Sales):</p>
+            <p><strong>5. The Meeting Quality Multiplier.</strong> Booked meetings only create business value if they happen. The multiplier is based on your B2B rejection/no-show rate for the same calendar month the rest of your commission is calculated from — so a bad stretch is judged against everything you booked that month, not just a rough week. The rate = meetings rejected or not attended &divide; all B2B meetings you booked, that month. The multiplier scales the Qualified Leads and Meeting incentives only (not New Sales):</p>
             <ul>
               <li>0&ndash;10%: 100% payout (the normal range &mdash; clients sometimes ghost)</li>
               <li>10&ndash;20%: 85%</li>
@@ -2233,7 +2233,7 @@
           <div class="definition-item"><dt>B2C Lead (Consumer Lead)</dt><dd>Any lead that isn't B2B. There's no third category.</dd></div>
           <div class="definition-item"><dt>Cadence Adherence</dt><dd>Not yet computed by the dashboard — reserved as a manually-entered score.</dd></div>
           <div class="definition-item"><dt>Closed Deal</dt><dd>A lead whose Sales status is Closed. Counted the same way everywhere on this dashboard: by the lead's creation-date cohort — of the leads that arrived in a given period, how many are closed as of right now, regardless of when they actually closed. Recent periods always read low until those leads have had time to close. Commission uses this same cohort logic for revenue; in practice it's run once, roughly 3–4 weeks into the following month, and whatever hasn't closed by then just doesn't get counted — the dashboard itself doesn't lock the number, so re-checking a past month later would show more revenue if more of that cohort has since closed.</dd></div>
-          <div class="definition-item"><dt>Commission — Meeting Quality Multiplier</dt><dd>Scales the Qualified Leads and Meeting incentives (never New Sales) by an SDR's rejection/no-show rate over a trailing 30-day window ending one week ago, B2B booked meetings only: 0–10% → ×1.00, 10–20% → ×0.85, 20–30% → ×0.60, 30–40% → ×0.30, 40%+ → ×0.</dd></div>
+          <div class="definition-item"><dt>Commission — Meeting Quality Multiplier</dt><dd>Scales the Qualified Leads and Meeting incentives (never New Sales) by an SDR's rejection/no-show rate for that same commission month, B2B booked meetings only: 0–10% → ×1.00, 10–20% → ×0.85, 20–30% → ×0.60, 30–40% → ×0.30, 40%+ → ×0.</dd></div>
           <div class="definition-item"><dt>Commission — Meetings Incentive</dt><dd>Meetings booked (the same single dashboard-wide definition — a genuine Meeting Status) as a % of that SDR's B2B leads, from last calendar month's leads by creation date: &lt;20% → $0, 20–25% → $300, 25–30% → $400, 30–35% → $600, 35–40% → $800, 40%+ → $1,000.</dd></div>
           <div class="definition-item"><dt>Commission — New Sales Incentive</dt><dd>A flat 0.25% of closed-deal revenue (USD-equivalent — AED is treated at 1:1 parity with USD by policy, not real exchange rate), no minimum, no cap, and not scaled by the Meeting Quality Multiplier. Counted from leads created last calendar month that are Closed as of now — same cohort as Qualified Leads/Meetings, not by when the deal actually closed. Every Closed deal in the cohort counts; the Instant Close carve-out was removed on 2026-07-31.</dd></div>
           <div class="definition-item"><dt>Commission — Payout Timing</dt><dd>Commission always looks at last calendar month's performance, independent of the Range: picker elsewhere on the dashboard — the brackets need a fully completed month to mean anything.</dd></div>
@@ -8033,28 +8033,22 @@ const QUALITY_MULTIPLIER_TIERS = [
   { minPct: 30, maxPct: 40,       multiplier: 0.30, label: 'Severe reduction' },
   { minPct: 40, maxPct: Infinity, multiplier: 0.00, label: 'No bonus payout' }
 ];
-// The "habitual" measure: a rolling 30-day window, but shifted back a week —
-// it covers days [today-37, today-7], not [today-30, today]. Originally this
-// was all-time, but that meant one bad month never washed out of an SDR's
-// record. A plain trailing-30-days-to-today window has a different problem:
-// meetings aren't usually scheduled more than a week out, so a lead created
-// 2-3 days ago whose meeting is booked for next week is still sitting at
-// "Meeting Scheduled" — not yet resolved one way or the other — and a window
-// ending today would judge that batch before it's had a chance to play out.
-// Ending the window a week ago instead means every lead counted has had at
-// least a week to reach Meeting Done / Not Attended / Rejected, so the rate
-// only reflects genuinely resolved outcomes. Reads from rawByDay (not
-// allData) so the Leads: filter dropdown cannot affect it, and immune to the
-// date-range picker — unlike the bracket incentives, which keep using the
-// selected range. B2B leads only — B2C is excluded from the quality
+// The "habitual" measure: a snapshot of the commission month itself — the
+// same days/cohort every other commission number uses — not a rolling window
+// relative to today. Changed 2026-08-13 per instruction: the prior version
+// covered [today-37, today-7], which measured whatever was recent at
+// calculation time, not the month actually being paid — recomputing the same
+// month later (say, checking August's numbers again a week on) gave a
+// different multiplier every time, since the window had silently moved
+// forward with it. Scoping it to the month's own days fixes that: the rate
+// for a given month is stable once that month's leads have finished
+// resolving. Reads from rawByDay (not allData) so the Leads: filter dropdown
+// cannot affect it. B2B leads only — B2C is excluded from the quality
 // multiplier entirely, since B2C meetings carry no media cost and aren't the
 // "habitual pattern" signal management wants this multiplier to react to.
-function trailingRejectionCounts(sdrKey) {
-  const windowEnd = dubaiOffsetDayKey(-7);   // 1 week ago
-  const windowStart = dubaiOffsetDayKey(-37); // 30 days before that
+function monthRejectionCounts(sdrKey, days) {
   let booked = 0, bad = 0;
-  if (rawByDay) Object.keys(rawByDay).forEach(d => {
-    if (d < windowStart || d > windowEnd) return;
+  days.forEach(d => {
     const rows = rawByDay[d] && rawByDay[d][sdrKey];
     if (!rows) return;
     rows.filter(isBusinessLead).forEach(r => {
@@ -8064,19 +8058,15 @@ function trailingRejectionCounts(sdrKey) {
   });
   return { booked, bad };
 }
-function trailingRejectionRate(sdrKey) {
-  const c = trailingRejectionCounts(sdrKey);
-  return c.booked ? c.bad / c.booked * 100 : 0;
-}
-function qualityMultiplierForSDR(sdrKey) {
-  const { booked, bad } = trailingRejectionCounts(sdrKey);
+function qualityMultiplierForSDR(sdrKey, days) {
+  const { booked, bad } = monthRejectionCounts(sdrKey, days);
   const rate = booked ? bad / booked * 100 : 0;
   const idx = findBracketIndex(rate, QUALITY_MULTIPLIER_TIERS);
   return { rate, idx, tier: QUALITY_MULTIPLIER_TIERS[idx], booked, bad };
 }
 function multiplierTierTable(activeIdx) {
   return `<table class="commission-bracket-table">
-    <thead><tr><th>Trailing 30-day rejection rate</th><th>Multiplier</th><th></th></tr></thead>
+    <thead><tr><th>This month's rejection rate</th><th>Multiplier</th><th></th></tr></thead>
     <tbody>
       ${QUALITY_MULTIPLIER_TIERS.map((t, i) => `<tr class="${i === activeIdx ? 'active' : ''}">
         <td>${t.minPct}%${t.maxPct === Infinity ? '+' : ' – <' + t.maxPct + '%'}</td>
@@ -8139,8 +8129,8 @@ function saveCommissionInputs(key, base, bonus, override, notes) {
 // The Meeting Quality Multiplier only scales the Qualified Leads and Meeting
 // Set incentives — NOT New Sales. New Sales Incentive is paid straight
 // (revenue × 0.25%, no multiplier), matching the source Google Sheet formula.
-function commissionPayout(key, qGross, mGross, nsGross) {
-  const q = qualityMultiplierForSDR(key);
+function commissionPayout(key, qGross, mGross, nsGross, days) {
+  const q = qualityMultiplierForSDR(key, days);
   return {
     rate: q.rate, tierIdx: q.idx, tier: q.tier, booked: q.booked, bad: q.bad,
     qGross, mGross, nsGross,
@@ -8457,7 +8447,7 @@ function sdrTotalCompensation(days, sdrKey) {
   const qAmount = QUALIFIED_BRACKETS[qIdx].amount;
   const mAmount = MEETING_BRACKETS[mIdx].amount;
   const nsAmount = Math.round(m.closedRevenueUSD * NEW_SALES_INCENTIVE_RATE);
-  const payout = commissionPayout(sdrKey, qAmount, mAmount, nsAmount);
+  const payout = commissionPayout(sdrKey, qAmount, mAmount, nsAmount, days);
   const bases = loadCommissionBases();
   const savedRaw = bases[sdrKey];
   const saved = (savedRaw && typeof savedRaw === 'object') ? savedRaw : { base: savedRaw || '', bonus: '', override: false };
@@ -10169,7 +10159,7 @@ function renderCapacitySection() {
 }
 
 function multiplierRowHtml(p) {
-  return `<div class="commission-incentive-row"><span>Meeting Quality Multiplier</span><span>&times;${p.tier.multiplier.toFixed(2)} (${p.rate.toFixed(1)}% B2B rejection, trailing 30 days — ${p.tier.minPct}${p.tier.maxPct === Infinity ? '%+' : '–' + p.tier.maxPct + '%'} tier)</span></div>`;
+  return `<div class="commission-incentive-row"><span>Meeting Quality Multiplier</span><span>&times;${p.tier.multiplier.toFixed(2)} (${p.rate.toFixed(1)}% B2B rejection, this month — ${p.tier.minPct}${p.tier.maxPct === Infinity ? '%+' : '–' + p.tier.maxPct + '%'} tier)</span></div>`;
 }
 // The Total Compensation box's payout lines: one line per incentive, already
 // multiplier-applied — no separate gross/paid/multiplier rows to parse. The
@@ -10198,7 +10188,8 @@ function calculateCommission(key) {
   const nsGross = parseFloat(document.getElementById('commissionNSIncentive-' + key).dataset.amount) || 0;
   // Override keeps its pre-multiplier behavior: incentives bypassed entirely,
   // so the multiplier is irrelevant when overridden.
-  const p = commissionPayout(key, qGross, mGross, nsGross);
+  const commissionDays = monthDayKeys(resolveCommissionMonth('sdr_commission_month', 'commissionMonthSelect'));
+  const p = commissionPayout(key, qGross, mGross, nsGross, commissionDays);
   const total = override ? (base + bonus) : (base + bonus + p.qPaid + p.mPaid + p.nsPaid);
   const box = document.getElementById('commissionTotalBox-' + key);
   box.innerHTML = override ? `
@@ -10224,7 +10215,7 @@ function commissionCard(sdr, days, monthKey) {
   const qAmount = QUALIFIED_BRACKETS[qIdx].amount;
   const mAmount = MEETING_BRACKETS[mIdx].amount;
   const nsAmount = Math.round(m.closedRevenueUSD * NEW_SALES_INCENTIVE_RATE);
-  const payout = commissionPayout(sdr.key, qAmount, mAmount, nsAmount);
+  const payout = commissionPayout(sdr.key, qAmount, mAmount, nsAmount, days);
   const bases = loadCommissionBases();
   const savedRaw = bases[sdr.key];
   // Back-compat: earlier versions stored a bare base string, not an object.
@@ -10259,9 +10250,9 @@ function commissionCard(sdr, days, monthKey) {
         <div class="commission-stat-sub">$${Math.round(m.closedRevenueUSD).toLocaleString()} closed revenue, USD-equivalent (from leads created this month, closed as of now)</div>
       </div>
       <div class="commission-stat" style="grid-column: 1 / -1;">
-        <div class="commission-stat-label">Meeting Quality Multiplier <span class="goal-info" title="Rejected or no-show meetings ÷ all meetings booked, B2B only, in a trailing 30-day window ending 1 week ago (not the selected range/month — see \'How compensation works\' below for why). Includes meetings still Scheduled or already Closed within that window. Scales Qualified Leads and Meeting incentives only — New Sales Incentive is unaffected.">ⓘ</span></div>
+        <div class="commission-stat-label">Meeting Quality Multiplier <span class="goal-info" title="Rejected or no-show meetings ÷ all meetings booked, B2B only, for this same commission month (the selected Performance month above — see \'How compensation works\' below for why). Includes meetings still Scheduled or already Closed within the month. Scales Qualified Leads and Meeting incentives only — New Sales Incentive is unaffected.">ⓘ</span></div>
         <div class="commission-stat-value">&times;${payout.tier.multiplier.toFixed(2)}</div>
-        <div class="commission-stat-sub">${payout.rate.toFixed(1)}% rejection — ${payout.bad} of ${payout.booked} booked meetings rejected/no-show (trailing 30 days, ending 1 week ago; B2B leads only, incl. scheduled &amp; closed)</div>
+        <div class="commission-stat-sub">${payout.rate.toFixed(1)}% rejection — ${payout.bad} of ${payout.booked} booked meetings rejected/no-show (this commission month; B2B leads only, incl. scheduled &amp; closed)</div>
       </div>
     </div>
     <div class="commission-bracket-label">Qualified Leads Incentive</div>
@@ -10275,7 +10266,7 @@ function commissionCard(sdr, days, monthKey) {
       <span>$${Math.round(m.closedRevenueUSD).toLocaleString()} closed revenue &times; 0.25%</span>
       <span id="commissionNSIncentive-${sdr.key}" data-amount="${nsAmount}">$${nsAmount.toLocaleString()}</span>
     </div>
-    <div class="commission-bracket-label">Meeting Quality Multiplier (trailing 30-day B2B rejection rate, ending 1 week ago — applies to Qualified Leads &amp; Meeting incentives only)</div>
+    <div class="commission-bracket-label">Meeting Quality Multiplier (this month's B2B rejection rate — applies to Qualified Leads &amp; Meeting incentives only)</div>
     ${multiplierTierTable(payout.tierIdx)}
     ${multiplierRowHtml(payout)}
     <div class="commission-base-row">
@@ -10775,7 +10766,7 @@ function renderNpFounder() {
     const oq = QUALIFIED_BRACKETS[findBracketIndex(om.qualifiedRate, QUALIFIED_BRACKETS)].amount;
     const omt = MEETING_BRACKETS[findBracketIndex(om.meetingRate, MEETING_BRACKETS)].amount;
     const ons = Math.round(om.closedRevenueUSD * NEW_SALES_INCENTIVE_RATE);
-    const op = commissionPayout(s.key, oq, omt, ons);
+    const op = commissionPayout(s.key, oq, omt, ons, days);
     const oldVar = op.qPaid + op.mPaid + op.nsPaid;
     oldSum += oldVar;
     return { s, m, p, base, bonus, variable, oldVar };
@@ -10823,7 +10814,7 @@ function renderNpFounder() {
 
     <div class="commission-bracket-label">New plan vs old, same month</div>
     <table class="np-econ-table">
-      <thead><tr><th>Coordinator</th><th class="num">Credit rate</th><th class="num">Old variable <span class="goal-info" title="Modelled, not what was actually paid: the old plan's quality multiplier always reads a trailing 30-day window ending a week ago from TODAY, not from the month being shown, so a back-month comparison can differ from the historical payslip by one multiplier band.">ⓘ</span></th><th class="num">New variable</th><th class="num">Change</th></tr></thead>
+      <thead><tr><th>Coordinator</th><th class="num">Credit rate</th><th class="num">Old variable <span class="goal-info" title="Modelled, not necessarily what was actually paid: the old plan's quality multiplier now reads the month being shown, so this matches the historical payslip as long as the underlying lead/deal data hasn't changed since it was originally calculated.">ⓘ</span></th><th class="num">New variable</th><th class="num">Change</th></tr></thead>
       <tbody>
         ${perSDR.map(r => `<tr>
           <td>${escapeHtml(r.s.name)}</td>
@@ -11031,7 +11022,7 @@ function reportCommissionSummaryHtml(sdr, monthKey, commissionDays) {
   const qGross = QUALIFIED_BRACKETS[findBracketIndex(m.qualifiedRate, QUALIFIED_BRACKETS)].amount;
   const mGross = MEETING_BRACKETS[findBracketIndex(m.meetingRate, MEETING_BRACKETS)].amount;
   const nsGross = Math.round(m.closedRevenueUSD * NEW_SALES_INCENTIVE_RATE);
-  const p = commissionPayout(sdr.key, qGross, mGross, nsGross);
+  const p = commissionPayout(sdr.key, qGross, mGross, nsGross, commissionDays);
   const bases = loadCommissionBases();
   const savedRaw = bases[sdr.key];
   const saved = (savedRaw && typeof savedRaw === 'object') ? savedRaw : { base: savedRaw || '', bonus: '', override: false };
@@ -11060,7 +11051,7 @@ function reportCommissionSummaryHtml(sdr, monthKey, commissionDays) {
         Qualified leads: ${m.qualified} (${m.qualifiedRate.toFixed(1)}% of B2B leads, B2B+B2C qualified &divide; B2B leads) &middot;
         Meetings: ${m.meetings} (${m.meetingRate.toFixed(1)}% of B2B leads, B2B+B2C meetings &divide; B2B leads) &middot;
         Closed deals: ${m.closedDeals} ($${Math.round(m.closedRevenueUSD).toLocaleString()} revenue, USD-equiv) &middot;
-        Meeting Quality Multiplier: &times;${p.tier.multiplier.toFixed(2)} (${p.rate.toFixed(1)}% B2B rejection rate, trailing 30 days ending 1 week ago — applies to Qualified/Meeting only, not New Sales)
+        Meeting Quality Multiplier: &times;${p.tier.multiplier.toFixed(2)} (${p.rate.toFixed(1)}% B2B rejection rate, this commission month — applies to Qualified/Meeting only, not New Sales)
       </div>
       ${notes ? `<div class="report-summary-notes"><strong>Bonus notes:</strong> ${escapeHtml(notes)}</div>` : ''}
     </div>
