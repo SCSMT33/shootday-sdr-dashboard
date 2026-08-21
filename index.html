@@ -2441,8 +2441,16 @@ let charts = {};
 let expandedCards = new Set();
 
 // ─── FILE HANDLING ────────────────────────────────────────────────────────────
+// Re-picking the SAME path in the OS file dialog does not fire `change` unless
+// the input is cleared first: the input's value is still that path, so the
+// browser sees nothing change and stays silent. Re-exporting from Airtable to
+// the same filename and loading it again is the normal weekly workflow here,
+// so without this reset every load after the first one was a silent no-op —
+// the dialog closed and nothing whatsoever happened. Cleared before the read
+// starts, so the next pick works even if this one fails to parse.
 function handleFile(e) {
   const file = e.target.files[0];
+  e.target.value = '';
   if (!file) return;
   readFile(file);
 }
@@ -2484,6 +2492,12 @@ function readFile(file) {
     setTimeout(() => {
       try {
         parseCSV(text, file.name);
+      } catch (err) {
+        // Previously this threw out of the timeout uncaught: the overlay
+        // vanished and the page just sat there, indistinguishable from a
+        // crash. Say what went wrong instead.
+        console.error(err);
+        alert('Could not load "' + file.name + '".\n\n' + ((err && err.message) || err));
       } finally {
         hideLoadingOverlay();
       }
@@ -2497,27 +2511,53 @@ function readFile(file) {
 }
 
 // ─── ROBUST CSV PARSER (handles quoted fields with embedded commas/newlines) ──
+// Same state machine as always, but it advances in slices instead of one
+// character at a time: the exports are multi-MB, and a per-character loop over
+// ~17M characters is the single biggest reason loading a CSV used to lock the
+// tab up. indexOf() does the scanning natively, and the next position of each
+// structural character (comma / newline / quote) is cached so a file section
+// with no quotes in it is never re-scanned for one — without that cache the
+// bulk scan would be quadratic on exactly the files it is meant to speed up.
+// Verified to produce byte-identical output to the old parser on every
+// committed export plus a randomized fuzz corpus.
 function parseCSVText(text) {
+  // normalize line endings
+  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const rows = [];
   let row = [];
   let field = '';
   let inQuotes = false;
-  // normalize line endings
-  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
+  const len = text.length;
+  let i = 0;
+  // Cached next-occurrence index per structural character; len means "none
+  // left in the rest of the file", which stops further scanning entirely.
+  let cComma = text.indexOf(',');
+  let cNL = text.indexOf('\n');
+  let cQuote = text.indexOf('"');
+  if (cComma === -1) cComma = len;
+  if (cNL === -1) cNL = len;
+  if (cQuote === -1) cQuote = len;
+  while (i < len) {
     if (inQuotes) {
-      if (c === '"') {
-        if (text[i + 1] === '"') { field += '"'; i++; }
-        else { inQuotes = false; }
-      } else {
-        field += c;
-      }
+      const q = text.indexOf('"', i);
+      if (q === -1) { field += text.slice(i); i = len; break; }
+      if (q > i) field += text.slice(i, q);
+      if (text.charCodeAt(q + 1) === 34) { field += '"'; i = q + 2; }   // escaped ""
+      else { inQuotes = false; i = q + 1; }
     } else {
-      if (c === '"') { inQuotes = true; }
-      else if (c === ',') { row.push(field); field = ''; }
-      else if (c === '\n') { row.push(field); field = ''; rows.push(row); row = []; }
-      else { field += c; }
+      if (cComma < i) { const k = text.indexOf(',', i); cComma = k === -1 ? len : k; }
+      if (cNL < i) { const k = text.indexOf('\n', i); cNL = k === -1 ? len : k; }
+      if (cQuote < i) { const k = text.indexOf('"', i); cQuote = k === -1 ? len : k; }
+      let next = len, kind = 0;
+      if (cComma < next) { next = cComma; kind = 1; }
+      if (cNL < next) { next = cNL; kind = 2; }
+      if (cQuote < next) { next = cQuote; kind = 3; }
+      if (next > i) field += text.slice(i, next);
+      i = next + 1;
+      if (kind === 1) { row.push(field); field = ''; }
+      else if (kind === 2) { row.push(field); field = ''; rows.push(row); row = []; }
+      else if (kind === 3) { inQuotes = true; }
+      else { i = len; }   // ran off the end with no delimiter left
     }
   }
   // last field/row
@@ -2525,11 +2565,28 @@ function parseCSVText(text) {
   return rows.filter(r => r.length > 1 || (r.length === 1 && r[0].trim() !== ''));
 }
 
+// Guards against loading the wrong export into the wrong slot. The two upload
+// buttons sit next to each other in the header and the CSVs are
+// indistinguishable in a file dialog, so mispicking is easy — and it used to
+// sail straight through: no rows matched, an empty dataset was committed over
+// the good one, and the persisted copy was overwritten with nothing, so the
+// dashboard went blank and stayed blank across a refresh.
+function requireHeaders(headers, required, what) {
+  const have = new Set(headers.map(h => h.trim().toLowerCase()));
+  const missing = required.filter(h => !have.has(h.toLowerCase()));
+  if (missing.length) {
+    throw new Error('That does not look like ' + what + ' — it has no ' +
+      missing.map(m => '"' + m + '"').join(' or ') + ' column.\n\n' +
+      'Check you picked the right export for the button you pressed.');
+  }
+}
+
 function parseCSV(text, filename) {
   const raw = text.replace(/^﻿/, '');
   const table = parseCSVText(raw);
-  if (!table.length) return;
+  if (!table.length) throw new Error('That file is empty.');
   const headers = table[0].map(h => h.trim());
+  requireHeaders(headers, ['SDR Owner', 'Creation Date'], 'an Airtable Bookings export');
 
   const rows = [];
   for (let i = 1; i < table.length; i++) {
@@ -2541,6 +2598,14 @@ function parseCSV(text, filename) {
 
   // Filter to SDR-owned rows only
   const sdrRows = rows.filter(r => sdrKeyByName(r['SDR Owner']));
+  // A Bookings export with the right columns but not one recognised SDR in it
+  // is either the wrong view or a renamed SDR in Airtable. Either way,
+  // committing it would wipe the loaded dashboard and its saved copy, so stop
+  // here with the reason rather than silently going blank.
+  if (!sdrRows.length) {
+    throw new Error('No rows owned by a known SDR (' + SDRS.map(x => x.name).join(', ') + ').\n\n' +
+      'Either this export is filtered to other owners, or an SDR was renamed in Airtable.');
+  }
 
   // Group by Dubai-local day and SDR, keeping raw rows so the business-lead filter
   // can be toggled live. Rows with no Creation Date can't be bucketed at all —
@@ -2582,6 +2647,7 @@ function normalizePhoneDigits(p) {
 }
 function handleCallsFile(e) {
   const file = e.target.files[0];
+  e.target.value = '';   // same-file re-pick fires no change event otherwise — see handleFile
   if (!file) return;
   readCallsFile(file);
 }
@@ -2593,6 +2659,12 @@ function readCallsFile(file) {
     setTimeout(() => {
       try {
         parseCallCSV(text, file.name);
+      } catch (err) {
+        // Previously this threw out of the timeout uncaught: the overlay
+        // vanished and the page just sat there, indistinguishable from a
+        // crash. Say what went wrong instead.
+        console.error(err);
+        alert('Could not load "' + file.name + '".\n\n' + ((err && err.message) || err));
       } finally {
         hideLoadingOverlay();
       }
@@ -2641,8 +2713,9 @@ function parseDurationSeconds(raw) {
 function parseCallCSV(text, filename) {
   const raw = text.replace(/^﻿/, '');
   const table = parseCSVText(raw);
-  if (!table.length) return;
+  if (!table.length) throw new Error('That file is empty.');
   const headers = table[0].map(h => h.trim());
+  requireHeaders(headers, ['direction', 'user', 'datetime (utc)'], 'an Aircall Call History export');
   const calls = [];
   for (let i = 1; i < table.length; i++) {
     const vals = table[i];
@@ -2657,6 +2730,12 @@ function parseCallCSV(text, filename) {
     if (utcMs == null) continue;
     const durationSec = parseDurationSeconds(findDurationRaw(row));
     calls.push({ phoneDigits, utcMs, sdrKey, durationSec });
+  }
+  // Same reasoning as the Bookings guard: an export with Aircall's columns but
+  // no outbound calls by a known SDR would blank out every call-based chart.
+  if (!calls.length) {
+    throw new Error('No outbound calls by a known SDR (' + SDRS.map(x => x.name).join(', ') + ') in that export.\n\n' +
+      'Check the date range and the agents included in the Aircall export.');
   }
   rawCalls = calls;
   callsFilename = filename;
@@ -2757,6 +2836,7 @@ function matchSpeedToLead() {
 // the SDR/Calls data pipeline.
 function handleAEBaselineFile(e) {
   const file = e.target.files[0];
+  e.target.value = '';   // same-file re-pick fires no change event otherwise — see handleFile
   if (!file) return;
   readAEBaselineFile(file);
 }
@@ -2768,6 +2848,12 @@ function readAEBaselineFile(file) {
     setTimeout(() => {
       try {
         parseAEBaselineCSV(text, file.name);
+      } catch (err) {
+        // Previously this threw out of the timeout uncaught: the overlay
+        // vanished and the page just sat there, indistinguishable from a
+        // crash. Say what went wrong instead.
+        console.error(err);
+        alert('Could not load "' + file.name + '".\n\n' + ((err && err.message) || err));
       } finally {
         hideLoadingOverlay();
       }
@@ -2782,8 +2868,9 @@ function readAEBaselineFile(file) {
 function parseAEBaselineCSV(text, filename, skipSave) {
   const raw = text.replace(/^﻿/, '');
   const table = parseCSVText(raw);
-  if (!table.length) return;
+  if (!table.length) throw new Error('That file is empty.');
   const headers = table[0].map(h => h.trim());
+  requireHeaders(headers, ['Owner', 'Creation Date'], 'an Airtable Bookings export');
   const rows = [];
   for (let i = 1; i < table.length; i++) {
     const vals = table[i];
@@ -2847,26 +2934,54 @@ function loadAECurrentData() {
     })
     .catch(() => {}); // no committed file (e.g. local file:// testing) — >1k/complex just reads dashes as before
 }
+// Manually uploaded AE Baseline exports are the largest file this dashboard
+// takes (the committed one is ~13MB), so localStorage never had a chance —
+// every manual upload silently failed to persist and was gone after a
+// refresh. Same IndexedDB store as the loaded CSVs.
 function saveAEBaselineData() {
-  try { localStorage.setItem('sdr_ae_baseline', JSON.stringify({ rows: rawAEBaseline, filename: aeBaselineFilename })); } catch (e) {}
+  idbSet(AE_BASELINE_KEY, { rows: rawAEBaseline, filename: aeBaselineFilename })
+    .then(() => { try { localStorage.removeItem(AE_BASELINE_KEY); } catch (e) {} })
+    .catch(err => {
+      try {
+        localStorage.setItem(AE_BASELINE_KEY, JSON.stringify({ rows: rawAEBaseline, filename: aeBaselineFilename }));
+      } catch (err2) {
+        console.error('Could not persist AE Baseline data:', err, err2);
+        showPersistWarning();
+      }
+    });
 }
 function clearAEBaselineData() {
-  if (!rawAEBaseline && !localStorage.getItem('sdr_ae_baseline')) return;
+  if (!rawAEBaseline && !localStorage.getItem(AE_BASELINE_KEY)) return;
   if (!confirm('Clear the loaded AE Baseline data? This cannot be undone.')) return;
-  try { localStorage.removeItem('sdr_ae_baseline'); } catch (e) {}
+  idbDelete(AE_BASELINE_KEY).catch(() => {});
+  try { localStorage.removeItem(AE_BASELINE_KEY); } catch (e) {}
   rawAEBaseline = null;
   aeBaselineFilename = null;
   document.getElementById('aeBaselineFileInput').value = '';
   renderAEBaselineSection();
   renderDashboard();
 }
+// Async, like restoreLoadedData — same one-time localStorage migration.
 function restoreAEBaselineData() {
-  try {
-    const saved = JSON.parse(localStorage.getItem('sdr_ae_baseline') || 'null');
-    if (!saved || !saved.rows) return;
-    rawAEBaseline = saved.rows;
-    aeBaselineFilename = saved.filename;
-  } catch (e) {}
+  return idbGet(AE_BASELINE_KEY)
+    .catch(() => null)
+    .then(saved => {
+      if (saved && saved.rows) return saved;
+      let legacy = null;
+      try { legacy = JSON.parse(localStorage.getItem(AE_BASELINE_KEY) || 'null'); } catch (e) {}
+      if (legacy && legacy.rows) {
+        idbSet(AE_BASELINE_KEY, legacy)
+          .then(() => { try { localStorage.removeItem(AE_BASELINE_KEY); } catch (e) {} })
+          .catch(() => {});
+      }
+      return legacy;
+    })
+    .then(saved => {
+      if (!saved || !saved.rows) return;
+      rawAEBaseline = saved.rows;
+      aeBaselineFilename = saved.filename;
+    })
+    .catch(e => { console.error('Could not restore AE Baseline data:', e); });
 }
 function toggleAEBaselineSection() {
   document.getElementById('aeBaselineSection').classList.toggle('expanded');
@@ -3222,25 +3337,95 @@ function loadRangeFilter() {
   updateRangeUI();
 }
 
+// ─── LARGE-BLOB STORAGE (IndexedDB) ───────────────────────────────────────────
+// The loaded exports do not fit in localStorage. Bookings on its own
+// serialises to ~2.3MB; add an Aircall Call History export and the combined
+// blob is ~6MB against Chrome's ~5MB per-origin localStorage quota, so
+// setItem threw QuotaExceededError — which the old code swallowed in an empty
+// catch. Because a rejected setItem leaves the PREVIOUS value in place, the
+// symptom was silent and confusing: the Aircall data loaded and charted fine,
+// then vanished on the next hard refresh, and from then on every later
+// Bookings load was silently discarded too while storage stayed frozen on a
+// stale snapshot. IndexedDB has no 5MB cliff and stores structured clones, so
+// there is no multi-megabyte JSON string being built on the main thread
+// either. localStorage remains the fallback for browsers where IndexedDB is
+// unavailable, and the source for a one-time migration of an existing blob.
+const IDB_NAME = 'shootday_sdr_dashboard';
+const IDB_STORE = 'blobs';
+const LOADED_DATA_KEY = 'sdr_data';
+const AE_BASELINE_KEY = 'sdr_ae_baseline';
+let idbPromise = null;
+function idbOpen() {
+  if (idbPromise) return idbPromise;
+  idbPromise = new Promise((resolve, reject) => {
+    if (!window.indexedDB) { reject(new Error('IndexedDB unavailable')); return; }
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(IDB_STORE)) req.result.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('IndexedDB open failed'));
+    req.onblocked = () => reject(new Error('IndexedDB blocked'));
+  }).catch(err => { idbPromise = null; throw err; });   // let a later call retry
+  return idbPromise;
+}
+function idbTx(mode, run) {
+  return idbOpen().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, mode);
+    const req = run(tx.objectStore(IDB_STORE));
+    tx.oncomplete = () => resolve(req ? req.result : undefined);
+    tx.onerror = () => reject(tx.error || new Error('IndexedDB transaction failed'));
+    tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
+  }));
+}
+function idbGet(key) { return idbTx('readonly', st => st.get(key)); }
+function idbSet(key, value) { return idbTx('readwrite', st => st.put(value, key)); }
+function idbDelete(key) { return idbTx('readwrite', st => st.delete(key)); }
+
+// Storage failures used to be invisible, which is the worst possible outcome
+// for a store whose entire job is surviving a refresh. Flag it in the header
+// instead. parseCSV rewrites #lastUpdated on every load, so the marker clears
+// itself as soon as a save succeeds.
+const PERSIST_WARNING = ' · \u26a0 not saved for next refresh';
+function showPersistWarning() {
+  const el = document.getElementById('lastUpdated');
+  if (!el || el.textContent.indexOf(PERSIST_WARNING) !== -1) return;
+  el.textContent += PERSIST_WARNING;
+  el.title = 'This browser would not store the loaded CSVs, so a hard refresh will come back empty and you will need to load them again. Everything on screen right now is still correct.';
+}
+
 // ─── PERSIST LOADED DATA ACROSS REFRESHES ─────────────────────────────────────
 // filename is optional — omit it (e.g. after just reloading the calls CSV) to
 // keep whatever Bookings filename was already persisted.
+let loadedFilename = null;
 function saveLoadedData(filename) {
-  try {
-    const prev = JSON.parse(localStorage.getItem('sdr_data') || 'null');
-    const finalFilename = filename !== undefined ? filename : (prev && prev.filename);
-    localStorage.setItem('sdr_data', JSON.stringify({ rawByDay, filename: finalFilename, rawCalls, callsFilename }));
-  } catch (e) {}
+  if (filename !== undefined) loadedFilename = filename;
+  const payload = { rawByDay, filename: loadedFilename, rawCalls, callsFilename };
+  // Fire-and-forget (IndexedDB is async) but never silent — see showPersistWarning.
+  idbSet(LOADED_DATA_KEY, payload)
+    .then(() => { try { localStorage.removeItem(LOADED_DATA_KEY); } catch (e) {} })
+    .catch(err => {
+      // No IndexedDB (or it refused): fall back to localStorage, which still
+      // fits a Bookings-only dataset comfortably.
+      try {
+        localStorage.setItem(LOADED_DATA_KEY, JSON.stringify(payload));
+      } catch (err2) {
+        console.error('Could not persist loaded data:', err, err2);
+        showPersistWarning();
+      }
+    });
 }
 // Wipes the loaded CSV (in-memory and persisted) and drops back to the
 // upload screen, so a fresh file can be loaded without stale data lingering.
 // Also clears any loaded call-history data, since Speed-to-Lead matches are
 // meaningless without the Bookings data they were matched against.
 function clearLoadedData() {
-  if (!rawByDay && !localStorage.getItem('sdr_data')) return;
+  if (!rawByDay && !localStorage.getItem(LOADED_DATA_KEY)) return;
   if (!confirm('Clear the currently loaded CSV data? This cannot be undone.')) return;
-  try { localStorage.removeItem('sdr_data'); } catch (e) {}
+  idbDelete(LOADED_DATA_KEY).catch(() => {});
+  try { localStorage.removeItem(LOADED_DATA_KEY); } catch (e) {}
   rawByDay = null;
+  loadedFilename = null;
   allData = null;
   allDataB2B = null;
   rawCalls = null;
@@ -3257,26 +3442,44 @@ function clearLoadedData() {
   document.getElementById('noData').style.display = 'block';
   closeReportPreview();
 }
+// Async now that the blob lives in IndexedDB — resolves true if a saved
+// dataset was restored. Also migrates a blob left behind by the old
+// localStorage-only build, which frees ~2.3MB of quota for the small
+// settings keys that share it.
 function restoreLoadedData() {
-  try {
-    const saved = JSON.parse(localStorage.getItem('sdr_data') || 'null');
-    if (!saved || !saved.rawByDay) return false;
-    rawByDay = saved.rawByDay;
-    rawCalls = saved.rawCalls || null;
-    callsFilename = saved.callsFilename || null;
-    matchSpeedToLead();
-    loadLeadTypeFilter();
-    loadRangeFilter();
-    loadSelectedSDRs();
-    const dates = Object.keys(allData).sort();
-    const firstDate = dates[0];
-    const lastDate = dates[dates.length - 1];
-    const rangeText = dates.length ? (firstDate === lastDate ? firstDate : `${firstDate} – ${lastDate}`) : 'no dates found';
-    document.getElementById('lastUpdated').textContent = `${saved.filename} · ${rangeText}`;
-    document.getElementById('noData').style.display = 'none';
-    document.getElementById('dashboard').style.display = 'block';
-    return true;
-  } catch (e) { return false; }
+  return idbGet(LOADED_DATA_KEY)
+    .catch(() => null)
+    .then(saved => {
+      if (saved && saved.rawByDay) return saved;
+      let legacy = null;
+      try { legacy = JSON.parse(localStorage.getItem(LOADED_DATA_KEY) || 'null'); } catch (e) {}
+      if (legacy && legacy.rawByDay) {
+        idbSet(LOADED_DATA_KEY, legacy)
+          .then(() => { try { localStorage.removeItem(LOADED_DATA_KEY); } catch (e) {} })
+          .catch(() => {});   // still usable from localStorage this session
+      }
+      return legacy;
+    })
+    .then(saved => {
+      if (!saved || !saved.rawByDay) return false;
+      rawByDay = saved.rawByDay;
+      rawCalls = saved.rawCalls || null;
+      callsFilename = saved.callsFilename || null;
+      loadedFilename = saved.filename || null;
+      matchSpeedToLead();
+      loadLeadTypeFilter();
+      loadRangeFilter();
+      loadSelectedSDRs();
+      const dates = Object.keys(allData).sort();
+      const firstDate = dates[0];
+      const lastDate = dates[dates.length - 1];
+      const rangeText = dates.length ? (firstDate === lastDate ? firstDate : `${firstDate} – ${lastDate}`) : 'no dates found';
+      document.getElementById('lastUpdated').textContent = `${saved.filename} · ${rangeText}`;
+      document.getElementById('noData').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+      return true;
+    })
+    .catch(e => { console.error('Could not restore saved data:', e); return false; });
 }
 
 // USED ONLY BY DATA HYGIENE (the laws below, isUnrecognizedStatus) — NOT the
@@ -11455,21 +11658,33 @@ renderInitiativesTable();
 // seeing it (missing months, wrong AE averages) instead of the full committed
 // dataset. Discard any pre-migration saved baseline once; uploads made after
 // this ships set the same flag path and persist normally.
+let aeBaselineV2Migrated = true;
 try {
   if (!localStorage.getItem('sdr_ae_baseline_v2')) {
     localStorage.removeItem('sdr_ae_baseline');
     localStorage.setItem('sdr_ae_baseline_v2', '1');
+    aeBaselineV2Migrated = false;
   }
 } catch (e) {}
-restoreAEBaselineData();
-if (!rawAEBaseline) loadDefaultAEBaseline();
 loadAECurrentData();
-renderAEBaselineSection();
-if (restoreLoadedData()) {
-  renderDashboard();
-} else {
-  document.getElementById('noData').style.display = 'block';
-}
+// Both restores read IndexedDB, so the boot sequence is a promise chain now.
+// renderDashboard() no-ops while allData is still null, so the AE-baseline
+// fetch resolving first can't render a half-built page.
+Promise.resolve(aeBaselineV2Migrated ? null : idbDelete(AE_BASELINE_KEY).catch(() => {}))
+  .then(() => restoreAEBaselineData())
+  .then(() => {
+    if (!rawAEBaseline) loadDefaultAEBaseline();
+    renderAEBaselineSection();
+    return restoreLoadedData();
+  })
+  .then(restored => {
+    if (restored) renderDashboard();
+    else document.getElementById('noData').style.display = 'block';
+  })
+  .catch(e => {
+    console.error('Startup failed:', e);
+    document.getElementById('noData').style.display = 'block';
+  });
 </script>
 </body>
 </html>
