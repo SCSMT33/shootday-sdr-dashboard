@@ -1589,28 +1589,28 @@
       </div>
       <div class="chart-card full" data-chart-id="chartLeadToClosed">
         <div class="chart-header">
-          <span class="chart-title">Lead to Deal Rate % <span class="goal-info" id="info-chartLeadToClosed" title="Closed deals ÷ Lead Volume per bucket, by creation-date cohort — summed first, then divided (never an average of daily rates, which over-weights thin days). Recent buckets always read low until their leads have had time to close (deals typically take weeks), same caveat as the Lead to Deal summary card up top. Dashed Pace = trailing 3-bucket rolling rate; dashed AE Baseline (when on) = the pre-SDR historical Lead to Deal rate.">ⓘ</span></span>
+          <span class="chart-title">Lead to Deal <span class="goal-info" id="info-chartLeadToClosed" title="Rate % = closed deals ÷ leads per bucket, by creation-date cohort — summed first, then divided (never an average of daily rates, which over-weights thin days). Number = the same thing as a raw closed-deal count instead of a rate. Recent buckets always read low until their leads have had time to close (deals typically take weeks), same caveat as the Lead to Deal summary card up top. Group: All combines your SDR selection into one line; By SDR Team splits US vs OUS; By SDR draws one line per selected Coordinator. The All/B2B/B2C dropdown here is a chart-local filter, independent of the global Leads: filter at the top of the page. Dashed Pace = trailing 3-bucket rolling rate/count; dashed AE Baseline (when on) = the pre-SDR historical figure.">ⓘ</span></span>
           <div class="chart-header-right">
             <div class="chart-legend" id="legend-chartLeadToClosed"></div>
+            <select class="chart-granularity" id="metric-chartLeadToClosed" onchange="renderCharts(getFilteredDays())">
+              <option value="pct" selected>Rate %</option>
+              <option value="raw">Number</option>
+            </select>
             <select class="chart-granularity" id="teamsComparison-chartLeadToClosed" onchange="renderCharts(getFilteredDays())">
-              <option value="off">Teams comparison: Off</option>
-              <option value="on">Teams comparison: On</option>
+              <option value="all" selected>Group: All</option>
+              <option value="team">Group: By SDR Team</option>
+              <option value="sdr">Group: By SDR</option>
             </select>
             <select class="chart-granularity" id="granularity-chartLeadToClosed" onchange="renderCharts(getFilteredDays())">
               <option value="daily">Daily</option>
               <option value="weekly" selected>Weekly</option>
               <option value="monthly">Monthly</option>
             </select>
-            <label class="chart-cumulative-toggle">
-              <input type="checkbox" id="modeToggle-chartLeadToClosed" onchange="renderCharts(getFilteredDays())">
-              <span class="toggle-track"></span>
-              <span class="toggle-text">Combined</span>
-            </label>
-            <label class="chart-cumulative-toggle">
-              <input type="checkbox" id="excludeCurrentWeek-chartLeadToClosed" onchange="renderCharts(getFilteredDays())">
-              <span class="toggle-track"></span>
-              <span class="toggle-text">Exclude current week</span>
-            </label>
+            <select class="chart-granularity" id="leadType-chartLeadToClosed" onchange="renderCharts(getFilteredDays())">
+              <option value="all" selected>All leads</option>
+              <option value="business">B2B only</option>
+              <option value="b2c">B2C only</option>
+            </select>
             <button class="chart-expand-btn" onclick="toggleChartExpand('chartLeadToClosed')" title="Expand">&#10530;</button>
           </div>
         </div>
@@ -2307,10 +2307,18 @@ const TEAM_GROUPS = [
 // (ignoring the view-tab SDR selection and any per-chart Combined toggle,
 // since a team-vs-team comparison is a different axis than per-SDR/combined)
 // for the chart to plot instead of its normal SDR-selection-driven views.
+// Three-way group select ('all'/'team'/'sdr') fully determines views on its
+// own — used by charts (like Lead to Deal) that dropped the separate
+// Combined checkbox in favor of one dropdown. The older two-way select
+// ('off'/'on') falls through to null on 'off', same as always, letting
+// makeChart's own Combined-checkbox fallback logic take over for those.
 function teamsComparisonViews(id) {
   const el = document.getElementById('teamsComparison-' + id);
-  if (!el || el.value !== 'on') return null;
-  return TEAM_GROUPS.map(g => ({ key: g.members, label: g.label, color: g.color }));
+  if (!el) return null;
+  if (el.value === 'on' || el.value === 'team') return TEAM_GROUPS.map(g => ({ key: g.members, label: g.label, color: g.color }));
+  if (el.value === 'sdr') return SDRS.filter(s => selectedSDRs.has(s.key)).map(s => ({ key: s.key, label: s.label, color: s.color }));
+  if (el.value === 'all') return [{ key: Array.from(selectedSDRs), label: 'Team', color: COLORS.Team }];
+  return null;
 }
 function normalizeSDRName(name) {
   return (name || '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -4410,13 +4418,16 @@ function bucketize(days, granularity) {
 // Sums a metric over days for a view. 'leadVol' is the commission-aware lead
 // denominator — B2B-only leads in Commission View, the filtered pool otherwise —
 // identical to what the summary cards use, so chart rates and card rates always
-// measure the same thing.
-function chartSum(days, view, field) {
+// measure the same thing. When the chart has its own leadType-<id> dropdown
+// (id passed in), that local filter wins over both the global Leads: filter
+// and the commission-aware default, same as every other chart-local filter.
+function chartSum(days, view, field, id) {
+  const local = id && document.getElementById('leadType-' + id) ? localLeadTypeDataset(id) : null;
   if (field === 'leadVol') {
-    const data = leadTypeFilter() === 'commission' ? allDataB2B : allData;
+    const data = local || (leadTypeFilter() === 'commission' ? allDataB2B : allData);
     return sumMetricFrom(data, days, view, 'leads');
   }
-  return sumMetricFrom(allData, days, view, field);
+  return sumMetricFrom(local || allData, days, view, field);
 }
 
 // spec: { type: 'rate'|'count', num, denom (rate), field (count), goal, pace, cumulativeAllowed }
@@ -4451,10 +4462,10 @@ function makeChart(id, days, spec) {
       if (isRate) {
         // Sum numerator and denominator across the bucket, THEN divide —
         // never average per-day rates (that would weight thin days equally).
-        const den = chartSum(present, v.key, spec.denom);
-        return den ? parseFloat((chartSum(present, v.key, spec.num) / den * 100).toFixed(1)) : 0;
+        const den = chartSum(present, v.key, spec.denom, id);
+        return den ? parseFloat((chartSum(present, v.key, spec.num, id) / den * 100).toFixed(1)) : 0;
       }
-      return chartSum(present, v.key, spec.field);
+      return chartSum(present, v.key, spec.field, id);
     });
     if (cumulative && !isRate) {
       let sum = 0;
@@ -4480,11 +4491,11 @@ function makeChart(id, days, spec) {
       const windowDays = windowBuckets.reduce((acc, wb) => acc.concat(wb.days), []).filter(d => d <= dubaiTodayKey() && allData[d]);
       if (!windowDays.length) return null;
       if (isRate) {
-        const den = chartSum(windowDays, keys, spec.denom);
-        return den ? parseFloat((chartSum(windowDays, keys, spec.num) / den * 100).toFixed(1)) : null;
+        const den = chartSum(windowDays, keys, spec.denom, id);
+        return den ? parseFloat((chartSum(windowDays, keys, spec.num, id) / den * 100).toFixed(1)) : null;
       }
       const windowDayCount = windowBuckets.reduce((a, wb) => a + wb.days.length, 0);
-      const perDay = windowDayCount ? chartSum(windowDays, keys, spec.field) / windowDayCount : 0;
+      const perDay = windowDayCount ? chartSum(windowDays, keys, spec.field, id) / windowDayCount : 0;
       return parseFloat((perDay * b.days.length).toFixed(1));
     });
     if (paceData.some(v => v != null)) {
@@ -4815,7 +4826,15 @@ function renderCharts(days) {
   // status = "Non respondant," stays on the Summary Card — see the
   // Non-Responsive Rate glossary entry.)
   makeChart('chartNR', chartDays, { type: 'rate', num: 'non_responsive_terminal', denom: 'leadVol', goal: d.goalNRRate, pace: true, aeBaseline: ae && ae.overall.leads ? parseFloat((ae.overall.non_responsive_terminal / ae.overall.leads * 100).toFixed(1)) : null });
-  makeChart('chartLeadToClosed', chartDays, { type: 'rate', num: 'closed', denom: 'leadVol', pace: true, aeBaseline: ae && ae.overall.leads ? parseFloat((ae.overall.closed / ae.overall.leads * 100).toFixed(1)) : null });
+  // Rate % vs Number: same underlying closed-deal count, just divided by
+  // leads or not. Number mode's AE Baseline is a per-day average (closed
+  // deals ÷ span days), matching the pattern every other count chart uses —
+  // Rate mode's is the flat historical %.
+  const ltcMetricEl = document.getElementById('metric-chartLeadToClosed');
+  const ltcRaw = ltcMetricEl && ltcMetricEl.value === 'raw';
+  makeChart('chartLeadToClosed', chartDays, ltcRaw
+    ? { type: 'count', field: 'closed', pace: true, aeBaseline: ae ? parseFloat((ae.overall.closed / ae.spanDays).toFixed(2)) : null }
+    : { type: 'rate', num: 'closed', denom: 'leadVol', pace: true, aeBaseline: ae && ae.overall.leads ? parseFloat((ae.overall.closed / ae.overall.leads * 100).toFixed(1)) : null });
   makeChart('chartLeadToMeetingDone', chartDays, { type: 'rate', num: 'meetings_held', denom: 'leadVol', pace: true, aeBaseline: ae && ae.overall.leads ? parseFloat((ae.overall.meetings_held / ae.overall.leads * 100).toFixed(1)) : null });
   renderDQChart(chartDays);
   renderDQReasonsChart(days);
@@ -4853,8 +4872,16 @@ function chartViewContext(id, simpleMode) {
   const teamsNote = (teamsEl && teamsEl.value === 'on') ? ', US Team vs OUS Team comparison on' : '';
   if (simpleMode) return ` Currently showing: ${filterLabel}${teamsNote}.`;
   const sdrLabel = selectedSDRs.size === SDRS.length ? 'Team (all 4 SDRs)' : Array.from(selectedSDRs).map(k => SDR_BY_KEY[k].label).join(' + ');
-  const combined = isCombinedMode(id);
-  const splitNote = (!combined && selectedSDRs.size > 1) ? 'one bar/line per selected SDR' : 'combined into one series';
+  // Charts on the newer 3-way group select (all/team/sdr — no separate
+  // Combined checkbox) describe their split from that value directly;
+  // everything else keeps reading the Combined checkbox as before.
+  let splitNote;
+  if (teamsEl && (teamsEl.value === 'all' || teamsEl.value === 'team' || teamsEl.value === 'sdr')) {
+    splitNote = teamsEl.value === 'sdr' ? 'one line per selected SDR' : teamsEl.value === 'team' ? 'US vs OUS team split' : 'combined into one series';
+  } else {
+    const combined = isCombinedMode(id);
+    splitNote = (!combined && selectedSDRs.size > 1) ? 'one bar/line per selected SDR' : 'combined into one series';
+  }
   const granularity = chartGranularity(id);
   const style = isBarMode() ? 'bars' : 'lines';
   const hoursFilterEl = document.getElementById('hoursFilter-' + id);
